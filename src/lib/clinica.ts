@@ -9,32 +9,68 @@ export type ClinicaContext = {
 
 export async function resolveClinicaContext(): Promise<ClinicaContext> {
   const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
-  if (userError || !user) {
+  const user = session?.user ?? null;
+
+  if (sessionError || !user) {
+    // Remove sessao local corrompida/expirada para evitar erros repetidos de 403 no auth endpoint.
+    await supabase.auth.signOut({ scope: "local" });
     throw new Error("Sessao expirada. Faca login novamente.");
   }
 
-  const perfisRes = await supabase
-    .from("perfis")
-    .select("clinica_id, funcao")
-    .eq("id", user.id)
-    .single();
-  const perfil = (perfisRes.data ?? null) as { clinica_id?: string; funcao?: string } | null;
+  const userId = user.id;
 
-  const profilesRes = await supabase
-    .from("profiles")
-    .select("clinica_id")
-    .eq("user_id", user.id)
-    .single();
-  const profile = (profilesRes.data ?? null) as { clinica_id?: string } | null;
+  type PerfilRow = { clinica_id?: string; funcao?: string };
+
+  async function lerPerfilAtual(): Promise<PerfilRow | null> {
+    const perfisRes = await supabase
+      .from("perfis")
+      .select("clinica_id, funcao")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (perfisRes.error) {
+      throw new Error(`Falha ao ler perfil do usuario: ${perfisRes.error.message}`);
+    }
+
+    return (perfisRes.data ?? null) as PerfilRow | null;
+  }
+
+  let perfil = await lerPerfilAtual();
+
+  // Auto-heal: tenta sincronizar cadastro de equipe/perfil quando o registro ainda nao foi criado.
+  if (!perfil) {
+    await supabase.rpc("sync_current_user_membership");
+    perfil = await lerPerfilAtual();
+  }
 
   const metadataClinicaId = (user.user_metadata?.clinica_id as string | undefined) ?? undefined;
+  const metadataFuncao = (user.user_metadata?.funcao as string | undefined) ?? undefined;
 
-  const clinicaId = perfil?.clinica_id ?? profile?.clinica_id ?? metadataClinicaId ?? user.id;
-  const funcao = perfil?.funcao ?? "admin_clinica";
+  let profile: { clinica_id?: string } | null = null;
+  if (!perfil?.clinica_id && !metadataClinicaId) {
+    const profilesRes = await supabase
+      .from("profiles")
+      .select("clinica_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (profilesRes.error) {
+      throw new Error(`Falha ao ler fallback de clinica em profiles: ${profilesRes.error.message}`);
+    }
+
+    profile = (profilesRes.data ?? null) as { clinica_id?: string } | null;
+  }
+
+  const clinicaId = perfil?.clinica_id ?? profile?.clinica_id ?? metadataClinicaId;
+  const funcao = perfil?.funcao ?? metadataFuncao ?? "admin_clinica";
+
+  if (!clinicaId) {
+    throw new Error("Perfil sem clinica vinculada. Atualize a tabela perfis e tente novamente.");
+  }
 
   return {
     userId: user.id,

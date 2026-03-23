@@ -2,11 +2,24 @@
 
 import Link from "next/link";
 import { PDFDownloadLink } from "@react-pdf/renderer";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  User,
+  Glasses,
+  Ruler,
+  CreditCard,
+  CheckCircle2,
+  ChevronRight,
+  ChevronLeft,
+  ArrowLeft,
+  Printer,
+  Save,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
+import BotaoImpressaoTermica from "@/components/otica/BotaoImpressaoTermica";
 import PDFComprovanteVenda, {
   type ComprovanteOS,
   type ComprovantePaciente,
@@ -14,30 +27,18 @@ import PDFComprovanteVenda, {
   type ComprovanteReceita,
   type ComprovanteVenda,
 } from "@/components/otica/PDFComprovanteVenda";
-
-type PacienteOption = {
-  id: string;
-  nome_completo: string;
-  cidade_atendimento?: string | null;
-  cpf?: string | null;
-};
-
-type ReceitaOptometrica = {
-  id: string;
-  data_exame?: string | null;
-  od_esferico?: number | null;
-  oe_esferico?: number | null;
-  od_cilindrico?: number | null;
-  oe_cilindrico?: number | null;
-  od_eixo?: number | null;
-  oe_eixo?: number | null;
-  adicao?: number | null;
-  dp_dnp?: string | null;
-};
-
-type StatusOS = "Laboratorio" | "Em Producao" | "Pronto" | "Entregue";
-type TipoPapel = "A4" | "termica";
-type ViaComprovante = "cliente" | "laboratorio";
+import Step1Cliente from "./steps/Step1Cliente";
+import Step2Produtos from "./steps/Step2Produtos";
+import Step3Medidas from "./steps/Step3Medidas";
+import Step4Fechamento from "./steps/Step4Fechamento";
+import type {
+  ArmacaoEstoque,
+  LenteCatalogo,
+  PacienteOption,
+  ReceitaOptometrica,
+  TipoArmacaoCatalogo,
+  VendaData,
+} from "./steps/types";
 
 type ComprovanteData = {
   venda: ComprovanteVenda;
@@ -45,6 +46,23 @@ type ComprovanteData = {
   os: ComprovanteOS;
   parcelas: ComprovanteParcela[];
 };
+
+const TERMO_ARMACAO_PROPRIA =
+  "Ciente que a armacao entregue para montagem nao foi adquirida neste estabelecimento. A loja nao se responsabiliza por quebras ou danos decorrentes de ressecamento, desgaste ou vicios ocultos do material durante o processo de laboratorio.";
+
+const ETAPAS = [
+  { id: 1, label: "Cliente", icon: <User size={18} /> },
+  { id: 2, label: "Produtos", icon: <Glasses size={18} /> },
+  { id: 3, label: "Medidas", icon: <Ruler size={18} /> },
+  { id: 4, label: "Fechamento", icon: <CreditCard size={18} /> },
+];
+
+function parseNumeroNullable(value?: string | null) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const n = Number(raw.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
 
 function gerarNumeroOSAutomatico() {
   const now = new Date();
@@ -55,38 +73,92 @@ function gerarNumeroOSAutomatico() {
   return `OS-${y}${m}${d}-${seq}`;
 }
 
-export default function NovaVendaPage() {
+async function obterIpOrigem() {
+  try {
+    const res = await fetch("https://api.ipify.org?format=json");
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ip?: string };
+    return data.ip ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function NovaVendaStepperContent() {
   const searchParams = useSearchParams();
   const pacienteIdFromUrl = searchParams.get("pacienteId") ?? "";
+  const toast = useToast();
 
+  const [step, setStep] = useState(1);
   const [clinicaId, setClinicaId] = useState("");
   const [habilitaOtica, setHabilitaOtica] = useState<boolean | null>(null);
   const [pacientes, setPacientes] = useState<PacienteOption[]>([]);
-  const [pacienteId, setPacienteId] = useState(pacienteIdFromUrl);
-  const [receita, setReceita] = useState<ReceitaOptometrica | null>(null);
-  const [usaNumManual, setUsaNumManual] = useState(false);
-  const [numeroOsManual, setNumeroOsManual] = useState("");
-  const [laboratorioNome, setLaboratorioNome] = useState("");
-  const [armacaoModelo, setArmacaoModelo] = useState("");
-  const [armacaoTipo, setArmacaoTipo] = useState("");
-  const [materialLente, setMaterialLente] = useState("");
-  const [dataEncomenda, setDataEncomenda] = useState(new Date().toISOString().slice(0, 10));
-  const [previsaoEntrega, setPrevisaoEntrega] = useState("");
-  const [dataEntregaReal, setDataEntregaReal] = useState("");
-  const [statusOS, setStatusOS] = useState<StatusOS>("Laboratorio");
-  const [valorTotal, setValorTotal] = useState("0");
-  const [metodoPagamento, setMetodoPagamento] = useState("A Vista");
-  const [qtdParcelas, setQtdParcelas] = useState("3");
-  const [primeiroVencimento, setPrimeiroVencimento] = useState("");
+  const [receitas, setReceitas] = useState<ReceitaOptometrica[]>([]);
+  const [lentes, setLentes] = useState<LenteCatalogo[]>([]);
+  const [tiposArmacao, setTiposArmacao] = useState<TipoArmacaoCatalogo[]>([]);
+  const [armacoesEstoque, setArmacoesEstoque] = useState<ArmacaoEstoque[]>([]);
   const [salvando, setSalvando] = useState(false);
-  const [tipoPapel, setTipoPapel] = useState<TipoPapel>("A4");
-  const [viaComprovante, setViaComprovante] = useState<ViaComprovante>("cliente");
   const [comprovante, setComprovante] = useState<ComprovanteData | null>(null);
-  const toast = useToast();
+
+  const [vendaData, setVendaData] = useState<VendaData>({
+    vendaManual: false,
+    clienteManualNome: "",
+    clienteManualCpf: "",
+    clienteManualCidade: "",
+    receitaManual: {
+      data_exame: new Date().toISOString().slice(0, 10),
+      od_esferico: "",
+      oe_esferico: "",
+      od_cilindrico: "",
+      oe_cilindrico: "",
+      od_eixo: "",
+      oe_eixo: "",
+      adicao: "",
+      dp_dnp: "",
+    },
+    pacienteId: pacienteIdFromUrl,
+    receitaId: "",
+    armacaoId: "",
+    armacaoTipoId: "",
+    armacaoPropria: false,
+    lenteId: "",
+    tratamentos: [],
+    laboratorioNome: "",
+    previsaoEntrega: "",
+    dataEncomenda: new Date().toISOString().slice(0, 10),
+    statusOS: "Laboratorio",
+    usaNumManual: false,
+    numeroOsManual: "",
+    termoQuebraAceito: false,
+    assinatura: "",
+    medidas: { od_dnp: "", oe_dnp: "", altura: "" },
+    financeiro: { total: 0, desconto: 0, metodo: "A Vista", qtdParcelas: "3", primeiroVencimento: "" },
+    pupilometroFoto: "",
+  });
 
   const pacienteNome = useMemo(
-    () => pacientes.find((p) => p.id === pacienteId)?.nome_completo ?? "",
-    [pacientes, pacienteId],
+    () => pacientes.find((p) => p.id === vendaData.pacienteId)?.nome_completo ?? "",
+    [pacientes, vendaData.pacienteId],
+  );
+
+  const lenteSelecionada = useMemo(
+    () => lentes.find((l) => l.id === vendaData.lenteId) ?? null,
+    [lentes, vendaData.lenteId],
+  );
+
+  const tipoArmacaoSelecionado = useMemo(
+    () => tiposArmacao.find((t) => t.id === vendaData.armacaoTipoId) ?? null,
+    [tiposArmacao, vendaData.armacaoTipoId],
+  );
+
+  const armacaoSelecionada = useMemo(
+    () => armacoesEstoque.find((a) => a.id === vendaData.armacaoId) ?? null,
+    [armacoesEstoque, vendaData.armacaoId],
+  );
+
+  const receitaSelecionada = useMemo(
+    () => receitas.find((r) => r.id === vendaData.receitaId) ?? null,
+    [receitas, vendaData.receitaId],
   );
 
   useEffect(() => {
@@ -94,50 +166,144 @@ export default function NovaVendaPage() {
       const ctx = await resolveClinicaContext();
       setClinicaId(ctx.clinicaId);
 
-      const [pacRes, cliRes] = await Promise.all([
+      const [pacRes, cliRes, armRes, lentesRes, tiposRes] = await Promise.all([
         supabase
           .from("pacientes")
           .select("id, nome_completo, cidade_atendimento, cpf")
           .eq("clinica_id", ctx.clinicaId)
           .order("nome_completo"),
         supabase.from("clinicas").select("possui_otica").eq("id", ctx.clinicaId).single(),
+        supabase
+          .from("estoque_armacoes")
+          .select("id, codigo_referencia, grife, modelo, cor, quantidade_atual, preco_venda")
+          .eq("clinica_id", ctx.clinicaId)
+          .gt("quantidade_atual", 0)
+          .order("grife", { ascending: true })
+          .order("modelo", { ascending: true }),
+        supabase.from("otica_lentes").select("id, nome, preco_base").eq("clinica_id", ctx.clinicaId).order("nome"),
+        supabase.from("otica_tipos_armacao").select("id, nome, preco_venda").eq("clinica_id", ctx.clinicaId).order("nome"),
       ]);
 
       setPacientes((pacRes.data as PacienteOption[]) ?? []);
+      setArmacoesEstoque((armRes.data as ArmacaoEstoque[]) ?? []);
+      setLentes((lentesRes.data as LenteCatalogo[]) ?? []);
+      setTiposArmacao((tiposRes.data as TipoArmacaoCatalogo[]) ?? []);
       const clinica = (cliRes.data ?? null) as { possui_otica?: boolean } | null;
       setHabilitaOtica(Boolean(clinica?.possui_otica));
     }
 
-    carregarBase();
+    void carregarBase();
   }, []);
 
   useEffect(() => {
-    async function buscarUltimaReceita() {
-      if (!pacienteId) {
-        setReceita(null);
+    async function buscarReceitas() {
+      if (vendaData.vendaManual) {
+        setReceitas([]);
+        return;
+      }
+
+      if (!vendaData.pacienteId) {
+        setReceitas([]);
+        setVendaData((prev) => ({ ...prev, receitaId: "" }));
         return;
       }
 
       const { data } = await supabase
         .from("receitas_optometricas")
         .select("id, data_exame, od_esferico, oe_esferico, od_cilindrico, oe_cilindrico, od_eixo, oe_eixo, adicao, dp_dnp")
-        .eq("paciente_id", pacienteId)
-        .order("data_exame", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .eq("paciente_id", vendaData.pacienteId)
+        .order("data_exame", { ascending: false });
 
-      setReceita((data as ReceitaOptometrica | null) ?? null);
+      const lista = (data as ReceitaOptometrica[]) ?? [];
+      setReceitas(lista);
+      setVendaData((prev) => {
+        if (prev.receitaId && lista.some((r) => r.id === prev.receitaId)) return prev;
+        return { ...prev, receitaId: lista[0]?.id ?? "" };
+      });
     }
 
-    buscarUltimaReceita();
-  }, [pacienteId]);
+    void buscarReceitas();
+  }, [vendaData.pacienteId, vendaData.vendaManual]);
+
+  useEffect(() => {
+    const valorLente = Number(lenteSelecionada?.preco_base ?? 0);
+    const valorArmacaoEstoque = vendaData.armacaoPropria ? 0 : Number(armacaoSelecionada?.preco_venda ?? 0);
+    const valorTipoArmacao = vendaData.armacaoPropria ? 0 : Number(tipoArmacaoSelecionado?.preco_venda ?? 0);
+    const base = valorLente + Math.max(valorArmacaoEstoque, valorTipoArmacao);
+    const total = Math.max(0, Number((base - Number(vendaData.financeiro.desconto || 0)).toFixed(2)));
+
+    setVendaData((prev) => {
+      if (prev.financeiro.total === total) return prev;
+      return { ...prev, financeiro: { ...prev.financeiro, total } };
+    });
+  }, [
+    lenteSelecionada?.preco_base,
+    armacaoSelecionada?.preco_venda,
+    tipoArmacaoSelecionado?.preco_venda,
+    vendaData.armacaoPropria,
+    vendaData.financeiro.desconto,
+  ]);
+
+  function validarEtapaAtual() {
+    if (step === 1) {
+      if (!vendaData.vendaManual && !vendaData.pacienteId) {
+        toast.info("Selecione um paciente para continuar.");
+        return false;
+      }
+
+      if (vendaData.vendaManual) {
+        if (!vendaData.clienteManualNome.trim()) {
+          toast.info("Informe o nome do cliente na venda manual.");
+          return false;
+        }
+
+        const manual = vendaData.receitaManual;
+        const algumOlho = Boolean(manual.od_esferico || manual.oe_esferico);
+        if (!algumOlho) {
+          toast.info("Preencha pelo menos OD ou OE da receita manual.");
+          return false;
+        }
+      }
+    }
+
+    if (step === 2) {
+      if (!vendaData.lenteId) {
+        toast.info("Selecione uma lente do catálogo.");
+        return false;
+      }
+      if (!vendaData.armacaoPropria && !vendaData.armacaoId && !vendaData.armacaoTipoId) {
+        toast.info("Selecione uma armação de estoque ou um tipo de armação.");
+        return false;
+      }
+    }
+
+    if (step === 3) {
+      if (!vendaData.medidas.od_dnp || !vendaData.medidas.oe_dnp) {
+        toast.info("Preencha OD e OE DNP antes de avançar.");
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function nextStep() {
+    if (!validarEtapaAtual()) return;
+    setStep((s) => Math.min(s + 1, 4));
+  }
+
+  function prevStep() {
+    setStep((s) => Math.max(s - 1, 1));
+  }
 
   function criarParcelasCrediario(total: number): ComprovanteParcela[] {
-    if (!metodoPagamento.toLowerCase().includes("crediario")) return [];
+    if (!vendaData.financeiro.metodo.toLowerCase().includes("crediario")) return [];
 
-    const qtd = Math.max(1, Number(qtdParcelas) || 1);
+    const qtd = Math.max(1, Number(vendaData.financeiro.qtdParcelas) || 1);
     const valorParcela = total / qtd;
-    const inicio = primeiroVencimento ? new Date(primeiroVencimento) : new Date();
+    const inicio = vendaData.financeiro.primeiroVencimento
+      ? new Date(vendaData.financeiro.primeiroVencimento)
+      : new Date();
 
     return Array.from({ length: qtd }).map((_, i) => {
       const vencimento = new Date(inicio);
@@ -150,31 +316,97 @@ export default function NovaVendaPage() {
     });
   }
 
-  async function salvarVendaOs() {
-    if (!pacienteId || !clinicaId) {
-      toast.info("Selecione um paciente para iniciar a venda.");
+  async function finalizarVenda() {
+    if (!clinicaId || (!vendaData.pacienteId && !vendaData.vendaManual)) {
+      toast.info("Preencha a etapa do cliente.");
       return;
     }
 
-    const numeroFinal = usaNumManual ? numeroOsManual.trim() : gerarNumeroOSAutomatico();
+    if (vendaData.armacaoPropria && !vendaData.termoQuebraAceito) {
+      toast.info("Confirme o aceite do termo de responsabilidade.");
+      return;
+    }
+
+    if (vendaData.armacaoPropria && !vendaData.assinatura) {
+      toast.info("Colete a assinatura do cliente para armação própria.");
+      return;
+    }
+
+    const numeroFinal = vendaData.usaNumManual
+      ? vendaData.numeroOsManual.trim()
+      : gerarNumeroOSAutomatico();
+
     if (!numeroFinal) {
-      toast.info("Informe o numero da OS manual.");
+      toast.info("Informe o número manual da OS ou use geração automática.");
       return;
     }
 
     setSalvando(true);
     try {
-      const valor = Number(valorTotal.replace(",", ".")) || 0;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      let pacienteIdFinal = vendaData.pacienteId;
+      let receitaIdFinal: string | null = vendaData.receitaId || null;
+
+      if (vendaData.vendaManual) {
+        const pacienteManualRes = await supabase
+          .from("pacientes")
+          .insert({
+            clinica_id: clinicaId,
+            nome_completo: vendaData.clienteManualNome.trim(),
+            cpf: vendaData.clienteManualCpf.trim() || null,
+            cidade_atendimento: vendaData.clienteManualCidade.trim() || null,
+          })
+          .select("id")
+          .single();
+
+        if (pacienteManualRes.error || !pacienteManualRes.data?.id) {
+          throw new Error(pacienteManualRes.error?.message ?? "Falha ao criar paciente manual.");
+        }
+
+        pacienteIdFinal = pacienteManualRes.data.id;
+
+        const receitaManual = vendaData.receitaManual;
+        const receitaManualRes = await supabase
+          .from("receitas_optometricas")
+          .insert({
+            clinica_id: clinicaId,
+            paciente_id: pacienteIdFinal,
+            data_exame: receitaManual.data_exame || new Date().toISOString().slice(0, 10),
+            od_esferico: parseNumeroNullable(receitaManual.od_esferico),
+            oe_esferico: parseNumeroNullable(receitaManual.oe_esferico),
+            od_cilindrico: parseNumeroNullable(receitaManual.od_cilindrico),
+            oe_cilindrico: parseNumeroNullable(receitaManual.oe_cilindrico),
+            od_eixo: parseNumeroNullable(receitaManual.od_eixo),
+            oe_eixo: parseNumeroNullable(receitaManual.oe_eixo),
+            adicao: parseNumeroNullable(receitaManual.adicao),
+            dp_dnp: receitaManual.dp_dnp || null,
+          })
+          .select("id")
+          .single();
+
+        if (receitaManualRes.error || !receitaManualRes.data?.id) {
+          throw new Error(receitaManualRes.error?.message ?? "Falha ao criar receita manual.");
+        }
+
+        receitaIdFinal = receitaManualRes.data.id;
+      }
+
+      const valorTotal = Number(vendaData.financeiro.total || 0);
 
       const vendaRes = await supabase
         .from("vendas")
         .insert({
           clinica_id: clinicaId,
-          paciente_id: pacienteId,
-          receita_id: receita?.id ?? null,
+          paciente_id: pacienteIdFinal,
+          receita_id: receitaIdFinal,
           status: "aberta",
-          valor_total: valor,
-          valor_final: valor,
+          armacao_propria: vendaData.armacaoPropria,
+          termo_quebra_aceito: vendaData.armacaoPropria ? vendaData.termoQuebraAceito : false,
+          valor_total: valorTotal,
+          valor_final: valorTotal,
         })
         .select("id")
         .single();
@@ -183,41 +415,105 @@ export default function NovaVendaPage() {
         throw new Error(vendaRes.error?.message ?? "Falha ao criar venda.");
       }
 
+      const armacaoModelo = armacaoSelecionada
+        ? `${armacaoSelecionada.grife} ${armacaoSelecionada.modelo}`.trim()
+        : tipoArmacaoSelecionado?.nome ?? null;
+
+      const armacaoTipo = armacaoSelecionada?.cor ?? tipoArmacaoSelecionado?.nome ?? null;
+
       const osRes = await supabase.from("ordens_servico").insert({
         venda_id: vendaRes.data.id,
         clinica_id: clinicaId,
-        receita_id: receita?.id ?? null,
+        receita_id: receitaIdFinal,
+        armacao_id: vendaData.armacaoId || null,
         numero_os: numeroFinal,
-        laboratorio_nome: laboratorioNome || null,
-        armacao_modelo: armacaoModelo || null,
-        armacao_tipo: armacaoTipo || null,
-        material_lente: materialLente || null,
-        data_encomenda: dataEncomenda || null,
-        previsao_entrega: previsaoEntrega || null,
-        data_entrega_real: dataEntregaReal || null,
-        status_os: statusOS,
+        laboratorio_nome: vendaData.laboratorioNome || null,
+        armacao_modelo: armacaoModelo,
+        armacao_tipo: armacaoTipo,
+        material_lente: lenteSelecionada?.nome ?? null,
+        data_encomenda: vendaData.dataEncomenda || null,
+        previsao_entrega: vendaData.previsaoEntrega || null,
+        status_os: vendaData.statusOS,
+        pupilometro_foto_url: vendaData.pupilometroFotoStorageUrl || null,
       });
 
-      if (osRes.error) {
-        throw new Error(osRes.error.message);
+      if (osRes.error) throw new Error(osRes.error.message);
+
+      if (vendaData.armacaoId) {
+        const baixaRes = await supabase.rpc("baixar_estoque", {
+          p_id: vendaData.armacaoId,
+          p_qtd: 1,
+        });
+        if (baixaRes.error) throw new Error(baixaRes.error.message);
       }
 
-      const pacienteSelecionado = pacientes.find((p) => p.id === pacienteId);
+      if (vendaData.armacaoPropria && vendaData.assinatura) {
+        const ipOrigem = await obterIpOrigem();
+        const termoRes = await supabase
+          .from("termos_aceite")
+          .insert({
+            clinica_id: clinicaId,
+            paciente_id: pacienteIdFinal,
+            venda_id: vendaRes.data.id,
+            criado_por: user?.id ?? null,
+            tipo_termo: "Responsabilidade_Armacao",
+            termo_texto: TERMO_ARMACAO_PROPRIA,
+            assinatura_base64: vendaData.assinatura,
+            ip_origem: ipOrigem,
+          })
+          .select("id")
+          .single();
+
+        if (termoRes.error || !termoRes.data?.id) {
+          throw new Error(termoRes.error?.message ?? "Falha ao registrar termo de armacao propria.");
+        }
+
+        const linkTermoRes = await supabase
+          .from("vendas")
+          .update({ termo_responsabilidade_id: termoRes.data.id })
+          .eq("id", vendaRes.data.id);
+
+        if (linkTermoRes.error) throw new Error(linkTermoRes.error.message);
+      }
+
+      const pacienteSelecionado = vendaData.vendaManual
+        ? {
+            nome_completo: vendaData.clienteManualNome,
+            cidade_atendimento: vendaData.clienteManualCidade || null,
+            cpf: vendaData.clienteManualCpf || null,
+          }
+        : pacientes.find((p) => p.id === vendaData.pacienteId);
+
+      const receitaComprovante = vendaData.vendaManual
+        ? {
+            od_esferico: parseNumeroNullable(vendaData.receitaManual.od_esferico),
+            od_cilindrico: parseNumeroNullable(vendaData.receitaManual.od_cilindrico),
+            od_eixo: parseNumeroNullable(vendaData.receitaManual.od_eixo),
+            oe_esferico: parseNumeroNullable(vendaData.receitaManual.oe_esferico),
+            oe_cilindrico: parseNumeroNullable(vendaData.receitaManual.oe_cilindrico),
+            oe_eixo: parseNumeroNullable(vendaData.receitaManual.oe_eixo),
+            adicao: parseNumeroNullable(vendaData.receitaManual.adicao),
+            dp_dnp: vendaData.receitaManual.dp_dnp || null,
+          }
+        : {
+            od_esferico: receitaSelecionada?.od_esferico ?? null,
+            od_cilindrico: receitaSelecionada?.od_cilindrico ?? null,
+            od_eixo: receitaSelecionada?.od_eixo ?? null,
+            oe_esferico: receitaSelecionada?.oe_esferico ?? null,
+            oe_cilindrico: receitaSelecionada?.oe_cilindrico ?? null,
+            oe_eixo: receitaSelecionada?.oe_eixo ?? null,
+            adicao: receitaSelecionada?.adicao ?? null,
+            dp_dnp: receitaSelecionada?.dp_dnp ?? null,
+          };
+
       const receitaPdf: ComprovanteReceita = {
-        od_esferico: receita?.od_esferico ?? null,
-        od_cilindrico: receita?.od_cilindrico ?? null,
-        od_eixo: receita?.od_eixo ?? null,
-        oe_esferico: receita?.oe_esferico ?? null,
-        oe_cilindrico: receita?.oe_cilindrico ?? null,
-        oe_eixo: receita?.oe_eixo ?? null,
-        adicao: receita?.adicao ?? null,
-        dp_dnp: receita?.dp_dnp ?? null,
+        ...receitaComprovante,
       };
 
       setComprovante({
         venda: {
-          valor_total: valor,
-          metodo_pagamento: metodoPagamento,
+          valor_total: valorTotal,
+          metodo_pagamento: vendaData.financeiro.metodo,
         },
         paciente: {
           nome_completo: pacienteSelecionado?.nome_completo ?? "Paciente",
@@ -226,17 +522,18 @@ export default function NovaVendaPage() {
         },
         os: {
           numero_os: numeroFinal,
-          laboratorio_nome: laboratorioNome || null,
-          armacao_modelo: armacaoModelo || null,
-          armacao_tipo: armacaoTipo || null,
-          material_lente: materialLente || null,
-          previsao_entrega: previsaoEntrega || null,
+          laboratorio_nome: vendaData.laboratorioNome || null,
+          armacao_modelo: armacaoModelo,
+          armacao_tipo: armacaoTipo,
+          material_lente: lenteSelecionada?.nome ?? null,
+          previsao_entrega: vendaData.previsaoEntrega || null,
           receita: receitaPdf,
         },
-        parcelas: criarParcelasCrediario(valor),
+        parcelas: criarParcelasCrediario(valorTotal),
       });
 
-      toast.success("Venda e Ordem de Servico registradas com sucesso!");
+      toast.success("Venda e OS registradas com sucesso.");
+      setStep(4);
     } catch (err) {
       const e = err as Error;
       toast.error(`Erro ao salvar: ${e.message}`);
@@ -249,231 +546,134 @@ export default function NovaVendaPage() {
     return (
       <section className="mx-auto max-w-5xl rounded-xl border border-amber-200 bg-amber-50 p-6">
         <h1 className="text-xl font-bold text-amber-900">Modulo Otica desativado para esta clinica</h1>
-        <p className="mt-2 text-amber-800">
-          Ative o add-on na Torre de Controle para abrir vendas e ordens de servico.
-        </p>
+        <p className="mt-2 text-amber-800">Ative o add-on na Torre de Controle para abrir vendas e ordens de servico.</p>
       </section>
     );
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">Nova Venda / Ordem de Servico</h1>
-        <Link href="/otica" className="text-sm text-slate-600 underline underline-offset-4">
-          Voltar para Otica
-        </Link>
-      </div>
-
-      <section className="rounded-xl border bg-white p-4 shadow-sm">
-        <label className="mb-2 block font-semibold">Paciente</label>
-        <select
-          value={pacienteId}
-          onChange={(e) => setPacienteId(e.target.value)}
-          className="w-full rounded border p-2"
-        >
-          <option value="">Selecione...</option>
-          {pacientes.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nome_completo}
-            </option>
-          ))}
-        </select>
-      </section>
-
-      {receita ? (
-        <div className="flex flex-col gap-3 rounded-xl border-l-4 border-green-500 bg-green-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto max-w-6xl p-6 md:p-10 space-y-8 pb-36">
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Link href="/otica" className="p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-cyan-600 transition-all">
+            <ArrowLeft size={20} />
+          </Link>
           <div>
-            <p className="font-bold text-green-700">
-              Receita de {receita.data_exame ? new Date(receita.data_exame).toLocaleDateString() : "data nao informada"} encontrada
-            </p>
-            <p className="text-xs text-green-700">
-              OD: {receita.od_esferico ?? "-"} / {receita.od_cilindrico ?? "-"} | OE: {receita.oe_esferico ?? "-"} / {receita.oe_cilindrico ?? "-"}
-            </p>
+            <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Nova Ordem de Serviço</p>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Venda & Montagem</h1>
           </div>
-          <span className="rounded bg-green-600 px-3 py-1 text-xs font-semibold text-white">Vinculo Ativo</span>
         </div>
-      ) : (
-        <div className="rounded-xl bg-yellow-50 p-4 text-yellow-800">
-          Nenhuma receita encontrada. Siga com preenchimento manual da OS.
-        </div>
-      )}
+      </header>
 
-      <section className="grid grid-cols-1 gap-6 rounded-xl border bg-white p-6 shadow md:grid-cols-3">
-        <div>
-          <label className="mb-2 block font-bold">Numeracao da OS</label>
-          <div className="mb-2 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setUsaNumManual(false)}
-              className={`flex-1 rounded p-2 text-xs ${!usaNumManual ? "bg-blue-600 text-white" : "bg-gray-200"}`}
-            >
-              Automatica
-            </button>
-            <button
-              type="button"
-              onClick={() => setUsaNumManual(true)}
-              className={`flex-1 rounded p-2 text-xs ${usaNumManual ? "bg-blue-600 text-white" : "bg-gray-200"}`}
-            >
-              Manual (Talao)
-            </button>
+      <nav className="flex justify-between items-center bg-white p-6 rounded-[32px] shadow-sm border border-slate-50">
+        {ETAPAS.map((e, idx) => (
+          <div key={e.id} className="flex items-center flex-1 last:flex-none">
+            <div className={`flex items-center gap-3 transition-all ${step >= e.id ? "text-cyan-600" : "text-slate-300"}`}>
+              <div
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black shadow-sm ${
+                  step === e.id
+                    ? "bg-cyan-600 text-white scale-110 shadow-cyan-100"
+                    : step > e.id
+                      ? "bg-cyan-100 text-cyan-600"
+                      : "bg-slate-50 text-slate-400"
+                }`}
+              >
+                {step > e.id ? <CheckCircle2 size={20} /> : e.icon}
+              </div>
+              <span className="hidden md:block text-[10px] font-black uppercase tracking-widest">{e.label}</span>
+            </div>
+            {idx < ETAPAS.length - 1 && (
+              <div className={`h-[2px] flex-1 mx-4 rounded-full ${step > e.id ? "bg-cyan-100" : "bg-slate-50"}`} />
+            )}
           </div>
-          <input
-            disabled={!usaNumManual}
-            value={numeroOsManual}
-            onChange={(e) => setNumeroOsManual(e.target.value)}
-            placeholder={usaNumManual ? "Digite o numero do talao" : "Gerado automaticamente"}
-            className="w-full rounded border bg-gray-50 p-2"
+        ))}
+      </nav>
+
+      <main className="animate-in fade-in slide-in-from-right-4 duration-500">
+        {step === 1 && (
+          <Step1Cliente
+            data={vendaData}
+            onChange={setVendaData}
+            pacientes={pacientes}
+            receitas={receitas}
+            pacienteNome={pacienteNome}
           />
-        </div>
+        )}
 
-        <div>
-          <label className="mb-2 block font-bold">Laboratorio</label>
-          <input
-            value={laboratorioNome}
-            onChange={(e) => setLaboratorioNome(e.target.value)}
-            className="w-full rounded border p-2"
-            placeholder="Ex: Essilor, Zeiss"
+        {step === 2 && (
+          <Step2Produtos
+            data={vendaData}
+            onChange={setVendaData}
+            lentes={lentes}
+            tiposArmacao={tiposArmacao}
+            armacoesEstoque={armacoesEstoque}
           />
-        </div>
+        )}
 
-        <div>
-          <label className="mb-2 block font-bold">Previsao de Entrega</label>
-          <input type="date" value={previsaoEntrega} onChange={(e) => setPrevisaoEntrega(e.target.value)} className="w-full rounded border p-2" />
-        </div>
+        {step === 3 && <Step3Medidas data={vendaData} onChange={setVendaData} clinicaId={clinicaId} />}
 
-        <div>
-          <label className="mb-2 block font-bold">Armacao - Modelo</label>
-          <input value={armacaoModelo} onChange={(e) => setArmacaoModelo(e.target.value)} className="w-full rounded border p-2" placeholder="Modelo" />
-        </div>
-
-        <div>
-          <label className="mb-2 block font-bold">Armacao - Tipo</label>
-          <input value={armacaoTipo} onChange={(e) => setArmacaoTipo(e.target.value)} className="w-full rounded border p-2" placeholder="Aro Fechado / Nylon / Parafuso" />
-        </div>
-
-        <div>
-          <label className="mb-2 block font-bold">Material da Lente</label>
-          <input value={materialLente} onChange={(e) => setMaterialLente(e.target.value)} className="w-full rounded border p-2" placeholder="Resina / Policarbonato / Trivex" />
-        </div>
-
-        <div>
-          <label className="mb-2 block font-bold">Valor Total (R$)</label>
-          <input value={valorTotal} onChange={(e) => setValorTotal(e.target.value)} className="w-full rounded border p-2" placeholder="0,00" />
-        </div>
-
-        <div>
-          <label className="mb-2 block font-bold">Metodo de Pagamento</label>
-          <select value={metodoPagamento} onChange={(e) => setMetodoPagamento(e.target.value)} className="w-full rounded border p-2">
-            <option>A Vista</option>
-            <option>PIX</option>
-            <option>Cartao</option>
-            <option>Crediario Proprio</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-2 block font-bold">Qtd. Parcelas (Crediario)</label>
-          <input value={qtdParcelas} onChange={(e) => setQtdParcelas(e.target.value)} className="w-full rounded border p-2" placeholder="3" />
-        </div>
-
-        <div>
-          <label className="mb-2 block font-bold">1o Vencimento</label>
-          <input type="date" value={primeiroVencimento} onChange={(e) => setPrimeiroVencimento(e.target.value)} className="w-full rounded border p-2" />
-        </div>
-      </section>
-
-      <section className="rounded-xl border bg-white p-4 shadow md:p-6">
-        <h2 className="mb-4 text-lg font-bold">Checklist de Entrega</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div>
-            <label className="mb-2 block font-semibold">Data Encomenda</label>
-            <input type="date" value={dataEncomenda} onChange={(e) => setDataEncomenda(e.target.value)} className="w-full rounded border p-2" />
-          </div>
-          <div>
-            <label className="mb-2 block font-semibold">Data Entrega Real</label>
-            <input type="date" value={dataEntregaReal} onChange={(e) => setDataEntregaReal(e.target.value)} className="w-full rounded border p-2" />
-          </div>
-          <div>
-            <label className="mb-2 block font-semibold">Status</label>
-            <select value={statusOS} onChange={(e) => setStatusOS(e.target.value as StatusOS)} className="w-full rounded border p-2">
-              <option value="Laboratorio">Aguardando Laboratorio</option>
-              <option value="Em Producao">Em Producao</option>
-              <option value="Pronto">Pronto para Entrega</option>
-              <option value="Entregue">Entregue</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-          {[
-            "Aguardando Laboratorio",
-            "Em Producao",
-            "Pronto para Entrega",
-            "Entregue",
-          ].map((item) => (
-            <span key={item} className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
-              {item}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      <button
-        type="button"
-        disabled={salvando || !pacienteId}
-        onClick={salvarVendaOs}
-        className="w-full rounded-lg bg-slate-900 py-4 font-bold text-white hover:bg-slate-800 disabled:bg-slate-400"
-      >
-        {salvando ? "Salvando..." : `Salvar Venda e OS${pacienteNome ? ` - ${pacienteNome}` : ""}`}
-      </button>
+        {step === 4 && <Step4Fechamento data={vendaData} onChange={setVendaData} termoTexto={TERMO_ARMACAO_PROPRIA} />}
+      </main>
 
       {comprovante && (
-        <section className="space-y-3 rounded-xl border bg-white p-4 shadow">
-          <h2 className="text-base font-bold">Impressao do Comprovante</h2>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-2 block text-sm font-semibold">Tipo de Papel</label>
-              <select value={tipoPapel} onChange={(e) => setTipoPapel(e.target.value as TipoPapel)} className="w-full rounded border p-2">
-                <option value="A4">A4</option>
-                <option value="termica">Termica 80mm</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-semibold">Via</label>
-              <select value={viaComprovante} onChange={(e) => setViaComprovante(e.target.value as ViaComprovante)} className="w-full rounded border p-2">
-                <option value="cliente">Via do Cliente</option>
-                <option value="laboratorio">Via do Laboratorio</option>
-              </select>
-            </div>
-
-            <div className="flex items-end">
-              <PDFDownloadLink
-                document={
-                  <PDFComprovanteVenda
-                    venda={comprovante.venda}
-                    paciente={comprovante.paciente}
-                    os={comprovante.os}
-                    parcelas={comprovante.parcelas}
-                    tipoPapel={tipoPapel}
-                    via={viaComprovante}
-                  />
-                }
-                fileName={`comprovante-${comprovante.os.numero_os || "os"}-${tipoPapel}-${viaComprovante}.pdf`}
-                className="w-full rounded bg-emerald-600 px-4 py-2 text-center font-semibold text-white hover:bg-emerald-700"
-              >
-                {({ loading }) =>
-                  loading
-                    ? "Gerando PDF..."
-                    : `Baixar ${viaComprovante === "cliente" ? "Via Cliente" : "Via Laboratorio"} (${tipoPapel})`
-                }
-              </PDFDownloadLink>
-            </div>
+        <section className="bg-white p-8 rounded-[40px] shadow-sm border border-emerald-100 space-y-4">
+          <div className="flex items-center gap-2">
+            <Printer size={18} className="text-emerald-600" />
+            <h3 className="font-black text-slate-800">Comprovantes da venda</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <PDFDownloadLink
+              document={<PDFComprovanteVenda {...comprovante} tipoPapel="A4" via="cliente" />}
+              className="w-full p-4 bg-slate-900 text-white rounded-2xl font-black text-xs text-center uppercase tracking-widest hover:bg-cyan-600 transition-all"
+            >
+              Gerar PDF (A4)
+            </PDFDownloadLink>
+            <BotaoImpressaoTermica {...comprovante} />
           </div>
         </section>
       )}
+
+      <footer className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-between items-center z-50">
+        <button
+          onClick={prevStep}
+          disabled={step === 1 || salvando}
+          className="flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-slate-400 hover:text-slate-600 disabled:opacity-0 transition-all"
+        >
+          <ChevronLeft size={20} /> Voltar
+        </button>
+
+        {step < 4 ? (
+          <button
+            onClick={nextStep}
+            disabled={salvando}
+            className="flex items-center gap-2 px-10 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-xl shadow-slate-200 hover:bg-cyan-600 transition-all"
+          >
+            Proximo Passo <ChevronRight size={20} />
+          </button>
+        ) : (
+          <button
+            onClick={finalizarVenda}
+            disabled={salvando}
+            className="flex items-center gap-2 px-10 py-4 bg-cyan-500 text-white rounded-2xl font-black shadow-xl shadow-cyan-100 hover:bg-cyan-600 transition-all disabled:bg-slate-300"
+          >
+            {salvando ? (
+              <div className="h-6 w-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <>
+                <Save size={20} /> Finalizar Venda
+              </>
+            )}
+          </button>
+        )}
+      </footer>
     </div>
+  );
+}
+
+export default function NovaVendaPage() {
+  return (
+    <Suspense fallback={<div className="p-20 text-center text-slate-400 font-black animate-pulse">CARREGANDO MÓDULO DE VENDAS...</div>}>
+      <NovaVendaStepperContent />
+    </Suspense>
   );
 }

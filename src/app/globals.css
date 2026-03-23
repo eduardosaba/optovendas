@@ -3,9 +3,27 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  --cor-primaria: #2563eb;
+  --cor-tema-unidade: #2563eb;
+  --card-radius: 32px;
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at 10% -10%, rgba(37, 99, 235, 0.09), transparent 32%),
+    radial-gradient(circle at 90% 0%, rgba(15, 23, 42, 0.06), transparent 28%),
+    var(--background);
   color: var(--foreground);
+}
+
+.bg-primary {
+  background-color: var(--cor-primaria);
+}
+
+.text-primary {
+  color: var(--cor-primaria);
+}
+
+.border-primary {
+  border-color: var(--cor-primaria);
 }

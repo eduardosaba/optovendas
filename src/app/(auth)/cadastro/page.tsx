@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { bootstrapClinicaForCurrentUser } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
+import AuthBrandingHeader from "@/components/auth/AuthBrandingHeader";
+import PasswordField from "@/components/auth/PasswordField";
 
 export default function CadastroPage() {
   const [nomeClinica, setNomeClinica] = useState("");
@@ -52,10 +54,7 @@ export default function CadastroPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-md space-y-8 rounded-2xl bg-white p-10 shadow-xl">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-blue-600">Criar conta no OptoVendas</h2>
-          <p className="mt-2 text-slate-500">Comece seu onboarding SaaS</p>
-        </div>
+        <AuthBrandingHeader title="Criar conta no {nomeSistema}" subtitle="Comece seu onboarding SaaS" emailHint={email} />
         <form className="mt-8 space-y-6" onSubmit={handleCadastro}>
           <input
             type="text"
@@ -71,13 +70,7 @@ export default function CadastroPage() {
             className="w-full rounded-lg border p-3 outline-blue-500"
             onChange={(e) => setEmail(e.target.value)}
           />
-          <input
-            type="password"
-            required
-            placeholder="Senha"
-            className="w-full rounded-lg border p-3 outline-blue-500"
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <PasswordField value={password} onChange={setPassword} />
           <button
             disabled={loading}
             className="w-full rounded-lg bg-blue-600 p-3 font-bold text-white hover:bg-blue-700 disabled:bg-slate-400"

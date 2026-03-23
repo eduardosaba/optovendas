@@ -136,8 +136,17 @@ export default function DashboardMasterPage() {
           >
             {demoMode ? "Demo: ON" : "Ativar Modo Demo"}
           </button>
+          <Link href="/admin/configuracoes" className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+            Configuracoes do SaaS
+          </Link>
+          <Link href="/admin/equipe" className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+            Equipe
+          </Link>
           <Link href="/admin/backup" className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
             Backup e Exportacao
+          </Link>
+          <Link href="/admin/performance" className="rounded bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+            Funil de Conversao
           </Link>
           <Link href="/admin" className="text-sm text-slate-600 underline underline-offset-4">
             Voltar

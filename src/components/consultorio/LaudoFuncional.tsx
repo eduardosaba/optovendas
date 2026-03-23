@@ -1,23 +1,19 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { maskAv } from "@/lib/refracaoFormat";
 import { useToast } from "@/components/ui/ToastProvider";
+import { ClipboardCheck, Eye, Activity, History, AlertTriangle, Save } from "lucide-react";
 
 type DadosLaudo = {
-  av_sc_longe_od: string;
-  av_sc_perto_od: string;
-  av_sc_longe_oe: string;
-  av_sc_perto_oe: string;
-  av_cc_longe_od: string;
-  av_cc_perto_od: string;
-  av_cc_longe_oe: string;
-  av_cc_perto_oe: string;
-  sensibilidade: string;
-  motor_acomodativo: string;
-  motor_vergencial: string;
-  ishihara: string;
-  profundidade: string;
-  conclusao: string;
+  av_sc_longe_od: string; av_sc_perto_od: string;
+  av_sc_longe_oe: string; av_sc_perto_oe: string;
+  av_cc_longe_od: string; av_cc_perto_od: string;
+  av_cc_longe_oe: string; av_cc_perto_oe: string;
+  sensibilidade: string; motor_acomodativo: string;
+  motor_vergencial: string; ishihara: string;
+  profundidade: string; conclusao: string;
   necessita_correcao: string;
 };
 
@@ -28,65 +24,65 @@ type Receita = {
   esferico_oe?: string | number | null;
   cilindrico_od?: string | number | null;
   cilindrico_oe?: string | number | null;
+  data_exame?: string | null;
+  criado_em?: string | null;
   created_at?: string | null;
   [key: string]: unknown;
 };
 
+function receitaDate(r: Receita): Date | null {
+  const raw = r.data_exame || r.created_at || r.criado_em;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export default function LaudoFuncional({ pacienteId }: { pacienteId: string }) {
   const toast = useToast();
   const [dados, setDados] = useState<DadosLaudo>({
-    av_sc_longe_od: "",
-    av_sc_perto_od: "",
-    av_sc_longe_oe: "",
-    av_sc_perto_oe: "",
-    av_cc_longe_od: "",
-    av_cc_perto_od: "",
-    av_cc_longe_oe: "",
-    av_cc_perto_oe: "",
-    sensibilidade: "sem_alteracao",
-    motor_acomodativo: "sem_alteracao",
-    motor_vergencial: "sem_alteracao",
-    ishihara: "sem_alteracao",
-    profundidade: "sem_alteracao",
-    conclusao: "",
-    necessita_correcao: "sim",
+    av_sc_longe_od: "", av_sc_perto_od: "", av_sc_longe_oe: "", av_sc_perto_oe: "",
+    av_cc_longe_od: "", av_cc_perto_od: "", av_cc_longe_oe: "", av_cc_perto_oe: "",
+    sensibilidade: "sem_alteracao", motor_acomodativo: "sem_alteracao",
+    motor_vergencial: "sem_alteracao", ishihara: "sem_alteracao",
+    profundidade: "sem_alteracao", conclusao: "", necessita_correcao: "sim",
   });
 
-  // histórico não usado diretamente aqui — mantido apenas para busca opcional no futuro
-  const [receitaAtual, setReceitaAtual] = useState<Receita | null>(null);
-  const [receitaAnterior300, setReceitaAnterior300] = useState<Receita | null>(null);
+  const [receitaAtual, setReceitaAtual] = useState<any | null>(null);
+  const [receitaAnterior300, setReceitaAnterior300] = useState<any | null>(null);
 
   useEffect(() => {
-    // Buscar receitas do paciente (12 meses) e também procurar uma receita anterior >=300 dias
     const fetchHistorico = async () => {
       try {
         const oneYearAgo = new Date();
         oneYearAgo.setDate(oneYearAgo.getDate() - 365);
 
-        const { data: recent } = await supabase
-          .from("receitas_optometricas")
-          .select("*")
-          .eq("paciente_id", pacienteId)
-          .gte("created_at", oneYearAgo.toISOString())
-          .order("created_at", { ascending: false });
-
-        // recent results are available if needed in the future
-
-        // Buscar a última receita registrada com pelo menos 300 dias de distância
         const threshold = new Date();
         threshold.setDate(threshold.getDate() - 300);
 
         const { data: allData, error: errAll } = await supabase
           .from("receitas_optometricas")
           .select("*")
-          .eq("paciente_id", pacienteId)
-          .order("created_at", { ascending: false });
+          .eq("paciente_id", pacienteId);
 
         if (errAll) return;
 
-        const prev = (allData || []).find((r: Receita) => {
-          if (!r.created_at) return false;
-          return new Date(r.created_at) <= threshold;
+        const sorted = ((allData as Receita[]) ?? [])
+          .slice()
+          .sort((a, b) => {
+            const da = receitaDate(a)?.getTime() ?? 0;
+            const db = receitaDate(b)?.getTime() ?? 0;
+            return db - da;
+          });
+
+        const recent = sorted.filter((r) => {
+          const d = receitaDate(r);
+          return !!d && d >= oneYearAgo;
+        });
+
+        const prev = sorted.find((r: Receita) => {
+          const d = receitaDate(r);
+          if (!d) return false;
+          return d <= threshold;
         }) as Receita | undefined;
 
         const latest = (recent && (recent as Receita[])[0]) || null;
@@ -102,172 +98,173 @@ export default function LaudoFuncional({ pacienteId }: { pacienteId: string }) {
   }, [pacienteId]);
 
   const salvarLaudo = async () => {
-    const { error } = await supabase.from("laudos_funcionais").insert([
-      {
-        paciente_id: pacienteId,
-        ...dados,
-      },
-    ]);
-
-    if (!error) toast.success("Laudo salvo com sucesso!");
+    const { error } = await supabase.from("laudos_funcionais").insert([{ paciente_id: pacienteId, ...dados }]);
+    if (!error) toast.success("Laudo clínico finalizado com sucesso!");
     else toast.error("Erro ao salvar laudo.");
   };
 
-  const highlightIfProgression = (field: keyof Receita) => {
-    if (!receitaAtual || !receitaAnterior300) return false;
-    const a = Number(receitaAtual[field] ?? NaN);
-    const b = Number(receitaAnterior300[field] ?? NaN);
-    if (Number.isNaN(a) || Number.isNaN(b)) return false;
-    return Math.abs(a - b) > 0.5;
-  };
-
   return (
-    <div className="bg-white p-8 rounded-xl shadow-lg max-w-5xl mx-auto border border-gray-200">
-      <h2 className="text-2xl font-bold text-center mb-8 text-slate-800 border-b pb-4">
-        LAUDO OPTOMÉTRICO FUNCIONAL
-      </h2>
-
-      {/* Tabela de Acuidade Visual - Idêntica ao seu Print */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-0 border border-black mb-8">
-        <div className="border-r border-black">
-          <p className="bg-gray-100 text-center font-bold border-b border-black py-1">Sem Correção Óptica</p>
-          <div className="grid grid-cols-3 text-xs font-bold text-center border-b border-black">
-            <div className="p-1 border-r border-black"></div>
-            <div className="p-1 border-r border-black">Visão Longe</div>
-            <div className="p-1">Visão Perto</div>
-          </div>
-          {["OD", "OE"].map((olho) => (
-            <div key={olho} className="grid grid-cols-3 border-b border-black last:border-0">
-              <div className="p-2 border-r border-black font-bold text-center">{olho}</div>
-              <input
-                className="p-2 border-r border-black text-center outline-none"
-                onChange={(e) => {
-                  const key = `av_sc_longe_${olho.toLowerCase()}` as keyof DadosLaudo;
-                  setDados({ ...dados, [key]: e.target.value });
-                }}
-              />
-              <input
-                className="p-2 text-center outline-none"
-                onChange={(e) => {
-                  const key = `av_sc_perto_${olho.toLowerCase()}` as keyof DadosLaudo;
-                  setDados({ ...dados, [key]: e.target.value });
-                }}
-              />
-            </div>
-          ))}
+    <div className="space-y-10 animate-in fade-in duration-700">
+      <header className="flex items-center gap-4 border-b border-slate-100 pb-6">
+        <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-100">
+          <ClipboardCheck size={28} />
         </div>
-
         <div>
-          <p className="bg-gray-100 text-center font-bold border-b border-black py-1">Com Correção Óptica</p>
-          <div className="grid grid-cols-3 text-xs font-bold text-center border-b border-black">
-            <div className="p-1 border-r border-black"></div>
-            <div className="p-1 border-r border-black">Visão Longe</div>
-            <div className="p-1">Visão Perto</div>
-          </div>
-          {["OD", "OE"].map((olho) => (
-            <div key={olho} className="grid grid-cols-3 border-b border-black last:border-0">
-              <div className="p-2 border-r border-black font-bold text-center">{olho}</div>
-              <input
-                className="p-2 border-r border-black text-center outline-none"
-                onChange={(e) => {
-                  const key = `av_cc_longe_${olho.toLowerCase()}` as keyof DadosLaudo;
-                  setDados({ ...dados, [key]: e.target.value });
-                }}
-              />
-              <input
-                className="p-2 text-center outline-none"
-                onChange={(e) => {
-                  const key = `av_cc_perto_${olho.toLowerCase()}` as keyof DadosLaudo;
-                  setDados({ ...dados, [key]: e.target.value });
-                }}
-              />
-            </div>
-          ))}
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight text-uppercase">Laudo Funcional</h2>
+          <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Avaliação de Saúde Ocular e Acuidade</p>
         </div>
-      </div>
+      </header>
 
-      {/* Testes Funcionais */}
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <CardAcuidade title="Sem Correção" icon={<Eye size={18} className="text-slate-400" />}>
+          <GridInputs prefix="sc" dados={dados} setDados={setDados} />
+        </CardAcuidade>
+
+        <CardAcuidade title="Com Correção (Atual)" icon={<Activity size={18} className="text-blue-600" />}>
+          <GridInputs prefix="cc" dados={dados} setDados={setDados} />
+        </CardAcuidade>
+      </section>
+
+      <section className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm space-y-4">
+        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6">Testes de Diagnóstico</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2">
+          <LinhaTeste titulo="Sensibilidade ao Contraste" value={dados.sensibilidade} onChange={(v: string) => setDados({...dados, sensibilidade: v})} />
+          <LinhaTeste titulo="Motor Acomodativo" value={dados.motor_acomodativo} onChange={(v: string) => setDados({...dados, motor_acomodativo: v})} />
+          <LinhaTeste titulo="Visão de Cores (Ishihara)" value={dados.ishihara} onChange={(v: string) => setDados({...dados, ishihara: v})} />
+          <LinhaTeste titulo="Senso de Profundidade" value={dados.profundidade} onChange={(v: string) => setDados({...dados, profundidade: v})} />
+        </div>
+      </section>
+
+      <section className="bg-slate-900 p-8 rounded-[40px] text-white overflow-hidden relative">
+        <div className="flex items-center gap-3 mb-8 relative z-10">
+          <History className="text-blue-400" size={20} />
+          <h3 className="text-xl font-black tracking-tight">Análise de Progressão (Últimos 12 meses)</h3>
+        </div>
+        
+        <div className="overflow-x-auto relative z-10">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="text-slate-500 uppercase text-[10px] font-black tracking-widest border-b border-white/10">
+                <th className="pb-4">Campo</th>
+                <th className="pb-4">Atual</th>
+                <th className="pb-4">Anterior (≥300 dias)</th>
+                <th className="pb-4">Status</th>
+              </tr>
+            </thead>
+            <tbody className="font-medium">
+              <RowComparativo label="Esférico OD" atual={receitaAtual?.esferico_od} anterior={receitaAnterior300?.esferico_od} />
+              <RowComparativo label="Esférico OE" atual={receitaAtual?.esferico_oe} anterior={receitaAnterior300?.esferico_oe} />
+              <RowComparativo label="Cilíndrico OD" atual={receitaAtual?.cilindrico_od} anterior={receitaAnterior300?.cilindrico_od} />
+              <RowComparativo label="Cilíndrico OE" atual={receitaAtual?.cilindrico_oe} anterior={receitaAnterior300?.cilindrico_oe} />
+            </tbody>
+          </table>
+        </div>
+        <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl" />
+      </section>
+
       <div className="space-y-4">
-        <LinhaTeste titulo="Sensibilidade ao Contraste" value={dados.sensibilidade} onChange={(v: string) => setDados({ ...dados, sensibilidade: v })} />
-        <LinhaTeste titulo="Teste Motor Acomodativo" value={dados.motor_acomodativo} onChange={(v: string) => setDados({ ...dados, motor_acomodativo: v })} />
-        <LinhaTeste titulo="Visão de Cores (Ishihara)" value={dados.ishihara} onChange={(v: string) => setDados({ ...dados, ishihara: v })} />
-      </div>
-
-      <div className="mt-8">
-        <label className="font-bold block mb-2">Conclusão:</label>
+        <label className="text-xs font-black uppercase text-slate-400 ml-2">Conclusão Clínica e Conduta</label>
         <textarea
-          className="w-full border border-gray-400 p-3 rounded h-32 focus:ring-2 focus:ring-blue-500 outline-none"
+          className="w-full bg-slate-50 border-none rounded-[32px] p-8 font-medium text-slate-700 shadow-inner focus:ring-2 focus:ring-blue-500 h-40 transition-all italic"
+          placeholder="Descreva as observações finais, diagnóstico e conduta recomendada..."
           onChange={(e) => setDados({ ...dados, conclusao: e.target.value })}
         />
       </div>
 
-      <button onClick={salvarLaudo} className="mt-6 w-full bg-slate-900 text-white py-4 rounded-lg font-bold hover:bg-slate-800 transition">
-        Salvar Laudo e Finalizar
+      <button 
+        onClick={salvarLaudo} 
+        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-[28px] font-black text-xl shadow-xl shadow-blue-100 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+      >
+        <Save size={24} /> Finalizar Laudo Funcional
       </button>
+    </div>
+  );
+}
 
-      {/* Histórico de Receitas e comparação */}
-      <div className="mt-10">
-        <h3 className="text-lg font-semibold mb-4">Histórico de Receitas (varredura 12 meses)</h3>
+function CardAcuidade({ title, icon, children }: any) {
+  return (
+    <div className="bg-white p-6 rounded-[40px] border border-slate-50 shadow-sm space-y-6">
+      <div className="flex items-center gap-2 border-b border-slate-50 pb-4">
+        {icon}
+        <h4 className="font-black text-slate-800 uppercase text-xs tracking-widest">{title}</h4>
+      </div>
+      {children}
+    </div>
+  );
+}
 
-        <div className="overflow-x-auto">
-          <table className="w-full table-auto border-collapse">
-            <thead>
-              <tr>
-                <th className="border px-2 py-1 text-left">Campo</th>
-                <th className="border px-2 py-1 text-left">Receita Atual</th>
-                <th className="border px-2 py-1 text-left">Receita Anterior (≥300 dias)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="border px-2 py-1">Data</td>
-                <td className="border px-2 py-1">{receitaAtual?.created_at ? new Date(receitaAtual.created_at).toLocaleDateString() : "-"}</td>
-                <td className="border px-2 py-1">{receitaAnterior300?.created_at ? new Date(receitaAnterior300.created_at).toLocaleDateString() : "-"}</td>
-              </tr>
+function GridInputs({ prefix, dados, setDados }: any) {
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      <div className="text-[10px] font-black text-slate-300 uppercase flex items-center justify-center italic">Olho</div>
+      <div className="text-[10px] font-black text-slate-400 uppercase text-center tracking-tighter">Visão Longe</div>
+      <div className="text-[10px] font-black text-slate-400 uppercase text-center tracking-tighter">Visão Perto</div>
+      
+      {(["OD", "OE"] as const).map((olho) => {
+        const keyL = `av_${prefix}_longe_${olho.toLowerCase()}`;
+        const keyP = `av_${prefix}_perto_${olho.toLowerCase()}`;
+        const outerKey = `${prefix}-${olho}`;
+        return (
+          <div key={outerKey} className="contents">
+            <div className={`flex items-center justify-center font-black rounded-xl text-xs ${olho === 'OD' ? 'bg-blue-50 text-blue-600' : 'bg-slate-900 text-white'}`}>{olho}</div>
+            <input
+              value={dados[keyL] ?? ""}
+              className="bg-slate-50 rounded-2xl p-4 text-center font-black text-slate-700 focus:ring-2 focus:ring-blue-500 border-none shadow-inner"
+              placeholder="20/--"
+              onChange={(e) => setDados({ ...dados, [keyL]: maskAv(e.target.value) })}
+            />
+            <input
+              value={dados[keyP] ?? ""}
+              className="bg-slate-50 rounded-2xl p-4 text-center font-black text-slate-700 focus:ring-2 focus:ring-blue-500 border-none shadow-inner"
+              placeholder="J--"
+              onChange={(e) => setDados({ ...dados, [keyP]: maskAv(e.target.value) })}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
-              <tr>
-                <td className="border px-2 py-1">Esférico OD</td>
-                <td className={`border px-2 py-1 ${highlightIfProgression("esferico_od") ? "bg-red-100 text-red-800" : ""}`}>{receitaAtual?.esferico_od ?? "-"}</td>
-                <td className="border px-2 py-1">{receitaAnterior300?.esferico_od ?? "-"}</td>
-              </tr>
-
-              <tr>
-                <td className="border px-2 py-1">Esférico OE</td>
-                <td className={`border px-2 py-1 ${highlightIfProgression("esferico_oe") ? "bg-red-100 text-red-800" : ""}`}>{receitaAtual?.esferico_oe ?? "-"}</td>
-                <td className="border px-2 py-1">{receitaAnterior300?.esferico_oe ?? "-"}</td>
-              </tr>
-
-              <tr>
-                <td className="border px-2 py-1">Cilíndrico OD</td>
-                <td className={`border px-2 py-1 ${highlightIfProgression("cilindrico_od") ? "bg-red-100 text-red-800" : ""}`}>{receitaAtual?.cilindrico_od ?? "-"}</td>
-                <td className="border px-2 py-1">{receitaAnterior300?.cilindrico_od ?? "-"}</td>
-              </tr>
-
-              <tr>
-                <td className="border px-2 py-1">Cilíndrico OE</td>
-                <td className={`border px-2 py-1 ${highlightIfProgression("cilindrico_oe") ? "bg-red-100 text-red-800" : ""}`}>{receitaAtual?.cilindrico_oe ?? "-"}</td>
-                <td className="border px-2 py-1">{receitaAnterior300?.cilindrico_oe ?? "-"}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+function LinhaTeste({ titulo, value, onChange }: any) {
+  const isAlt = value === "com_alteracao";
+  return (
+    <div className="flex justify-between items-center py-4 border-b border-slate-50 last:border-none group">
+      <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">{titulo}</span>
+      <div className="flex bg-slate-50 p-1 rounded-xl">
+        <button 
+          onClick={() => onChange("sem_alteracao")}
+          className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isAlt ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
+        > Normal </button>
+        <button 
+          onClick={() => onChange("com_alteracao")}
+          className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isAlt ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400'}`}
+        > Alterado </button>
       </div>
     </div>
   );
 }
 
-function LinhaTeste({ titulo, value, onChange }: { titulo: string; value: string; onChange: (v: string) => void }) {
+function RowComparativo({ label, atual, anterior }: any) {
+  const nA = Number(atual);
+  const nB = Number(anterior);
+  const diff = !isNaN(nA) && !isNaN(nB) ? Math.abs(nA - nB) : 0;
+  const alert = diff > 0.5;
+
   return (
-    <div className="flex justify-between items-center border-b py-3">
-      <span className="font-medium text-gray-700">{titulo}</span>
-      <div className="flex gap-4">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" checked={value === "sem_alteracao"} onChange={() => onChange("sem_alteracao")} /> Sem Alteração
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input type="radio" checked={value === "com_alteracao"} onChange={() => onChange("com_alteracao")} /> Com Alteração
-        </label>
-      </div>
-    </div>
+    <tr className="border-b border-white/5 last:border-none">
+      <td className="py-4 text-slate-400 text-xs">{label}</td>
+      <td className="py-4 font-black">{atual ?? '-'}</td>
+      <td className="py-4 text-slate-400 italic">{anterior ?? '-'}</td>
+      <td className="py-4">
+        {alert ? (
+          <span className="flex items-center gap-1 text-rose-400 text-[10px] font-black uppercase animate-pulse">
+            <AlertTriangle size={12} /> Mudança Crítica
+          </span>
+        ) : (
+          <span className="text-emerald-400 text-[10px] font-black uppercase tracking-tighter">Estável</span>
+        )}
+      </td>
+    </tr>
   );
 }

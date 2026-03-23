@@ -13,9 +13,20 @@ type Clinica = {
   plano_tipo?: string | null;
 };
 
+type MasterStats = {
+  clinicasAtivas: number;
+  pacientesTotais: number;
+  faturamentoGlobal: number;
+};
+
 export default function TorreDeControle() {
   const DEMO_MODE_KEY = "optovendas-master-demo-mode";
   const [clinicas, setClinicas] = useState<Clinica[]>([]);
+  const [stats, setStats] = useState<MasterStats>({
+    clinicasAtivas: 0,
+    pacientesTotais: 0,
+    faturamentoGlobal: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [demoMode, setDemoMode] = useState(false);
@@ -29,12 +40,31 @@ export default function TorreDeControle() {
   useEffect(() => {
     async function buscarClinicas() {
       try {
-        const { data, error } = await supabase
-          .from("clinicas")
-          .select("id, nome_fantasia, cidade_sede, possui_otica, plano_tipo");
+        const [clinicasRes, pacientesCountRes, vendasRes] = await Promise.all([
+          supabase
+            .from("clinicas")
+            .select("id, nome_fantasia, cidade_sede, possui_otica, plano_tipo"),
+          supabase.from("pacientes").select("id", { count: "exact", head: true }),
+          supabase.from("vendas").select("valor_final, valor_total"),
+        ]);
 
-        if (error) throw error;
-        setClinicas((data as Clinica[]) ?? []);
+        if (clinicasRes.error) throw clinicasRes.error;
+
+        const clinicasRows = (clinicasRes.data as Clinica[]) ?? [];
+        const pacientesTotais = pacientesCountRes.error ? 0 : pacientesCountRes.count ?? 0;
+        const faturamentoGlobal = vendasRes.error
+          ? 0
+          : (((vendasRes.data as Array<{ valor_final?: number | null; valor_total?: number | null }>) ?? []).reduce(
+              (acc, item) => acc + Number(item.valor_final ?? item.valor_total ?? 0),
+              0,
+            ));
+
+        setClinicas(clinicasRows);
+        setStats({
+          clinicasAtivas: clinicasRows.length,
+          pacientesTotais,
+          faturamentoGlobal,
+        });
       } catch (err) {
         const e = err as Error | null;
         setErro(e?.message ?? "Erro ao carregar clinicas");
@@ -67,10 +97,64 @@ export default function TorreDeControle() {
   return (
     <div className="p-8">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold text-slate-800">Torre de Controle - OptoVendas</h1>
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">
+            Torre de Controle <span className="text-blue-600">Master</span>
+          </h1>
+          <p className="font-medium text-slate-500">Visao geral de todas as unidades e parceiros.</p>
+        </div>
+        <div className="rounded-full bg-blue-600 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white">
+          SaaS Admin
+        </div>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-3">
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+          <p className="text-xs font-bold uppercase text-slate-400">Clinicas Parceiras</p>
+          <p className="mt-2 text-4xl font-black text-slate-800">{stats.clinicasAtivas}</p>
+          <div className="mt-4 h-1 w-12 rounded-full bg-blue-500" />
+        </div>
+
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+          <p className="text-xs font-bold uppercase text-slate-400">Total de Pacientes</p>
+          <p className="mt-2 text-4xl font-black text-slate-800">{stats.pacientesTotais}</p>
+          <div className="mt-4 h-1 w-12 rounded-full bg-green-500" />
+        </div>
+
+        <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+          <p className="text-xs font-bold uppercase text-slate-400">Faturamento Redes (Mes)</p>
+          <p className="mt-2 text-4xl font-black text-slate-800">
+            R$ {stats.faturamentoGlobal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <div className="mt-4 h-1 w-12 rounded-full bg-indigo-500" />
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-3xl bg-slate-900 p-8 text-white">
+        <h2 className="mb-4 text-xl font-bold">Acoes Estrategicas</h2>
+        <div className="flex gap-3 text-sm">
+          <Link href="/admin/configuracoes" className="rounded bg-blue-600 px-4 py-3 font-bold text-white hover:bg-blue-700">
+            + Cadastrar Nova Clinica
+          </Link>
+          <Link href="/admin/performance" className="rounded border border-slate-700 bg-slate-800 px-4 py-3 font-bold text-white hover:bg-slate-700">
+            Relatorio de Inadimplencia
+          </Link>
+        </div>
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-center justify-end gap-3">
         <div className="flex gap-3 text-sm">
           <Link href="/admin/dashboard" className="rounded bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700">
             Dashboard Master
+          </Link>
+          <Link href="/admin/equipe" className="rounded bg-slate-900 px-3 py-2 font-semibold text-white hover:bg-slate-800">
+            Equipe
+          </Link>
+          <Link href="/admin/performance" className="rounded bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-700">
+            Funil de Conversao
+          </Link>
+          <Link href="/admin/configuracoes" className="rounded bg-slate-900 px-3 py-2 font-semibold text-white hover:bg-slate-800">
+            Configuracoes do SaaS
           </Link>
           <Link href="/admin/backup" className="rounded bg-emerald-600 px-3 py-2 font-semibold text-white hover:bg-emerald-700">
             Backup e Exportacao

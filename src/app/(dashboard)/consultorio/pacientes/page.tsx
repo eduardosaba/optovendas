@@ -1,63 +1,166 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import {
+  Search,
+  UserPlus,
+  MessageCircle,
+  MoreHorizontal,
+  Stethoscope,
+  Filter,
+  ArrowRight,
+  MapPin,
+} from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Paciente } from "@/types/database";
+import { resolveClinicaContext } from "@/lib/clinica";
 
-export default function ListaPacientes() {
-  const [pacientes, setPacientes] = useState<Paciente[]>([]);
+function toPacienteSlug(nome: string) {
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
+
+export default function ListaPacientesPage() {
+  const [busca, setBusca] = useState("");
+  const [pacientes, setPacientes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    async function carregarPacientes() {
-      const { data, error } = await supabase
+    async function loadPacientes() {
+      const ctx = await resolveClinicaContext();
+      const { data } = await supabase
         .from("pacientes")
-        .select("id, clinica_id, nome_completo, cidade_atendimento, celular, criado_em")
-        .order("criado_em", { ascending: false });
+        .select("*")
+        .eq("clinica_id", ctx.clinicaId)
+        .order("nome_completo", { ascending: true });
 
-      if (error) {
-        setErro(error.message);
-      } else {
-        setPacientes((data as Paciente[]) ?? []);
-      }
-
+      setPacientes(data || []);
       setLoading(false);
     }
-
-    carregarPacientes();
+    void loadPacientes();
   }, []);
 
+  const pacientesFiltrados = pacientes.filter((p) =>
+    p.nome_completo?.toLowerCase().includes(busca.toLowerCase()) || p.cpf?.includes(busca),
+  );
+
   return (
-    <div className="p-2 md:p-4">
-      <h2 className="mb-4 text-xl font-bold">Lista de Pacientes - OptoVendas</h2>
+    <div className="max-w-7xl mx-auto p-6 md:p-10 space-y-8">
+      {/* Header com Ações Rápidas */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <p className="text-blue-600 font-black text-xs uppercase tracking-widest">Gestão de Clientes</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Pacientes<span className="text-blue-600">.</span></h1>
+        </div>
 
-      {loading && <p className="text-slate-500">Carregando pacientes...</p>}
-      {erro && <p className="text-red-600">Erro ao carregar: {erro}</p>}
+        <Link
+          href="/consultorio/pacientes/novo"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-blue-200 active:scale-95 text-center justify-center"
+        >
+          <UserPlus size={20} />
+          Novo Cadastro
+        </Link>
+      </header>
 
-      {!loading && !erro && (
-        <div className="overflow-hidden rounded bg-white shadow">
-          {pacientes.length === 0 && (
-            <div className="p-4 text-slate-500">Nenhum paciente cadastrado ainda.</div>
-          )}
+      {/* Barra de Busca Estilo OptoVendas */}
+      <div className="flex gap-4">
+        <div className="relative flex-1 group">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+          <input
+            type="text"
+            placeholder="Buscar por nome, CPF ou apelido..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="w-full pl-14 pr-6 py-5 bg-white rounded-[32px] border-none shadow-sm focus:ring-2 focus:ring-blue-500 font-bold text-slate-600 italic transition-all"
+          />
+        </div>
+        <button className="bg-white p-5 rounded-[24px] text-slate-400 hover:text-blue-600 shadow-sm border border-slate-50 transition-all">
+          <Filter size={24} />
+        </button>
+      </div>
 
-          {pacientes.map((p) => (
-            <div key={p.id} className="border-b p-4 last:border-0">
-              <p className="font-semibold text-slate-800">{p.nome_completo}</p>
-              <p className="text-sm text-slate-500">{p.cidade_atendimento ?? "Cidade nao informada"}</p>
-              <div className="mt-2">
-                <Link
-                  href={`/consultorio/atendimento/${p.id}`}
-                  className="text-sm text-cyan-700 underline underline-offset-4"
-                >
-                  Iniciar atendimento clinico
-                </Link>
-              </div>
-            </div>
+      {/* Grid de Cards de Pacientes */}
+      {loading ? (
+        <div className="text-center py-20 text-slate-400 font-bold animate-pulse">Carregando pacientes...</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {pacientesFiltrados.map((paciente) => (
+            <PacienteCard key={paciente.id} paciente={paciente} />
           ))}
+
+          {pacientesFiltrados.length === 0 && (
+            <div className="col-span-full bg-slate-50 rounded-[40px] p-20 text-center border-2 border-dashed border-slate-200">
+              <p className="text-slate-400 font-bold">Nenhum paciente encontrado.</p>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+function PacienteCard({ paciente }: { paciente: any }) {
+  return (
+    <div className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all duration-500 group relative overflow-hidden">
+      {/* Indicador Lateral de Cor */}
+      <div className="absolute left-0 top-1/4 bottom-1/4 w-1.5 bg-blue-600 rounded-r-full opacity-0 group-hover:opacity-100 transition-all" />
+
+      <div className="flex justify-between items-start mb-6">
+        <div className="w-14 h-14 bg-slate-50 rounded-[20px] overflow-hidden flex items-center justify-center text-slate-400 font-black text-xl group-hover:bg-blue-600 group-hover:text-white transition-all duration-500">
+          {paciente.foto_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={paciente.foto_url} alt={paciente.nome_completo || "Paciente"} className="h-full w-full object-cover" loading="lazy" />
+          ) : (
+            paciente.nome_completo?.[0]
+          )}
+        </div>
+        <button className="p-2 text-slate-300 hover:text-slate-600 transition-colors">
+          <MoreHorizontal size={20} />
+        </button>
+      </div>
+
+      <div className="space-y-1">
+        <h3 className="text-xl font-black text-slate-900 truncate">{paciente.nome_completo}</h3>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter italic">{paciente.apelido || "Sem apelido"}</p>
+      </div>
+
+      <div className="mt-6 flex items-center gap-2 text-slate-400">
+        <MapPin size={14} />
+        <span className="text-xs font-medium">{paciente.cidade_atendimento || "Cidade não informada"}</span>
+      </div>
+
+      {/* Ações do Card */}
+      <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">
+        <div className="flex gap-2">
+          <button className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-sm">
+            <MessageCircle size={18} />
+          </button>
+          <div className="relative group/atendimento">
+            <Link
+              href={`/consultorio/atendimento/novo?pacienteId=${paciente.id}`}
+              className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm inline-flex"
+            >
+              <Stethoscope size={18} />
+            </Link>
+            <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition-opacity group-hover/atendimento:opacity-100">
+              Iniciar atendimento
+            </span>
+          </div>
+        </div>
+
+        <Link
+          href={`/consultorio/pacientes/${toPacienteSlug(paciente.nome_completo || "paciente")}`}
+          className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-300 group-hover:text-blue-600 transition-all"
+        >
+          Ver Ficha <ArrowRight size={14} />
+        </Link>
+      </div>
     </div>
   );
 }
