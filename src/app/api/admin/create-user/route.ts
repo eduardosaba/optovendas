@@ -5,60 +5,64 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { clinica_id, nome_completo, email, perfil, ativo, password } = body;
-    if (!clinica_id || !email || !nome_completo) return NextResponse.json({ error: 'clinica_id, nome_completo and email required' }, { status: 400 });
+    
+    if (!clinica_id || !email || !nome_completo) 
+      return NextResponse.json({ error: 'clinica_id, nome_completo e email são obrigatórios' }, { status: 400 });
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !serviceRole) return NextResponse.json({ error: 'server not configured' }, { status: 500 });
+    
+    if (!supabaseUrl || !serviceRole) 
+      return NextResponse.json({ error: 'Servidor não configurado (Service Role faltando)' }, { status: 500 });
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
+    const supabaseAdmin = createClient(supabaseUrl, serviceRole, { 
+      auth: { persistSession: false, autoRefreshToken: false } 
+    });
 
-    // gerar senha temporária se não veio
-    const tempPassword = password || ('Tmp!' + Math.random().toString(36).slice(2, 10) + '!');
+    // Senha padrão ou vinda do form
+    const finalPassword = password || 'Mudar@123';
 
-    const createRes: any = await (supabaseAdmin as any).auth.admin.createUser({
+    // CRIAÇÃO COM CONFIRMAÇÃO AUTOMÁTICA
+    const { data: authRes, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email.toLowerCase().trim(),
-      password: tempPassword,
+      password: finalPassword,
+      email_confirm: true, // AQUI: Valida o e-mail instantaneamente
       user_metadata: { nome_completo, clinica_id, perfil }
     });
 
-    if (createRes.error) return NextResponse.json({ error: createRes.error.message }, { status: 500 });
+    if (authError) return NextResponse.json({ error: authError.message }, { status: 500 });
 
-    const userId = createRes.user?.id ?? createRes?.data?.id ?? null;
+    const userId = authRes.user?.id;
 
-    // Inserir na tabela usuarios_unidade (vinculo principal da equipe por clinica)
-    const insertRes = await supabaseAdmin.from('usuarios_unidade').insert({
-      clinica_id,
-      nome_completo,
-      email: email.toLowerCase().trim(),
-      perfil,
-      ativo: !!ativo,
-      user_id: userId,
-    }).select('id, nome_completo, email, perfil, ativo').single();
+    // Inserir na tabela usuarios_unidade
+    const { data: dbData, error: dbError } = await supabaseAdmin
+      .from('usuarios_unidade')
+      .insert({
+        clinica_id,
+        nome_completo,
+        email: email.toLowerCase().trim(),
+        perfil,
+        ativo: !!ativo,
+        user_id: userId,
+      })
+      .select()
+      .single();
 
-    if (insertRes.error) {
-      console.error('failed insert usuarios_unidade', insertRes.error);
-      // Evita usuario orfao no Auth sem vinculo de equipe.
-      if (userId) {
-        try {
-          await (supabaseAdmin as any).auth.admin.deleteUser(userId);
-        } catch (cleanupError) {
-          console.warn('failed cleanup auth user after usuarios_unidade error', cleanupError);
-        }
-      }
-      return NextResponse.json({ error: `Falha ao vincular usuário à clínica: ${insertRes.error.message}` }, { status: 500 });
+    if (dbError) {
+      if (userId) await supabaseAdmin.auth.admin.deleteUser(userId);
+      return NextResponse.json({ error: `Erro no banco: ${dbError.message}` }, { status: 500 });
     }
 
-    // Enviar e-mail de redefinição para forçar troca da senha no primeiro acesso
-    try {
-      await (supabaseAdmin as any).auth.resetPasswordForEmail(email.toLowerCase().trim());
-    } catch (e) {
-      console.warn('failed send reset email', e);
-    }
+    // REMOVIDO: resetPasswordForEmail (para não enviar e-mail e deixar logar direto)
 
-    return NextResponse.json({ ok: true, user: insertRes.data, tempPassword: password ? null : tempPassword });
+    return NextResponse.json({ 
+      ok: true, 
+      user: dbData, 
+      msg: "Usuário ativado e pronto para login!" 
+    });
+
   } catch (err: any) {
     console.error(err);
-    return NextResponse.json({ error: err?.message || String(err) }, { status: 500 });
+    return NextResponse.json({ error: err?.message || "Erro interno" }, { status: 500 });
   }
 }
