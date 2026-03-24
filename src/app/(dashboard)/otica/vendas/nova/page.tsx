@@ -105,6 +105,7 @@ function NovaVendaStepperContent() {
     clienteManualNome: "",
     clienteManualCpf: "",
     clienteManualCidade: "",
+    localidadeVenda: "",
     receitaManual: {
       data_exame: new Date().toISOString().slice(0, 10),
       od_esferico: "",
@@ -141,6 +142,11 @@ function NovaVendaStepperContent() {
     [pacientes, vendaData.pacienteId],
   );
 
+  const pacienteCidadeAtendimento = useMemo(
+    () => pacientes.find((p) => p.id === vendaData.pacienteId)?.cidade_atendimento ?? "",
+    [pacientes, vendaData.pacienteId],
+  );
+
   const lenteSelecionada = useMemo(
     () => lentes.find((l) => l.id === vendaData.lenteId) ?? null,
     [lentes, vendaData.lenteId],
@@ -160,6 +166,10 @@ function NovaVendaStepperContent() {
     () => receitas.find((r) => r.id === vendaData.receitaId) ?? null,
     [receitas, vendaData.receitaId],
   );
+
+  const localidadePadraoVenda = vendaData.vendaManual
+    ? vendaData.clienteManualCidade
+    : receitaSelecionada?.localidade_atendimento || pacienteCidadeAtendimento;
 
   useEffect(() => {
     async function carregarBase() {
@@ -210,7 +220,7 @@ function NovaVendaStepperContent() {
 
       const { data } = await supabase
         .from("receitas_optometricas")
-        .select("id, data_exame, od_esferico, oe_esferico, od_cilindrico, oe_cilindrico, od_eixo, oe_eixo, adicao, dp_dnp")
+        .select("id, data_exame, localidade_atendimento, od_esferico, oe_esferico, od_cilindrico, oe_cilindrico, od_eixo, oe_eixo, adicao, dp_dnp")
         .eq("paciente_id", vendaData.pacienteId)
         .order("data_exame", { ascending: false });
 
@@ -374,6 +384,7 @@ function NovaVendaStepperContent() {
           .insert({
             clinica_id: clinicaId,
             paciente_id: pacienteIdFinal,
+            localidade_atendimento: vendaData.clienteManualCidade.trim() || null,
             data_exame: receitaManual.data_exame || new Date().toISOString().slice(0, 10),
             od_esferico: parseNumeroNullable(receitaManual.od_esferico),
             oe_esferico: parseNumeroNullable(receitaManual.oe_esferico),
@@ -395,6 +406,10 @@ function NovaVendaStepperContent() {
       }
 
       const valorTotal = Number(vendaData.financeiro.total || 0);
+      const localidadeVendaFinal =
+        vendaData.localidadeVenda.trim() ||
+        (vendaData.vendaManual ? vendaData.clienteManualCidade.trim() : pacienteCidadeAtendimento.trim()) ||
+        null;
 
       const vendaRes = await supabase
         .from("vendas")
@@ -407,6 +422,8 @@ function NovaVendaStepperContent() {
           termo_quebra_aceito: vendaData.armacaoPropria ? vendaData.termoQuebraAceito : false,
           valor_total: valorTotal,
           valor_final: valorTotal,
+          vendedor_id: vendaData.vendedorId || user?.id || null,
+          localidade_venda: localidadeVendaFinal,
         })
         .select("id")
         .single();
@@ -612,7 +629,14 @@ function NovaVendaStepperContent() {
 
         {step === 3 && <Step3Medidas data={vendaData} onChange={setVendaData} clinicaId={clinicaId} />}
 
-        {step === 4 && <Step4Fechamento data={vendaData} onChange={setVendaData} termoTexto={TERMO_ARMACAO_PROPRIA} />}
+        {step === 4 && (
+          <Step4Fechamento
+            data={vendaData}
+            onChange={setVendaData}
+            termoTexto={TERMO_ARMACAO_PROPRIA}
+            cidadePadraoVenda={localidadePadraoVenda}
+          />
+        )}
       </main>
 
       {comprovante && (

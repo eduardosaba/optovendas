@@ -41,8 +41,8 @@ export default function AuthBrandingHeader({ title, subtitle, emailHint }: AuthB
 
   return (
     <div className="text-center">
-      <div className="mx-auto mb-4 flex h-20 max-w-[220px] items-center justify-center overflow-hidden rounded-lg bg-transparent px-2">
-        <img src={logoUrl} alt="Logo de acesso" className="h-full w-full object-contain" />
+      <div className="mx-auto mb-4 flex h-auto max-w-[280px] items-center justify-center bg-transparent px-2">
+        <img src={logoUrl} alt={nomeSistema ? `${nomeSistema} logo` : "Logo de acesso"} className="max-h-24 w-auto object-contain" />
       </div>
       <h2 className="text-3xl font-bold text-blue-600">{title.replace("{nomeSistema}", nomeSistema || "OptoVendas")}</h2>
       <p className="mt-2 text-slate-500">{subtitle}</p>

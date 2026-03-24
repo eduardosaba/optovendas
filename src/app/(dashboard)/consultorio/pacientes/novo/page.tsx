@@ -246,7 +246,7 @@ export default function CadastroPacientePage() {
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <p className="text-blue-600 font-black text-xs uppercase tracking-widest">Consultório</p>
+            <p className="text-blue-600 font-black text-xs uppercase tracking-widest">ConsultórioS</p>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">
               {pacienteIdEditar ? "Completar Cadastro" : "Novo Paciente"}
               <span className="text-blue-600">.</span>

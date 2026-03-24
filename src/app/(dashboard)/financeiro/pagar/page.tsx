@@ -4,6 +4,16 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  Plus,
+  Receipt,
+  Wallet,
+} from "lucide-react";
+import Link from "next/link";
 
 type Categoria = {
   id: string;
@@ -20,6 +30,7 @@ type ContaCorrente = {
 type ContaPagar = {
   id: string;
   descricao?: string | null;
+  localidade?: string | null;
   valor_total: number;
   data_vencimento?: string | null;
   data_pagamento?: string | null;
@@ -43,6 +54,7 @@ export default function PagarPage() {
   const [pagandoId, setPagandoId] = useState<string | null>(null);
 
   const [descricao, setDescricao] = useState("");
+  const [localidade, setLocalidade] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
   const [dataVencimento, setDataVencimento] = useState("");
   const [valorTotal, setValorTotal] = useState("");
@@ -68,7 +80,7 @@ export default function PagarPage() {
             .order("descricao"),
           supabase
             .from("contas_a_pagar")
-            .select("id, descricao, valor_total, data_vencimento, data_pagamento, status, categoria_id")
+            .select("id, descricao, localidade, valor_total, data_vencimento, data_pagamento, status, categoria_id")
             .eq("clinica_id", ctx.clinicaId)
             .order("data_vencimento", { ascending: true }),
         ]);
@@ -108,17 +120,19 @@ export default function PagarPage() {
           clinica_id: clinicaId,
           categoria_id: categoriaId,
           descricao: descricao.trim(),
+          localidade: localidade.trim() || null,
           valor_total: valor,
           data_vencimento: dataVencimento,
           status: "pendente",
         })
-        .select("id, descricao, valor_total, data_vencimento, data_pagamento, status, categoria_id")
+        .select("id, descricao, localidade, valor_total, data_vencimento, data_pagamento, status, categoria_id")
         .single();
 
       if (res.error) throw new Error(res.error.message);
 
       setLancamentos((prev) => [...prev, res.data as ContaPagar]);
       setDescricao("");
+      setLocalidade("");
       setDataVencimento("");
       setValorTotal("");
       toast.success("Despesa lancada com sucesso.");
@@ -188,107 +202,209 @@ export default function PagarPage() {
     [lancamentos],
   );
 
-  return (
-    <div className="space-y-8 p-6">
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="mb-4 font-bold">Lancar Nova Despesa</h2>
+  const lancamentosOrdenados = useMemo(() => {
+    return [...lancamentos].sort((a, b) => {
+      const aPago = (a.status || "").toLowerCase() === "pago";
+      const bPago = (b.status || "").toLowerCase() === "pago";
+      if (aPago !== bPago) return aPago ? 1 : -1;
+      const da = a.data_vencimento ? new Date(a.data_vencimento).getTime() : Number.MAX_SAFE_INTEGER;
+      const db = b.data_vencimento ? new Date(b.data_vencimento).getTime() : Number.MAX_SAFE_INTEGER;
+      return da - db;
+    });
+  }, [lancamentos]);
 
-        <form onSubmit={salvarDespesa} className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+  return (
+    <div className="mx-auto max-w-6xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
+      <header className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/financeiro"
+            className="rounded-2xl border border-slate-50 bg-white p-3 text-slate-400 shadow-sm transition-all hover:text-rose-600"
+          >
+            <ArrowLeft size={20} />
+          </Link>
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-rose-600">Saidas</p>
+            <h1 className="text-4xl font-black tracking-tight text-slate-900">
+              Contas a Pagar<span className="text-rose-600">.</span>
+            </h1>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 rounded-[24px] border border-rose-100 bg-rose-50 px-6 py-4">
+          <div className="rounded-xl bg-rose-600 p-2 text-white shadow-lg shadow-rose-100">
+            <AlertCircle size={20} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase leading-none text-rose-400">Total Pendente</p>
+            <p className="text-xl font-black text-rose-700">{brl(totalPendente)}</p>
+          </div>
+        </div>
+      </header>
+
+      <section className="space-y-8 rounded-[40px] border border-slate-50 bg-white p-8 shadow-sm">
+        <div className="flex items-center gap-3 border-b border-slate-50 pb-6">
+          <Receipt className="text-rose-500" size={20} />
+          <h2 className="text-xl font-black tracking-tight text-slate-800">Novo Lancamento</h2>
+        </div>
+
+        <form onSubmit={salvarDespesa} className="grid grid-cols-1 items-end gap-6 md:grid-cols-4">
+          <div className="space-y-2 md:col-span-1">
+            <label className="ml-2 text-[10px] font-black uppercase text-slate-400">Descricao</label>
             <input
-              className="rounded border p-2"
-              placeholder="Descricao (Ex: Nota Lab Zeiss)"
               value={descricao}
               onChange={(e) => setDescricao(e.target.value)}
+              placeholder="Ex: Aluguel / Nota Lab"
+              className="w-full rounded-2xl border-none bg-slate-50 p-4 font-bold text-slate-700 shadow-inner transition-all focus:ring-2 focus:ring-rose-500"
             />
+          </div>
 
-            <select className="rounded border p-2" value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)}>
+          <div className="space-y-2">
+            <label className="ml-2 text-[10px] font-black uppercase text-slate-400">Localidade (Rota)</label>
+            <input
+              value={localidade}
+              onChange={(e) => setLocalidade(e.target.value)}
+              placeholder="Ex: Serrinha / Feira"
+              className="w-full rounded-2xl border-none bg-slate-50 p-4 font-bold text-slate-700 shadow-inner transition-all focus:ring-2 focus:ring-rose-500"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="ml-2 text-[10px] font-black uppercase text-slate-400">Categoria</label>
+            <select
+              value={categoriaId}
+              onChange={(e) => setCategoriaId(e.target.value)}
+              className="w-full rounded-2xl border-none bg-slate-50 p-4 font-bold text-slate-700 focus:ring-2 focus:ring-rose-500"
+            >
               {categorias.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nome}
                 </option>
               ))}
             </select>
+          </div>
 
-            <input type="date" className="rounded border p-2" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} />
-
+          <div className="space-y-2">
+            <label className="ml-2 text-[10px] font-black uppercase text-slate-400">Vencimento</label>
             <input
-              type="text"
-              className="rounded border p-2"
-              placeholder="Valor R$"
+              type="date"
+              value={dataVencimento}
+              onChange={(e) => setDataVencimento(e.target.value)}
+              className="w-full rounded-2xl border-none bg-slate-50 p-4 font-bold text-slate-700 focus:ring-2 focus:ring-rose-500"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="ml-2 text-[10px] font-black uppercase text-slate-400">Valor (R$)</label>
+            <input
               value={valorTotal}
               onChange={(e) => setValorTotal(e.target.value)}
+              placeholder="0,00"
+              className="w-full rounded-2xl border-none bg-slate-50 p-4 font-black text-rose-600 shadow-inner focus:ring-2 focus:ring-rose-500"
             />
           </div>
 
           <button
             type="submit"
             disabled={salvando}
-            className="rounded-lg bg-red-600 px-6 py-2 font-bold text-white hover:bg-red-700 disabled:bg-red-300"
+            className="md:col-span-4 flex items-center justify-center gap-2 rounded-2xl bg-slate-900 py-5 font-black uppercase tracking-widest text-white shadow-xl shadow-slate-100 transition-all hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {salvando ? "Salvando..." : "Salvar Despesa"}
+            {salvando ? (
+              <>
+                <Loader2 className="animate-spin" size={20} />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Plus size={20} />
+                Registrar Despesa
+              </>
+            )}
           </button>
         </form>
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="rounded-xl border-l-4 border-red-500 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Total pendente</p>
-          <p className="text-2xl font-bold text-red-600">{brl(totalPendente)}</p>
+      <section className="flex flex-col items-center justify-between gap-6 rounded-[40px] bg-slate-900 p-8 text-white md:flex-row">
+        <div className="flex items-center gap-4">
+          <div className="rounded-2xl bg-white/10 p-4 backdrop-blur-md">
+            <Wallet size={24} className="text-rose-400" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Fonte de Pagamento</p>
+            <p className="text-sm font-bold">Saldo sera deduzido da conta selecionada</p>
+          </div>
         </div>
-        <div className="rounded-xl border-l-4 border-slate-500 bg-white p-5 shadow-sm md:col-span-2">
-          <p className="mb-2 text-sm text-slate-500">Conta para baixa de despesas</p>
-          <select
-            value={contaSelecionada}
-            onChange={(e) => setContaSelecionada(e.target.value)}
-            className="w-full rounded border p-2"
-          >
-            {contas.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.descricao} ({brl(Number(c.saldo_atual || 0))})
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
 
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <h2 className="mb-4 font-bold">Contas Pendentes</h2>
+        <select
+          value={contaSelecionada}
+          onChange={(e) => setContaSelecionada(e.target.value)}
+          className="min-w-[300px] rounded-2xl border-none bg-white/10 p-4 font-black text-white focus:ring-2 focus:ring-rose-500"
+        >
+          {contas.map((c) => (
+            <option key={c.id} value={c.id} className="text-slate-900">
+              {c.descricao} - {brl(Number(c.saldo_atual || 0))}
+            </option>
+          ))}
+        </select>
+      </section>
 
+      <section className="overflow-hidden rounded-[40px] border border-slate-50 bg-white shadow-sm">
         {loading ? (
-          <p className="text-slate-500">Carregando...</p>
+          <div className="flex items-center justify-center gap-2 p-10 text-slate-500">
+            <Loader2 className="animate-spin" size={18} />
+            Carregando contas...
+          </div>
+        ) : lancamentosOrdenados.length === 0 ? (
+          <div className="p-10 text-center text-slate-500">Nenhuma conta cadastrada.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left">
-              <thead className="bg-slate-100 text-sm">
+              <thead className="bg-slate-50/50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                 <tr>
-                  <th className="p-3">Descricao</th>
-                  <th className="p-3">Vencimento</th>
-                  <th className="p-3">Valor</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Acao</th>
+                  <th className="p-8">Credor / Descricao</th>
+                  <th className="p-8 text-center">Localidade</th>
+                  <th className="p-8 text-center">Vencimento</th>
+                  <th className="p-8 text-center">Valor</th>
+                  <th className="p-8 text-center">Status</th>
+                  <th className="p-8 text-right">Acao</th>
                 </tr>
               </thead>
-              <tbody>
-                {lancamentos.map((l) => (
-                  <tr key={l.id} className="border-t">
-                    <td className="p-3 font-medium">{l.descricao || "(sem descricao)"}</td>
-                    <td className="p-3">{l.data_vencimento ? new Date(l.data_vencimento).toLocaleDateString("pt-BR") : "-"}</td>
-                    <td className="p-3 font-semibold">{brl(Number(l.valor_total || 0))}</td>
-                    <td className="p-3">
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${l.status === "pago" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+              <tbody className="divide-y divide-slate-50">
+                {lancamentosOrdenados.map((l) => (
+                  <tr key={l.id} className="group transition-all hover:bg-slate-50/50">
+                    <td className="p-8">
+                      <p className="leading-tight text-slate-800 font-black">{l.descricao || "Sem descricao"}</p>
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-tighter text-slate-400">ID: {l.id.substring(0, 8)}</p>
+                    </td>
+                    <td className="p-8 text-center font-bold text-slate-500">{l.localidade || "-"}</td>
+                    <td className="p-8 text-center font-bold text-slate-600">
+                      {l.data_vencimento ? new Date(l.data_vencimento).toLocaleDateString("pt-BR") : "-"}
+                    </td>
+                    <td className="p-8 text-center font-black text-rose-600">{brl(Number(l.valor_total || 0))}</td>
+                    <td className="p-8 text-center">
+                      <span
+                        className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-widest ${
+                          l.status === "pago" ? "bg-emerald-100 text-emerald-600" : "bg-amber-100 text-amber-600"
+                        }`}
+                      >
                         {l.status}
                       </span>
                     </td>
-                    <td className="p-3">
-                      <button
-                        type="button"
-                        disabled={l.status === "pago" || pagandoId === l.id}
-                        onClick={() => void marcarComoPago(l)}
-                        className="rounded bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
-                      >
-                        {pagandoId === l.id ? "Processando..." : "Marcar como Pago"}
-                      </button>
+                    <td className="p-8 text-right">
+                      {l.status !== "pago" ? (
+                        <button
+                          onClick={() => void marcarComoPago(l)}
+                          disabled={pagandoId === l.id}
+                          className="rounded-xl bg-slate-900 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-emerald-600 disabled:opacity-50"
+                        >
+                          {pagandoId === l.id ? "Processando..." : "Baixar Nota"}
+                        </button>
+                      ) : (
+                        <div className="flex items-center justify-end gap-2 text-emerald-500">
+                          <CheckCircle2 size={18} />
+                          <span className="text-[10px] font-black uppercase">Pago</span>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -296,7 +412,7 @@ export default function PagarPage() {
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

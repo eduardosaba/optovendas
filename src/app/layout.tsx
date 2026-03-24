@@ -1,11 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import ToastProvider from "@/components/ui/ToastProvider";
 import { ConfigProvider } from "@/context/ConfigContext";
 
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+
 export const metadata: Metadata = {
-  title: "OptoVendas",
-  description: "Sistema de Gestao Optometrica",
+  title: "OptoVendas • Inteligência em Óptica",
+  description: "Sistema de Gestão Optométrica e Comercial",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -19,7 +22,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1E3A8A",
+  themeColor: "#0891b2",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({
@@ -28,10 +34,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR">
-      <body>
+    <html lang="pt-BR" className={`${inter.variable}`}>
+      <body className="antialiased selection:bg-cyan-100 selection:text-cyan-900 bg-slate-50 text-slate-900 font-sans">
         <ConfigProvider>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <main className="min-h-screen">{children}</main>
+          </ToastProvider>
         </ConfigProvider>
       </body>
     </html>

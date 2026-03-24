@@ -33,14 +33,14 @@ export default function MeuPerfilPage() {
 
       const perfilRes = await supabase
         .from("perfis")
-        .select("nome")
+        .select("nome, foto_url")
         .eq("id", ctx.userId)
         .maybeSingle();
 
       if (!perfilRes.error) {
         const p = (perfilRes.data ?? null) as PerfilData | null;
         setNomeExibicao(p?.nome || "");
-        setFotoUrl("");
+        setFotoUrl((p as any)?.foto_url || "");
       }
     }
 
@@ -70,7 +70,7 @@ export default function MeuPerfilPage() {
     try {
       const updatePerfil = await supabase
         .from("perfis")
-        .update({ nome: nomeExibicao || null })
+        .update({ nome: nomeExibicao || null, foto_url: fotoUrl || null })
         .eq("id", userId);
 
       if (updatePerfil.error) throw new Error(updatePerfil.error.message);

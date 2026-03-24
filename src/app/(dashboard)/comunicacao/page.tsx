@@ -5,6 +5,21 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { enviarZap, templatesMensagens, type TipoComunicacao } from "@/lib/whatsapp-service";
 import { useToast } from "@/components/ui/ToastProvider";
+import {
+  Calendar,
+  Cake,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Filter,
+  History,
+  Loader2,
+  MessageSquare,
+  RefreshCcw,
+  Search,
+  Send,
+} from "lucide-react";
 
 type Paciente = {
   id: string;
@@ -51,6 +66,37 @@ function badge(tipo: TipoComunicacao) {
   if (tipo === "Oculos Pronto") return "bg-blue-100 text-blue-700";
   if (tipo === "Lembrete Consulta") return "bg-amber-100 text-amber-700";
   return "bg-emerald-100 text-emerald-700";
+}
+
+function getTipoInfo(tipo: TipoComunicacao) {
+  if (tipo === "Aniversario") {
+    return {
+      color: "bg-pink-50 text-pink-600 border-pink-100",
+      icon: <Cake size={12} />,
+    };
+  }
+  if (tipo === "Oculos Pronto") {
+    return {
+      color: "bg-blue-50 text-blue-600 border-blue-100",
+      icon: <CheckCircle2 size={12} />,
+    };
+  }
+  if (tipo === "Lembrete Consulta") {
+    return {
+      color: "bg-amber-50 text-amber-600 border-amber-100",
+      icon: <Calendar size={12} />,
+    };
+  }
+  if (tipo === "Retorno Anual") {
+    return {
+      color: "bg-emerald-50 text-emerald-600 border-emerald-100",
+      icon: <RefreshCcw size={12} />,
+    };
+  }
+  return {
+    color: "bg-slate-50 text-slate-600 border-slate-100",
+    icon: <MessageSquare size={12} />,
+  };
 }
 
 export default function ComunicacaoPage() {
@@ -331,152 +377,231 @@ export default function ComunicacaoPage() {
   }, [paginaHistorico, totalPaginasHistorico]);
 
   return (
-    <div className="space-y-6 p-4 md:p-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-black text-slate-900">Central de Relacionamento WhatsApp</h1>
-        <p className="text-sm text-slate-500">Alvos do dia para fidelizacao e pos-venda</p>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
+      <header className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
+        <div>
+          <p className="mb-1 text-[10px] font-black uppercase tracking-[0.3em] text-emerald-600">Engajamento</p>
+          <h1 className="text-4xl font-black tracking-tight text-slate-900">
+            Relacionamento<span className="text-emerald-600">.</span>
+          </h1>
+        </div>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setAba("alvos")}
-          className={`rounded px-4 py-2 text-sm font-bold ${aba === "alvos" ? "bg-slate-900 text-white" : "bg-white text-slate-700 border"}`}
-        >
-          Alvos do Dia
-        </button>
-        <button
-          type="button"
-          onClick={() => setAba("historico")}
-          className={`rounded px-4 py-2 text-sm font-bold ${aba === "historico" ? "bg-slate-900 text-white" : "bg-white text-slate-700 border"}`}
-        >
-          Historico de Envios
-        </button>
-      </div>
-
-      <div className="rounded-xl border-l-4 border-green-500 bg-white p-4 shadow-sm">
-        <p className="text-sm text-slate-500">Contatos sugeridos hoje</p>
-        <p className="text-2xl font-black text-green-600">{total}</p>
-      </div>
-
-      {aba === "alvos" && (
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Filtrar por tipo</label>
-          <select
-            value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value as "Todos" | TipoComunicacao)}
-            className="w-full rounded border p-2 md:w-80"
+        <div className="flex gap-1 rounded-2xl bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => setAba("alvos")}
+            className={`rounded-xl px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${
+              aba === "alvos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+            }`}
           >
-            <option value="Todos">Todos</option>
-            <option value="Aniversario">Aniversario</option>
-            <option value="Lembrete Consulta">Lembrete Consulta</option>
-            <option value="Oculos Pronto">Oculos Pronto</option>
-            <option value="Retorno Anual">Retorno Anual</option>
-          </select>
+            Alvos do Dia
+          </button>
+          <button
+            type="button"
+            onClick={() => setAba("historico")}
+            className={`rounded-xl px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${
+              aba === "historico" ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            Historico
+          </button>
         </div>
-      )}
+      </header>
 
-      {loading ? (
-        <p className="text-slate-500">Carregando central...</p>
-      ) : aba === "alvos" && alvosFiltrados.length === 0 ? (
-        <div className="rounded-xl border bg-white p-6 text-slate-600">Sem comunicacoes pendentes para o filtro atual.</div>
-      ) : aba === "alvos" ? (
-        <div className="space-y-3">
-          {alvosFiltrados.map((c) => (
-            <div key={c.chave} className="flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${badge(c.tipo)}`}>{c.tipo}</span>
-                <p className="mt-1 font-bold text-slate-800">{c.nome}</p>
-                <p className="text-xs text-slate-500">{c.fone}</p>
-              </div>
-
-              <button
-                type="button"
-                disabled={enviando === c.chave}
-                onClick={() => void enviar(c)}
-                className="rounded-lg bg-green-500 px-4 py-2 text-sm font-bold text-white hover:bg-green-600 disabled:bg-green-300"
-              >
-                {enviando === c.chave ? "Enviando..." : "Enviar WhatsApp"}
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : historico.length === 0 ? (
-        <div className="rounded-xl border bg-white p-6 text-slate-600">Sem historico de envios ainda.</div>
-      ) : (
-        <div className="space-y-3">
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <label className="mb-2 block text-xs font-bold uppercase text-slate-500">Buscar no historico</label>
-            <input
-              value={buscaHistorico}
-              onChange={(e) => setBuscaHistorico(e.target.value)}
-              placeholder="Nome, WhatsApp, tipo, status ou trecho da mensagem"
-              className="w-full rounded border p-2 md:w-[460px]"
-            />
+      <section className="flex flex-col items-center justify-between gap-6 rounded-[40px] bg-emerald-600 p-8 text-white shadow-xl shadow-emerald-100 md:flex-row">
+        <div className="flex items-center gap-4">
+          <div className="rounded-2xl bg-white/10 p-4 backdrop-blur-md">
+            <MessageSquare size={24} />
           </div>
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Sugestoes de Contato</p>
+            <p className="text-3xl font-black">{total} pacientes</p>
+          </div>
+        </div>
+        <div className="text-center text-[10px] font-bold uppercase leading-relaxed opacity-60 md:text-right">
+          Otimize seu pos-venda e
+          <br />
+          reduza faltas em exames.
+        </div>
+      </section>
 
-          {historicoFiltrado.length === 0 ? (
-            <div className="rounded-xl border bg-white p-6 text-slate-600">Nenhum envio encontrado para a busca atual.</div>
-          ) : null}
-
-          {historicoFiltrado.length > 0 ? (
-            <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="p-3">Paciente</th>
-                <th className="p-3">Tipo</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Enviado em</th>
-                <th className="p-3">WhatsApp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {historicoPaginado.map((h) => (
-                <tr key={h.id} className="border-t">
-                  <td className="p-3 font-semibold text-slate-800">{nomeHistorico(h)}</td>
-                  <td className="p-3 text-slate-600">{h.tipo}</td>
-                  <td className="p-3">
-                    <span className={`rounded-full px-2 py-1 text-xs font-bold ${h.status === "Enviado" ? "bg-green-100 text-green-700" : h.status === "Erro" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
-                      {h.status}
-                    </span>
-                  </td>
-                  <td className="p-3 text-slate-600">{h.enviado_em ? new Date(h.enviado_em).toLocaleString("pt-BR") : "-"}</td>
-                  <td className="p-3 text-slate-600">{foneHistorico(h)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-            </div>
-          ) : null}
-
-          {historicoFiltrado.length > 0 ? (
-            <div className="flex flex-col items-start gap-2 rounded-xl border bg-white p-3 text-xs text-slate-600 sm:flex-row sm:items-center sm:justify-between">
-              <p>
-                Pagina {paginaHistorico} de {totalPaginasHistorico} ({historicoFiltrado.length} registros)
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPaginaHistorico((p) => Math.max(1, p - 1))}
-                  disabled={paginaHistorico === 1}
-                  className="rounded border px-3 py-1 font-semibold disabled:opacity-50"
-                >
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaginaHistorico((p) => Math.min(totalPaginasHistorico, p + 1))}
-                  disabled={paginaHistorico >= totalPaginasHistorico}
-                  className="rounded border px-3 py-1 font-semibold disabled:opacity-50"
-                >
-                  Proxima
-                </button>
+      <section className="space-y-6">
+        {aba === "alvos" ? (
+          <>
+            <div className="flex flex-col items-center justify-between gap-4 rounded-[32px] border border-slate-50 bg-white p-4 shadow-sm md:flex-row">
+              <div className="ml-2 flex items-center gap-3">
+                <Filter size={16} className="text-slate-400" />
+                <span className="text-xs font-black uppercase text-slate-400">Filtrar:</span>
+              </div>
+              <div className="flex w-full gap-2 overflow-x-auto pb-1 md:w-auto">
+                {(["Todos", "Aniversario", "Lembrete Consulta", "Oculos Pronto", "Retorno Anual"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setFiltroTipo(t as "Todos" | TipoComunicacao)}
+                    className={`whitespace-nowrap rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-tighter transition-all ${
+                      filtroTipo === t ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-400 hover:bg-slate-100"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </div>
             </div>
-          ) : null}
-        </div>
-      )}
+
+            {loading ? (
+              <div className="col-span-full flex justify-center py-20">
+                <Loader2 className="animate-spin text-emerald-500" size={28} />
+              </div>
+            ) : alvosFiltrados.length === 0 ? (
+              <div className="rounded-[32px] border border-slate-50 bg-white p-8 text-sm font-medium text-slate-500 shadow-sm">
+                Sem comunicacoes pendentes para o filtro atual.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {alvosFiltrados.map((c) => {
+                  const info = getTipoInfo(c.tipo);
+                  return (
+                    <article
+                      key={c.chave}
+                      className="group flex items-center justify-between rounded-[32px] border border-slate-50 bg-white p-6 shadow-sm transition-all hover:shadow-xl"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl font-black ${info.color}`}>
+                          {info.icon}
+                        </div>
+                        <div>
+                          <span className={`rounded-full border px-2 py-0.5 text-[8px] font-black uppercase ${info.color}`}>
+                            {c.tipo}
+                          </span>
+                          <h4 className="mt-1 font-black text-slate-800">{c.nome}</h4>
+                          <p className="text-[10px] font-bold uppercase text-slate-400">{c.fone}</p>
+                          {c.local || c.cidade ? (
+                            <p className="mt-1 text-[10px] font-bold uppercase text-slate-300">
+                              {c.local || c.cidade}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void enviar(c)}
+                        disabled={enviando === c.chave}
+                        className="rounded-2xl bg-emerald-50 p-4 text-emerald-600 transition-all hover:bg-emerald-600 hover:text-white disabled:opacity-50"
+                        title="Enviar WhatsApp"
+                      >
+                        {enviando === c.chave ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-[32px] border border-slate-50 bg-white p-4 shadow-sm">
+              <div className="relative md:w-[520px]">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input
+                  value={buscaHistorico}
+                  onChange={(e) => setBuscaHistorico(e.target.value)}
+                  placeholder="Nome, WhatsApp, tipo, status ou trecho da mensagem"
+                  className="w-full rounded-2xl border-none bg-slate-50 py-3 pl-11 pr-4 text-sm font-bold text-slate-700 shadow-inner focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="col-span-full flex justify-center py-20">
+                <Loader2 className="animate-spin text-emerald-500" size={28} />
+              </div>
+            ) : historicoFiltrado.length === 0 ? (
+              <div className="rounded-[32px] border border-slate-50 bg-white p-8 text-sm font-medium text-slate-500 shadow-sm">
+                Nenhum envio encontrado para a busca atual.
+              </div>
+            ) : (
+              <>
+                <div className="overflow-hidden rounded-[32px] border border-slate-50 bg-white shadow-sm">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50/70 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <tr>
+                        <th className="p-4">Paciente</th>
+                        <th className="p-4">Tipo</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4">Enviado em</th>
+                        <th className="p-4">WhatsApp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {historicoPaginado.map((h) => {
+                        const info = getTipoInfo(h.tipo);
+                        return (
+                          <tr key={h.id} className="transition hover:bg-slate-50/50">
+                            <td className="p-4 font-bold text-slate-800">{nomeHistorico(h)}</td>
+                            <td className="p-4">
+                              <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-black uppercase ${info.color}`}>
+                                {info.icon}
+                                {h.tipo}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <span
+                                className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${
+                                  h.status === "Enviado"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : h.status === "Erro"
+                                      ? "bg-rose-100 text-rose-700"
+                                      : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {h.status}
+                              </span>
+                            </td>
+                            <td className="p-4 text-slate-600">
+                              <span className="inline-flex items-center gap-1">
+                                <Clock size={12} className="text-slate-400" />
+                                {h.enviado_em ? new Date(h.enviado_em).toLocaleString("pt-BR") : "-"}
+                              </span>
+                            </td>
+                            <td className="p-4 text-slate-600">{foneHistorico(h)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-slate-50 bg-white p-3 text-xs text-slate-600 sm:flex-row sm:items-center">
+                  <p className="inline-flex items-center gap-2 font-semibold">
+                    <History size={12} className="text-slate-400" />
+                    Pagina {paginaHistorico} de {totalPaginasHistorico} ({historicoFiltrado.length} registros)
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaginaHistorico((p) => Math.max(1, p - 1))}
+                      disabled={paginaHistorico === 1}
+                      className="inline-flex items-center gap-1 rounded border px-3 py-1 font-bold disabled:opacity-50"
+                    >
+                      <ChevronLeft size={14} /> Anterior
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaginaHistorico((p) => Math.min(totalPaginasHistorico, p + 1))}
+                      disabled={paginaHistorico >= totalPaginasHistorico}
+                      className="inline-flex items-center gap-1 rounded border px-3 py-1 font-bold disabled:opacity-50"
+                    >
+                      Proxima <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

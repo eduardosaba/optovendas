@@ -139,7 +139,7 @@ export default function DashboardPrincipalPage() {
       <header>
         <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-blue-600">Painel de Controle</p>
         <h1 className="text-4xl font-black tracking-tight text-slate-900 md:text-5xl">
-          Ola, {nomeSistema}
+          Olá, {nomeSistema}
           <span className="text-blue-600">.</span>
         </h1>
       </header>

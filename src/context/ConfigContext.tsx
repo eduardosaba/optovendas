@@ -16,7 +16,7 @@ const DEFAULT_CONFIG: ConfigState = {
   nomeSistema: "OptoVendas",
   versao: "1.0.0",
   corPrimaria: "#2563eb",
-  logoSistema: "",
+  logoSistema: "https://ggpjfyejksxphmzdscro.supabase.co/storage/v1/object/public/logo/Opto%20(1).png",
   corTemaUnidade: "#2563eb",
 };
 
@@ -59,7 +59,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
           nomeSistema: sis?.nome_sistema || DEFAULT_CONFIG.nomeSistema,
           versao: sis?.versao || DEFAULT_CONFIG.versao,
           corPrimaria: sis?.cor_primaria || DEFAULT_CONFIG.corPrimaria,
-          logoSistema: sis?.logo_url || "",
+          logoSistema: sis?.logo_url || DEFAULT_CONFIG.logoSistema,
           corTemaUnidade,
         };
 

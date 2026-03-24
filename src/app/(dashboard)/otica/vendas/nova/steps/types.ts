@@ -8,6 +8,7 @@ export type PacienteOption = {
 export type ReceitaOptometrica = {
   id: string;
   data_exame?: string | null;
+  localidade_atendimento?: string | null;
   od_esferico?: number | null;
   oe_esferico?: number | null;
   od_cilindrico?: number | null;
@@ -82,6 +83,7 @@ export type VendaData = {
   clienteManualNome: string;
   clienteManualCpf: string;
   clienteManualCidade: string;
+  localidadeVenda: string;
   receitaManual: ReceitaManualData;
   pacienteId: string;
   receitaId: string;
@@ -102,6 +104,7 @@ export type VendaData = {
   financeiro: FinanceiroData;
   pupilometroFoto: string;
   pupilometroFotoStorageUrl?: string;
+  vendedorId?: string | null;
 };
 
 export const VALOR_CARTAO_MM = 85.6;

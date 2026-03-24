@@ -12,6 +12,7 @@ const BASE_MEDIDAS: VendaData = {
   clienteManualNome: "",
   clienteManualCpf: "",
   clienteManualCidade: "",
+  localidadeVenda: "",
   receitaManual: {
     data_exame: new Date().toISOString().slice(0, 10),
     od_esferico: "",

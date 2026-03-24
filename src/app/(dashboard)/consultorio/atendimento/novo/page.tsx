@@ -387,6 +387,7 @@ export default function NovoAtendimentoPage() {
         {
           paciente_id: pacienteFinalId,
           clinica_id: ctx.clinicaId,
+          localidade_atendimento: agendaAtiva?.cidade ?? null,
           od_esferico: toNumberOrNull(refracao.odEsferico),
           od_cilindrico: toNumberOrNull(refracao.odCilindrico),
           od_eixo: toNumberOrNull(refracao.odEixo),

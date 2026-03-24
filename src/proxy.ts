@@ -88,14 +88,23 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  if (req.nextUrl.pathname === "/") {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/vendas";
+    return NextResponse.redirect(redirectUrl);
+  }
+
   const protectedRoute =
-    req.nextUrl.pathname === "/" ||
     req.nextUrl.pathname.startsWith("/perfil") ||
     req.nextUrl.pathname.startsWith("/consultorio") ||
     req.nextUrl.pathname.startsWith("/otica") ||
     req.nextUrl.pathname.startsWith("/financeiro") ||
     req.nextUrl.pathname.startsWith("/comunicacao") ||
     req.nextUrl.pathname.startsWith("/admin");
+
+  // Nao bloqueia no servidor quando nao ha sessao em cookie.
+  // O controle fino ocorre no cliente (dashboard layout), evitando loop
+  // de redirecionamento apos login client-side.
 
   // NOTE:
   // Em alguns fluxos de login client-side, a sessao pode existir no navegador
@@ -106,12 +115,6 @@ export async function proxy(req: NextRequest) {
   if (session && protectedRoute) {
     const user = session.user;
     const pathname = req.nextUrl.pathname;
-
-    if (pathname === "/") {
-      const redirectUrl = req.nextUrl.clone();
-      redirectUrl.pathname = await resolverDestinoPorFuncao(user?.id);
-      return NextResponse.redirect(redirectUrl);
-    }
 
     const perfilRes = await supabase.from("perfis").select("funcao").eq("id", user?.id).maybeSingle();
     const perfil = (perfilRes.data ?? null) as { funcao?: string } | null;

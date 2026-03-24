@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useConfig } from "@/context/ConfigContext";
+import DashboardHeader from "@/components/dashboard/Header";
 
 const WelcomeTour = dynamic(() => import("@/components/onboarding/WelcomeTour"), {
   ssr: false,
@@ -27,6 +27,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
+  const router = useRouter();
   const { nomeSistema, logoSistema, corPrimaria } = useConfig();
   const [loading, setLoading] = useState(true);
   const [possuiOtica, setPossuiOtica] = useState(true);
@@ -67,7 +68,10 @@ export default function DashboardLayout({
           }
         } catch (err) {
           console.error("Erro ao carregar contexto:", err);
-          if (mounted) setLoading(false);
+          if (mounted) {
+            setLoading(false);
+            router.replace("/login");
+          }
         }
     }
 
@@ -81,28 +85,42 @@ export default function DashboardLayout({
   const navItems = [
     {
       href: "/consultorio",
-      label: "Consultorio",
+      label: "Consultório",
       iconPath: "M12 21a7 7 0 1 0-7-7 7 7 0 0 0 7 7Zm0 0v-3.5m-3.5 0h7",
       iconClass: "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
       show: role === "master" || role === "admin" || role === "consultorio",
     },
     {
+      href: "/consultorio/pacientes",
+      label: "Pacientes",
+      iconPath: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m17 0h2m-2 0h-3m-8 0H4m5-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 1a3 3 0 1 0 0-6",
+      iconClass: "bg-sky-50 text-sky-600 group-hover:bg-sky-100",
+      show: role === "master" || role === "admin" || role === "consultorio",
+    },
+    {
       href: "/otica",
-      label: "Otica",
+      label: "Ótica",
       iconPath: "M3 12h18m-15 0a3 3 0 1 0 0.01 0M18 12a3 3 0 1 0 0.01 0",
       iconClass: "bg-violet-50 text-violet-600 group-hover:bg-violet-100",
       show: !loading && possuiOtica && (role === "master" || role === "admin" || role === "vendas"),
     },
     {
+      href: "/clientes",
+      label: "Clientes",
+      iconPath: "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2m15 0h7M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8.5-2h6m-3-3v6",
+      iconClass: "bg-cyan-50 text-cyan-600 group-hover:bg-cyan-100",
+      show: role === "master" || role === "admin" || role === "vendas",
+    },
+    {
       href: "/financeiro",
-      label: "Financeiro",
+      label: "Financeiro Ótica",
       iconPath: "M3 7h18v10H3zM16 12h3",
       iconClass: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100",
       show: role === "master" || role === "admin" || role === "financeiro",
     },
     {
       href: "/comunicacao",
-      label: "Comunicacao",
+      label: "Comunicação",
       iconPath: "M4 5h16v10H8l-4 4V5Z",
       iconClass: "bg-orange-50 text-orange-600 group-hover:bg-orange-100",
       show: role === "master" || role === "admin" || role === "consultorio" || role === "vendas",
@@ -143,8 +161,11 @@ export default function DashboardLayout({
     <div className="min-h-screen bg-transparent">
       <aside className="fixed left-5 top-5 hidden h-[calc(100vh-40px)] w-72 flex-col rounded-[40px] border border-slate-100 bg-white/95 p-7 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)] backdrop-blur md:flex">
         <div className="mb-10 flex items-center gap-3">
-          {logoSistema ? <Image src={logoSistema} alt="Logo" width={36} height={36} className="h-9 w-9 rounded-xl object-cover" /> : null}
-          <h1 className="text-2xl font-black tracking-tight text-slate-900" style={{ color: corPrimaria }}>{nomeSistema}</h1>
+          {logoSistema ? (
+            <img src={logoSistema} alt={nomeSistema || "OptoVendas"} className="h-24 w-auto object-contain" />
+          ) : (
+            <h1 className="text-2xl font-black tracking-tight text-slate-900" style={{ color: corPrimaria }}>{nomeSistema || "OptoVendas"}</h1>
+          )}
         </div>
 
         <nav className="flex-1 space-y-2">
@@ -198,19 +219,7 @@ export default function DashboardLayout({
       </aside>
 
       <div className="md:pl-[20rem]">
-        <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:hidden">
-          <div className="flex items-center gap-2">
-            {logoSistema ? <Image src={logoSistema} alt="Logo" width={24} height={24} className="h-6 w-6 rounded-lg object-cover" /> : null}
-            <h1 className="text-base font-black" style={{ color: corPrimaria }}>{nomeSistema}</h1>
-          </div>
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen((v) => !v)}
-            className="rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700"
-          >
-            Menu
-          </button>
-        </header>
+        <DashboardHeader onOpenMobileMenu={() => setMobileMenuOpen((v) => !v)} />
 
         {mobileMenuOpen && (
           <div className="fixed inset-0 z-50 md:hidden">

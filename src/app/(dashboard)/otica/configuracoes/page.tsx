@@ -4,17 +4,19 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
-import { 
-  Store, 
-  Upload, 
-  MapPin, 
-  Phone, 
-  Mail, 
-  Save, 
-  ArrowLeft, 
-  Loader2, 
+import {
+  Store,
+  Upload,
+  MapPin,
+  Phone,
+  Mail,
+  Save,
+  ArrowLeft,
+  Loader2,
   Globe,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ShieldCheck,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -31,10 +33,32 @@ export default function ConfiguracoesOticaPage() {
     endereco: "",
     cidade: "",
     logo_url: "",
-    mensagem_rodape: ""
+    mensagem_rodape: "",
+    cobrar_comissao: false,
+    comissao_padrao_porcentagem: 0
   });
   
   const toast = useToast();
+  const [userFuncao, setUserFuncao] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function carregarFuncao() {
+      try {
+        const u = await supabase.auth.getUser();
+        const user = u.data?.user;
+        if (!user) return;
+        const res = await supabase.from("perfis").select("funcao").eq("id", user.id).maybeSingle();
+        if (!mounted) return;
+        const f = (res.data?.funcao as string) || null;
+        setUserFuncao(f);
+      } catch (e) {
+        // noop
+      }
+    }
+    void carregarFuncao();
+    return () => { mounted = false };
+  }, []);
 
   useEffect(() => {
     async function carregarDados() {
@@ -46,7 +70,14 @@ export default function ConfiguracoesOticaPage() {
           .eq("clinica_id", ctx.clinicaId)
           .single();
 
-        if (data) setConfig(data as any);
+        if (data) {
+          const normalized = {
+            ...(data as any),
+            cobrar_comissao: !!(data as any).cobrar_comissao,
+            comissao_padrao_porcentagem: Number((data as any).comissao_padrao_porcentagem) || 0
+          };
+          setConfig(normalized as any);
+        }
       } catch (err) {
         console.error("Erro ao carregar configs:", err);
       } finally {
@@ -68,16 +99,19 @@ export default function ConfiguracoesOticaPage() {
       const filePath = `otica-logos/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('public_assets')
-        .upload(filePath, file);
+        .from('branding-assets')
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type || 'image/png',
+        });
 
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage
-        .from('public_assets')
+        .from('branding-assets')
         .getPublicUrl(filePath);
 
-      const publicUrl = (data as any)?.publicUrl || (data as any)?.publicUrl;
+      const publicUrl = (data as any)?.publicUrl;
 
       setConfig(prev => ({ ...prev, logo_url: publicUrl }));
       toast.success("Logo carregada! Não esqueça de salvar as alterações.");
@@ -92,13 +126,18 @@ export default function ConfiguracoesOticaPage() {
     setSalvando(true);
     try {
       const ctx = await resolveClinicaContext();
+      const payload: any = {
+        ...config,
+        clinica_id: ctx.clinicaId,
+        updated_at: new Date()
+      };
+
+      // se o id estiver vazio ou for string vazia, remova-o para não enviar UUID inválido
+      if (!payload.id) delete payload.id;
+
       const { error } = await supabase
         .from("otica_configuracoes")
-        .upsert({
-          ...config,
-          clinica_id: ctx.clinicaId,
-          updated_at: new Date()
-        });
+        .upsert(payload);
 
       if (error) throw error;
       toast.success("Configurações da Ótica atualizadas!");
@@ -139,6 +178,23 @@ export default function ConfiguracoesOticaPage() {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Card de Permissões - visível apenas para admins/master */}
+        {(["master", "admin_clinica", "admin"].includes((userFuncao || "").toLowerCase())) && (
+          <div className="lg:col-span-3">
+            <Link href="/otica/configuracoes/permissoes">
+              <div className="group bg-white p-6 rounded-[32px] border border-slate-50 shadow-sm hover:shadow-xl hover:border-cyan-100 transition-all cursor-pointer flex items-center gap-4">
+                <div className="p-4 bg-slate-900 text-white rounded-2xl group-hover:bg-cyan-600 transition-colors">
+                  <ShieldCheck size={24} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 uppercase text-xs tracking-widest">Níveis de Acesso</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Configurar o que cada cargo pode ver</p>
+                </div>
+                <ChevronRight size={20} className="ml-auto text-slate-200 group-hover:text-cyan-600" />
+              </div>
+            </Link>
+          </div>
+        )}
         
         {/* COLUNA ESQUERDA: LOGO */}
         <div className="space-y-6">
@@ -157,10 +213,10 @@ export default function ConfiguracoesOticaPage() {
                <input 
                  type="file" 
                  onChange={handleUploadLogo} 
-                 className="absolute inset-0 opacity-0 cursor-pointer" 
+                 className="absolute inset-0 opacity-0 cursor-pointer z-20" 
                  accept="image/*"
                />
-               <div className="absolute inset-0 bg-cyan-600/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+               <div className="absolute inset-0 bg-cyan-600/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none group-hover:pointer-events-auto">
                   <Upload className="text-cyan-600" />
                </div>
              </div>
@@ -184,6 +240,33 @@ export default function ConfiguracoesOticaPage() {
             <ConfigInput label="WhatsApp" value={config.whatsapp} onChange={v => setConfig({...config, whatsapp: v})} icon={<Globe size={14}/>} />
             <div className="md:col-span-2">
               <ConfigInput label="E-mail de Contato" value={config.email} onChange={v => setConfig({...config, email: v})} icon={<Mail size={14}/>} />
+                <div className="md:col-span-2 flex items-center gap-4">
+                  <label className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      checked={!!config.cobrar_comissao}
+                      onChange={e => setConfig({...config, cobrar_comissao: e.target.checked})}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Cobrar comissão sobre vendas</span>
+                  </label>
+
+                  <div className="ml-6">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Percentual padrão</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        value={config.comissao_padrao_porcentagem as any}
+                        onChange={e => setConfig({...config, comissao_padrao_porcentagem: Number(e.target.value) || 0})}
+                        className="w-32 bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 shadow-inner transition-all"
+                      />
+                      <span className="text-slate-400 font-black">%</span>
+                    </div>
+                  </div>
+                </div>
             </div>
           </section>
 

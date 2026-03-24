@@ -18,7 +18,8 @@ import {
 type Resumo = {
   totalItens: number;
   totalPecas: number;
-  valorEstoque: number;
+  valorCustoTotal: number;
+  valorVendaTotal: number;
 };
 
 type TopGrife = {
@@ -35,7 +36,7 @@ type ItemBaixo = {
 };
 
 export default function DashboardEstoquePage() {
-  const [resumo, setResumo] = useState<Resumo>({ totalItens: 0, totalPecas: 0, valorEstoque: 0 });
+  const [resumo, setResumo] = useState<Resumo>({ totalItens: 0, totalPecas: 0, valorCustoTotal: 0, valorVendaTotal: 0 });
   const [topGrifes, setTopGrifes] = useState<TopGrife[]>([]);
   const [baixoEstoque, setBaixoEstoque] = useState<ItemBaixo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +46,7 @@ export default function DashboardEstoquePage() {
     try {
       const ctx = await resolveClinicaContext();
       const [resumoRes, topRes, baixoRes] = await Promise.all([
-        supabase.rpc("dashboard_estoque_resumo"),
+        supabase.rpc("dashboard_estoque_resumo", { p_clinica_id: ctx.clinicaId }),
         supabase.rpc("dashboard_estoque_top_grifes", { p_dias: 30 }),
         supabase
           .from("estoque_armacoes")
@@ -56,11 +57,12 @@ export default function DashboardEstoquePage() {
           .limit(8),
       ]);
 
-      const resumoJson = (resumoRes.data || {}) as Partial<Resumo>;
+      const resumoJson = (resumoRes.data || {}) as any;
       setResumo({
         totalItens: Number(resumoJson.totalItens || 0),
         totalPecas: Number(resumoJson.totalPecas || 0),
-        valorEstoque: Number(resumoJson.valorEstoque || 0),
+        valorCustoTotal: Number(resumoJson.valorCustoTotal || resumoJson.valorEstoque || 0),
+        valorVendaTotal: Number(resumoJson.valorVendaTotal || 0),
       });
 
       setTopGrifes(((topRes.data as any[]) || []).map((item) => ({
@@ -91,7 +93,7 @@ export default function DashboardEstoquePage() {
              <ArrowLeft size={20} />
            </Link>
            <div>
-             <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Analytics</p>
+             <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Analítico</p>
              <h1 className="text-4xl font-black text-slate-900 tracking-tight">Kardex de Ótica<span className="text-cyan-600">.</span></h1>
            </div>
         </div>
@@ -101,18 +103,42 @@ export default function DashboardEstoquePage() {
       </header>
 
       {/* WIDGETS DE RESUMO */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <MetricCard label="SKUs Únicos" value={resumo.totalItens} icon={<Package size={20} />} />
-        <MetricCard label="Total em Peças" value={resumo.totalPecas} icon={<TrendingUp size={20} />} />
-        <MetricCard
-          label="Capital Imobilizado"
-          value={resumo.valorEstoque.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-          icon={<DollarSign size={20} />}
-          highlight
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <MetricCard label="Modelos Ativos" value={resumo.totalItens} icon={<Package size={20} />} />
+        <MetricCard label="Total de Peças" value={resumo.totalPecas} icon={<TrendingUp size={20} />} />
+
+        <MetricCard 
+          label="Custo Imobilizado" 
+          value={resumo.valorCustoTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} 
+          icon={<DollarSign size={20} />} 
+          highlight 
+        />
+
+        <MetricCard 
+          label="Previsão de Receita" 
+          value={resumo.valorVendaTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} 
+          icon={<BarChart3 size={20}/>} 
+          colorClass="text-emerald-500"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-3 bg-gradient-to-r from-cyan-600 to-cyan-500 p-8 rounded-[40px] text-white shadow-xl shadow-cyan-100 flex flex-col md:flex-row justify-between items-center group">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-80">Margem de Contribuição Estimada</p>
+            <h2 className="text-4xl font-black tracking-tighter mt-1">
+              {(resumo.valorVendaTotal - resumo.valorCustoTotal).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </h2>
+          </div>
+          <div className="mt-4 md:mt-0 bg-white/10 p-4 rounded-3xl backdrop-blur-md border border-white/20">
+            <p className="text-[10px] font-black uppercase">ROI Estimado</p>
+            <p className="text-2xl font-black">
+              {resumo.valorCustoTotal > 0 
+                ? (((resumo.valorVendaTotal - resumo.valorCustoTotal) / resumo.valorCustoTotal) * 100).toFixed(0) 
+                : 0}%
+            </p>
+          </div>
+        </div>
         
         {/* REPOSIÇÃO URGENTE */}
         <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
@@ -189,14 +215,14 @@ export default function DashboardEstoquePage() {
 }
 
 // SUBCOMPONENTES
-function MetricCard({ label, value, icon, highlight = false }: any) {
+function MetricCard({ label, value, icon, highlight = false, colorClass = "text-cyan-600" }: any) {
   return (
     <div className={`p-8 rounded-[40px] shadow-sm border transition-all hover:shadow-xl ${highlight ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-50 text-slate-900'}`}>
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 shadow-inner ${highlight ? 'bg-white/10 text-cyan-400' : 'bg-slate-50 text-cyan-600'}`}>
+      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 shadow-inner ${highlight ? 'bg-white/10 text-cyan-400' : `bg-slate-50 ${colorClass}`}`}>
         {icon}
       </div>
       <p className={`text-[10px] font-black uppercase tracking-[0.2em] mb-1 ${highlight ? 'text-slate-500' : 'text-slate-400'}`}>{label}</p>
-      <p className="text-3xl font-black tracking-tighter">{value}</p>
+      <p className="text-2xl font-black tracking-tighter">{value}</p>
     </div>
   );
 }

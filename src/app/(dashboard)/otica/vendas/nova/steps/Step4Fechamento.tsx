@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CreditCard, BadgePercent, Signature, Receipt, AlertCircle } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import { CreditCard, BadgePercent, Signature, Receipt, AlertCircle, UserCheck, MapPin } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { resolveClinicaContext } from "@/lib/clinica";
 import SignatureTermPad from "@/components/shared/SignatureTermPad";
 import type { VendaData } from "./types";
 
@@ -9,9 +11,10 @@ type Props = {
   data: VendaData;
   onChange: (next: VendaData) => void;
   termoTexto: string;
+  cidadePadraoVenda?: string;
 };
 
-export default function Step4Fechamento({ data, onChange, termoTexto }: Props) {
+export default function Step4Fechamento({ data, onChange, termoTexto, cidadePadraoVenda }: Props) {
   const [assinaturaCapturada, setAssinaturaCapturada] = useState(Boolean(data.assinatura));
 
   const subtotal = Number(data.financeiro.total || 0);
@@ -31,6 +34,69 @@ export default function Step4Fechamento({ data, onChange, termoTexto }: Props) {
       },
     });
   };
+
+  const [vendedores, setVendedores] = useState<Array<{ id: string; nome?: string }>>([]);
+  const [isVendedor, setIsVendedor] = useState(false);
+
+  useEffect(() => {
+    async function carregarVendedores() {
+      try {
+        const ctx = await resolveClinicaContext();
+        const { data: lista, error } = await supabase
+          .from("perfis")
+          .select("id, nome")
+          .eq("clinica_id", ctx.clinicaId)
+          .order("nome", { ascending: true });
+
+        if (!error && lista) setVendedores(lista as any[]);
+
+        const { data: userData } = await supabase.auth.getUser();
+        const currentUserId = userData?.user?.id;
+
+        // try to read role/funcao from perfis and profiles to determine if user is vendedor
+        let roleVal: string | null = null;
+        try {
+          const perf = await supabase.from("perfis").select("id, nome, funcao").eq("id", currentUserId).maybeSingle();
+          if (perf.data) roleVal = (perf.data as any).funcao ?? roleVal;
+        } catch {}
+
+        try {
+          const prof = await supabase.from("profiles").select("id, display_name, role").eq("id", currentUserId).maybeSingle();
+          if (prof.data) roleVal = (prof.data as any).role ?? roleVal;
+        } catch {}
+
+        const vendedorRoles = ["vendedor_otica", "vendas", "atendente"];
+        const currentIsVendedor = roleVal ? vendedorRoles.includes(roleVal) : false;
+
+        if (currentIsVendedor) {
+          setIsVendedor(true);
+          // ensure current user is set as vendedorId and limit options
+          if (currentUserId) {
+            onChange({ ...data, vendedorId: currentUserId });
+            setVendedores(prev => (prev.some(v => v.id === currentUserId) ? prev : [{ id: currentUserId, nome: (userData?.user?.user_metadata?.full_name || userData?.user?.email) } as any]));
+          }
+        } else {
+          // if not vendedor, preselect current user only if vendaData doesn't have vendedorId
+          if (currentUserId && !data.vendedorId) {
+            onChange({ ...data, vendedorId: currentUserId });
+          }
+        }
+      } catch (err) {
+        console.error("Erro ao carregar vendedores:", err);
+      }
+    }
+
+    void carregarVendedores();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const padrao = (cidadePadraoVenda || "").trim();
+    if (!data.localidadeVenda?.trim() && padrao) {
+      onChange({ ...data, localidadeVenda: padrao });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cidadePadraoVenda]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -112,6 +178,48 @@ export default function Step4Fechamento({ data, onChange, termoTexto }: Props) {
       </div>
 
       <div className="space-y-6">
+        <section className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-50 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-cyan-50 text-cyan-600 rounded-lg"><UserCheck size={18} /></div>
+            <h3 className="text-lg font-black text-slate-800">Responsável pela Venda</h3>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Selecionar Vendedor(a)</label>
+            <div>
+              {isVendedor ? (
+                <div className="p-4 bg-slate-50 rounded-2xl font-bold text-slate-700">
+                  {vendedores[0]?.nome || vendedores[0]?.id || "Vendedor"}
+                </div>
+              ) : (
+                <select
+                  value={data.vendedorId || ""}
+                  onChange={(e) => onChange({ ...data, vendedorId: e.target.value || null })}
+                  className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 transition-all"
+                >
+                  <option value="">Selecione quem realizou a venda...</option>
+                  {vendedores.map((v) => (
+                    <option key={v.id} value={v.id}>{v.nome || v.id}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Localidade da Venda (Rota)</label>
+            <div className="relative">
+              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+              <input
+                value={data.localidadeVenda || ""}
+                onChange={(e) => onChange({ ...data, localidadeVenda: e.target.value })}
+                placeholder="Ex: Serrinha / Feira"
+                className="w-full rounded-2xl border-none bg-slate-50 py-4 pl-11 pr-4 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+          </div>
+        </section>
+
         <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Signature size={20} /></div>

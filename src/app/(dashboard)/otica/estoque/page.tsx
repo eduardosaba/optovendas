@@ -11,11 +11,14 @@ import {
   Search,
   Image as ImageIcon,
   TrendingUp,
-  ChevronRight,
   MinusCircle,
   PlusCircle,
   Tag,
   ArrowLeft,
+  Edit3,
+  X,
+  Save,
+  Loader2,
 } from "lucide-react";
 
 type ItemEstoque = {
@@ -26,6 +29,7 @@ type ItemEstoque = {
   cor?: string | null;
   quantidade_atual: number;
   preco_venda: number;
+  preco_custo: number;
   foto_url?: string | null;
   atualizado_em: string;
 };
@@ -41,6 +45,8 @@ export default function EstoquePage() {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [mostrarForm, setMostrarForm] = useState(false);
+
+  const [editandoItem, setEditandoItem] = useState<ItemEstoque | null>(null);
 
   useEffect(() => {
     async function carregar() {
@@ -75,11 +81,12 @@ export default function EstoquePage() {
     );
   }, [busca, itens]);
 
-  async function cadastrarItem(e: FormEvent<HTMLFormElement>) {
+  async function handleSalvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSalvando(true);
     const formData = new FormData(e.currentTarget);
-    const payload = {
+
+    const payload: any = {
       clinica_id: clinicaId,
       codigo_referencia: String(formData.get("codigo_referencia")),
       grife: String(formData.get("grife")),
@@ -87,41 +94,54 @@ export default function EstoquePage() {
       cor: String(formData.get("cor") || ""),
       quantidade_atual: Number(formData.get("quantidade_atual")),
       preco_venda: Number(String(formData.get("preco_venda")).replace(",", ".")),
-      foto_url: String(formData.get("foto_url") || ""),
+      preco_custo: Number(String(formData.get("preco_custo") || "0").replace(",", ".")),
     };
+
     try {
-      // se um arquivo foi selecionado, faça upload para o Storage e obtenha a URL pública
       if (selectedFile && clinicaId) {
         setUploading(true);
-        try {
-          const ext = (selectedFile.name.split(".").pop() || "jpg").toLowerCase();
-          const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const path = `clinicas/${clinicaId}/armacoes/${unique}.${ext}`;
-          const up = await supabase.storage.from("branding-assets").upload(path, selectedFile, {
-            upsert: false,
-            contentType: selectedFile.type || "image/jpeg",
-          });
-          if (up.error) throw up.error;
-          const pub = supabase.storage.from("branding-assets").getPublicUrl(path).data?.publicUrl;
-          if (pub) payload.foto_url = pub;
-        } finally {
-          setUploading(false);
-        }
+        const ext = (selectedFile.name.split(".").pop() || "jpg").toLowerCase();
+        const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const path = `clinicas/${clinicaId}/armacoes/${unique}.${ext}`;
+        const up = await supabase.storage.from("branding-assets").upload(path, selectedFile);
+        if (up.error) throw up.error;
+        const pub = supabase.storage.from("branding-assets").getPublicUrl(path).data?.publicUrl;
+        if (pub) payload.foto_url = pub;
+        setUploading(false);
+      } else if (editandoItem) {
+        payload.foto_url = editandoItem.foto_url;
       }
 
-      const { data, error } = await supabase.from("estoque_armacoes").insert(payload).select().single();
-      if (error) throw error;
-      setItens([data, ...itens]);
-      setMostrarForm(false);
-      (e.target as HTMLFormElement).reset();
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      toast.success("Produto catalogado!");
+      if (editandoItem) {
+        const { data, error } = await supabase
+          .from("estoque_armacoes")
+          .update(payload)
+          .eq("id", editandoItem.id)
+          .select()
+          .single();
+        if (error) throw error;
+        setItens(itens.map(i => i.id === data.id ? data : i));
+        toast.success("Produto atualizado!");
+      } else {
+        const { data, error } = await supabase.from("estoque_armacoes").insert(payload).select().single();
+        if (error) throw error;
+        setItens([data, ...itens]);
+        toast.success("Produto catalogado!");
+      }
+
+      fecharFormulario();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
       setSalvando(false);
     }
+  }
+
+  function fecharFormulario() {
+    setMostrarForm(false);
+    setEditandoItem(null);
+    setSelectedFile(null);
+    setPreviewUrl(null);
   }
 
   async function ajustarQuantidade(id: string, atual: number, delta: number) {
@@ -146,10 +166,10 @@ export default function EstoquePage() {
         </div>
         <div className="flex gap-3 w-full md:w-auto">
           <button 
-            onClick={() => setMostrarForm(!mostrarForm)}
+            onClick={() => { if(mostrarForm) fecharFormulario(); else setMostrarForm(true); }}
             className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-cyan-600 text-white px-6 py-4 rounded-2xl font-black text-sm shadow-xl shadow-cyan-100 hover:bg-cyan-700 transition-all"
           >
-            {mostrarForm ? "Fechar" : <><Plus size={18}/> Novo Item</>}
+            {mostrarForm ? "Cancelar" : <><Plus size={18}/> Novo Item</>}
           </button>
           <Link href="/otica/estoque/dashboard" className="p-4 bg-slate-900 text-white rounded-2xl shadow-lg hover:bg-slate-800 transition-all">
             <TrendingUp size={20} />
@@ -157,47 +177,56 @@ export default function EstoquePage() {
         </div>
       </header>
 
-      {/* FORMULÁRIO DE CADASTRO (EXPANSÍVEL) */}
-      {mostrarForm && (
+      {/* FORMULÁRIO (CADASTRO OU EDIÇÃO) */}
+      {(mostrarForm || editandoItem) && (
         <section className="bg-white p-8 rounded-[40px] shadow-2xl border border-cyan-100 animate-in slide-in-from-top-4 duration-500">
-          <h2 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
-            <Tag className="text-cyan-500" /> Detalhes do Produto
-          </h2>
-          <form onSubmit={cadastrarItem} className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <InputEstoque name="codigo_referencia" label="Cód. Referência" placeholder="RB-5228" required />
-            <InputEstoque name="grife" label="Grife / Marca" placeholder="Ray-Ban" required />
-            <InputEstoque name="modelo" label="Modelo" placeholder="Wayfarer" required />
-            <InputEstoque name="cor" label="Cor / Detalhes" placeholder="Black Piano" />
-            <InputEstoque name="quantidade_atual" label="Qtd Inicial" type="number" placeholder="10" required />
-            <InputEstoque name="preco_venda" label="Preço de Venda (R$)" placeholder="450,00" required />
-            <div className="md:col-span-2">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+              <Tag className="text-cyan-500" /> {editandoItem ? "Editar Produto" : "Detalhes do Produto"}
+            </h2>
+            <button onClick={fecharFormulario} className="text-slate-400 hover:text-rose-500"><X size={24}/></button>
+          </div>
+          
+          <form onSubmit={handleSalvar} className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <InputEstoque name="codigo_referencia" label="Cód. Referência" defaultValue={editandoItem?.codigo_referencia} required />
+            <InputEstoque name="grife" label="Grife / Marca" defaultValue={editandoItem?.grife} required />
+            <InputEstoque name="modelo" label="Modelo" defaultValue={editandoItem?.modelo} required />
+            <InputEstoque name="cor" label="Cor / Detalhes" defaultValue={editandoItem?.cor || ""} />
+            <InputEstoque name="quantidade_atual" label="Quantidade" type="number" defaultValue={editandoItem?.quantidade_atual} required />
+            <InputEstoque name="preco_custo" label="Preço de Custo (R$)" defaultValue={editandoItem?.preco_custo} placeholder="0,00" />
+            <InputEstoque name="preco_venda" label="Preço de Venda (R$)" defaultValue={editandoItem?.preco_venda} placeholder="0,00" required />
+            
+            <div className="md:col-span-1">
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Foto da Armação (Opcional)</label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] || null;
-                      setSelectedFile(f);
-                      if (f) setPreviewUrl(URL.createObjectURL(f));
-                      else setPreviewUrl(null);
-                    }}
-                    className="file:bg-cyan-600 file:text-white file:px-4 file:py-2 file:rounded-full"
-                  />
-                  {uploading && <span className="text-sm text-slate-500">Enviando...</span>}
-                </div>
-                {previewUrl && (
-                  <img src={previewUrl} alt="preview" className="w-40 h-28 object-cover rounded-xl border" />
-                )}
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Foto</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    setSelectedFile(f);
+                    if (f) setPreviewUrl(URL.createObjectURL(f));
+                  }}
+                  className="text-xs block w-full file:bg-cyan-50 file:text-cyan-700 file:border-none file:px-3 file:py-2 file:rounded-lg"
+                />
               </div>
             </div>
-            <button 
-              disabled={salvando}
-              className="md:col-span-4 bg-slate-900 text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-cyan-600 transition-all disabled:opacity-50"
-            >
-              {salvando ? "Processando..." : "Confirmar Entrada em Estoque"}
-            </button>
+
+            <div className="md:col-span-4 flex gap-4">
+               {(previewUrl || editandoItem?.foto_url) && (
+                 <div className="relative">
+                    <img src={previewUrl || editandoItem?.foto_url || ""} alt="preview" className="w-32 h-20 object-contain rounded-xl border bg-slate-50" />
+                    <p className="text-[9px] text-center font-bold text-slate-400 mt-1 uppercase">Visualização</p>
+                 </div>
+               )}
+               <button 
+                disabled={salvando || uploading}
+                className="flex-1 bg-slate-900 text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-cyan-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {salvando ? <Loader2 className="animate-spin" /> : <Save size={20}/>}
+                {editandoItem ? "Salvar Alterações" : "Confirmar Entrada"}
+              </button>
+            </div>
           </form>
         </section>
       )}
@@ -221,8 +250,16 @@ export default function EstoquePage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           {itensFiltrados.map((item) => (
-            <article key={item.id} className="group bg-white rounded-[40px] border border-slate-50 shadow-sm hover:shadow-2xl transition-all duration-500 overflow-hidden flex flex-col">
-              {/* Espaço da Foto */}
+            <article key={item.id} className="group bg-white rounded-[40px] border border-slate-50 shadow-sm hover:shadow-2xl transition-all duration-500 overflow-hidden flex flex-col relative">
+              
+              {/* Botão Editar Flutuante */}
+              <button 
+                onClick={() => { setEditandoItem(item); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                className="absolute top-4 left-4 z-10 p-2 bg-white/90 backdrop-blur rounded-xl shadow-sm text-slate-400 hover:text-cyan-600 opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <Edit3 size={18} />
+              </button>
+
               <div className="aspect-[4/3] bg-slate-50 relative overflow-hidden flex items-center justify-center border-b border-slate-50">
                 {item.foto_url ? (
                   <img src={item.foto_url} alt={item.modelo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
@@ -237,7 +274,6 @@ export default function EstoquePage() {
                 </div>
               </div>
 
-              {/* Conteúdo */}
               <div className="p-6 space-y-4 flex-1 flex flex-col">
                 <div>
                   <p className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">{item.grife}</p>
@@ -245,22 +281,22 @@ export default function EstoquePage() {
                   <p className="text-xs font-bold text-slate-400 italic mt-1">{item.cor || "Cor única"}</p>
                 </div>
 
-                <div className="flex justify-between items-end mt-auto">
+                <div className="flex justify-between items-end mt-auto pt-4 border-t border-slate-50">
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-300 uppercase">Preço</p>
-                    <p className="text-xl font-black text-slate-900">R$ {Number(item.preco_venda).toFixed(2)}</p>
+                    <p className="text-[10px] font-black text-slate-300 uppercase leading-none">Venda</p>
+                    <p className="text-lg font-black text-slate-900">R$ {Number(item.preco_venda).toFixed(2)}</p>
+                    <p className="text-[9px] font-bold text-slate-400">Custo: R$ {Number(item.preco_custo || 0).toFixed(2)}</p>
                   </div>
                   
-                  {/* Controle de Qtd Rápido */}
-                  <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-100">
-                    <button onClick={() => ajustarQuantidade(item.id, item.quantidade_atual, -1)} className="text-slate-400 hover:text-rose-500 transition-colors">
-                      <MinusCircle size={20} />
+                  <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                    <button onClick={() => ajustarQuantidade(item.id, item.quantidade_atual, -1)} className="text-slate-400 hover:text-rose-500">
+                      <MinusCircle size={18} />
                     </button>
-                    <span className={`text-sm font-black ${item.quantidade_atual <= 2 ? 'text-rose-600' : 'text-slate-700'}`}>
+                    <span className={`text-xs font-black ${item.quantidade_atual <= 2 ? 'text-rose-600' : 'text-slate-700'}`}>
                       {item.quantidade_atual}
                     </span>
-                    <button onClick={() => ajustarQuantidade(item.id, item.quantidade_atual, 1)} className="text-slate-400 hover:text-emerald-500 transition-colors">
-                      <PlusCircle size={20} />
+                    <button onClick={() => ajustarQuantidade(item.id, item.quantidade_atual, 1)} className="text-slate-400 hover:text-emerald-500">
+                      <PlusCircle size={18} />
                     </button>
                   </div>
                 </div>
@@ -275,11 +311,11 @@ export default function EstoquePage() {
 
 function InputEstoque({ label, ...props }: any) {
   return (
-    <div className="space-y-2">
-      <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">{label}</label>
+    <div className="space-y-1">
+      <label className="text-[9px] font-black uppercase text-slate-400 ml-2 tracking-tighter">{label}</label>
       <input 
         {...props} 
-        className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 transition-all"
+        className="w-full bg-slate-50 border-none rounded-xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 transition-all text-sm"
       />
     </div>
   );
