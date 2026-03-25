@@ -210,6 +210,12 @@ function MasterKpiCard({ titulo, valor, icon, color }: any) {
 }
 
 function BarraProgressoMaster({ cidade, valor, total, index }: any) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 120 + (index * 60));
+    return () => clearTimeout(t);
+  }, [index]);
+
   const perc = total > 0 ? (valor / total) * 100 : 0;
   const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   const cores = ["bg-blue-600", "bg-indigo-600", "bg-cyan-600", "bg-emerald-600"];
@@ -219,14 +225,14 @@ function BarraProgressoMaster({ cidade, valor, total, index }: any) {
       <div className="flex justify-between items-end mb-2">
         <div>
           <span className="text-[10px] font-black text-slate-300 uppercase block mb-1">Rank #{index + 1}</span>
-          <p className="font-black text-slate-800 tracking-tight">{cidade}</p>
+          <p className="font-black text-slate-800 tracking-tight truncate max-w-[60%]">{cidade}</p>
         </div>
         <span className="font-black text-slate-900 text-sm">{brl(valor)}</span>
       </div>
       <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden shadow-inner">
-        <div 
-          className={`h-full ${cores[index % cores.length]} rounded-full transition-all duration-1000 shadow-lg`} 
-          style={{ width: `${perc}%` }} 
+        <div
+          className={`h-full ${cores[index % cores.length]} rounded-full transition-all duration-1000 shadow-lg`}
+          style={{ width: `${mounted ? perc : 1}%` }}
         />
       </div>
     </div>

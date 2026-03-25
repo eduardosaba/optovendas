@@ -34,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`${inter.variable}`}>
+    <html lang="pt-BR" suppressHydrationWarning className={`${inter.variable}`}>
       <body className="antialiased selection:bg-cyan-100 selection:text-cyan-900 bg-slate-50 text-slate-900 font-sans">
         <ConfigProvider>
           <ToastProvider>

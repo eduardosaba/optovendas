@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChangeEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, Eye, EyeOff, Minus, MousePointer2, Plus, RefreshCw, Ruler } from "lucide-react";
+import type { ChangeEvent, PointerEvent as ReactPointerEvent } from "react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, Minus, MousePointer2, Plus, RefreshCw, Ruler } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { VendaData } from "./types";
 
@@ -13,11 +13,8 @@ type Props = {
 };
 
 type MarkerId =
-  | "ref1"
-  | "ref2"
   | "od"
   | "oe"
-  | "ponte"
   | "ponteEsq"
   | "ponteDir"
   | "bordaOD"
@@ -31,14 +28,19 @@ type MarkerId =
   | "coOEA"
   | "coOEB";
 
-type ModoCalibracao = "cartao" | "armacao";
+type ModoCalibracao = "armacao";
 
 type MarkerPoint = {
   x: number;
   y: number;
 };
 
-const LARGO_CARTAO_MM = 85.6;
+type SceneRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v));
@@ -74,8 +76,38 @@ function labelTolerancia(diffAbs: number) {
   return "Fora da tolerancia";
 }
 
+function calcSceneRect(containerW: number, containerH: number, naturalW: number, naturalH: number): SceneRect {
+  if (containerW <= 0 || containerH <= 0 || naturalW <= 0 || naturalH <= 0) {
+    return { x: 0, y: 0, width: Math.max(0, containerW), height: Math.max(0, containerH) };
+  }
+
+  const containerRatio = containerW / containerH;
+  const imageRatio = naturalW / naturalH;
+
+  if (containerRatio > imageRatio) {
+    const height = containerH;
+    const width = height * imageRatio;
+    return {
+      x: (containerW - width) / 2,
+      y: 0,
+      width,
+      height,
+    };
+  }
+
+  const width = containerW;
+  const height = width / imageRatio;
+  return {
+    x: 0,
+    y: (containerH - height) / 2,
+    width,
+    height,
+  };
+}
+
 export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const sceneSizeRef = useRef<{ width: number; height: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -83,11 +115,10 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [image, setImage] = useState<string | null>(data.pupilometroFoto || null);
   const [imageReady, setImageReady] = useState(false);
   const [mmPorPixel, setMmPorPixel] = useState(0);
-  const [modo, setModo] = useState<ModoCalibracao>((data.medidas.modo_medicao as ModoCalibracao) || "cartao");
+  const [modo, setModo] = useState<ModoCalibracao>("armacao");
   const [ponteManual, setPonteManual] = useState(data.medidas.armacao_ponte_pt || "18");
   const [distanciaCapturaM, setDistanciaCapturaM] = useState("1.0");
 
-  const [pontoReferencia, setPontoReferencia] = useState({ x1: 100, x2: 250, y: 200 });
   const [pupilaDir, setPupilaDir] = useState<MarkerPoint>({ x: 150, y: 180 });
   const [pupilaEsq, setPupilaEsq] = useState<MarkerPoint>({ x: 220, y: 180 });
   const [centroNasal, setCentroNasal] = useState(185);
@@ -109,6 +140,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [alturaVerticalOeMm, setAlturaVerticalOeMm] = useState("0.0");
   const [coOdMm, setCoOdMm] = useState("0.0");
   const [coOeMm, setCoOeMm] = useState("0.0");
+  const [dpBinocularMm, setDpBinocularMm] = useState("0.0");
 
   const [dragId, setDragId] = useState<MarkerId | null>(null);
   const [salvandoStorage, setSalvandoStorage] = useState(false);
@@ -120,10 +152,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [markerSelecionado, setMarkerSelecionado] = useState<MarkerId | null>(null);
   const [ajusteFinoAtivo, setAjusteFinoAtivo] = useState(false);
   const [passoAjustePx, setPassoAjustePx] = useState(1);
-  const [mostrarRefs, setMostrarRefs] = useState(true);
   const [medindoArmacaoTotal, setMedindoArmacaoTotal] = useState(false);
-  const [medindoAvD, setMedindoAvD] = useState(false);
-  const [medindoAvE, setMedindoAvE] = useState(false);
   const [medindoCoD, setMedindoCoD] = useState(false);
   const [medindoCoE, setMedindoCoE] = useState(false);
   const [pontoArmacaoA, setPontoArmacaoA] = useState<MarkerPoint | null>(null);
@@ -131,6 +160,15 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [armacaoTotalMm, setArmacaoTotalMm] = useState("0.0");
   const [ponteMedidaMm, setPonteMedidaMm] = useState("0.0");
   const [bloquearSemConferenciaPT, setBloquearSemConferenciaPT] = useState(true);
+  const [isPointerActive, setIsPointerActive] = useState(false);
+  const [pointerPos, setPointerPos] = useState<MarkerPoint | null>(null);
+  const [inclinacao, setInclinacao] = useState<number | null>(null);
+  const [isReto, setIsReto] = useState(true);
+  const [sensorDisponivel, setSensorDisponivel] = useState(false);
+  const [solicitandoSensor, setSolicitandoSensor] = useState(false);
+  const [focoTelaCheia, setFocoTelaCheia] = useState(false);
+  const [imageNatural, setImageNatural] = useState({ width: 0, height: 0 });
+  const [sceneRect, setSceneRect] = useState<SceneRect>({ x: 0, y: 0, width: 0, height: 0 });
 
   useEffect(() => {
     setImage(data.pupilometroFoto || null);
@@ -142,10 +180,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   }, [cameraOpen]);
 
   useEffect(() => {
-    if (modo === "armacao") {
-      setMostrarRefs(true);
-    }
-  }, [modo]);
+    setModo("armacao");
+  }, []);
 
   useEffect(() => {
     if (modo !== "armacao") return;
@@ -161,32 +197,137 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !window.DeviceOrientationEvent) return;
+    setSensorDisponivel(true);
+
+    const handleOrientation = (event: DeviceOrientationEvent) => {
+      const beta = event.beta;
+      if (typeof beta !== "number") return;
+      setInclinacao(beta);
+      const verticalidade = Math.abs(90 - Math.abs(beta));
+      setIsReto(verticalidade < 3);
+    };
+
+    window.addEventListener("deviceorientation", handleOrientation);
+    return () => window.removeEventListener("deviceorientation", handleOrientation);
+  }, []);
+
+  async function solicitarPermissaoSensor() {
+    if (typeof window === "undefined") return;
+    const maybeRequest = (window.DeviceOrientationEvent as any)?.requestPermission;
+    if (!maybeRequest) return;
+
+    setSolicitandoSensor(true);
+    try {
+      const res = await maybeRequest();
+      if (res !== "granted") {
+        setSensorDisponivel(false);
+      }
+    } catch {
+      setSensorDisponivel(false);
+    } finally {
+      setSolicitandoSensor(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!containerRef.current || !imageReady) return;
+
+    const scalePoint = (p: MarkerPoint | null, scaleX: number, scaleY: number) => {
+      if (!p) return p;
+      return {
+        x: clamp(p.x * scaleX, 8, nextWidth - 8),
+        y: clamp(p.y * scaleY, 8, nextHeight - 8),
+      };
+    };
+
+    let frame = 0;
+    let nextWidth = 0;
+    let nextHeight = 0;
+    const obs = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+
+      const nextScene = calcSceneRect(entry.contentRect.width, entry.contentRect.height, imageNatural.width, imageNatural.height);
+      nextWidth = nextScene.width;
+      nextHeight = nextScene.height;
+
+      setSceneRect(nextScene);
+
+      if (nextWidth <= 0 || nextHeight <= 0) return;
+
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const prev = sceneSizeRef.current;
+        if (!prev || prev.width <= 0 || prev.height <= 0) {
+          sceneSizeRef.current = { width: nextWidth, height: nextHeight };
+          return;
+        }
+
+        const deltaW = Math.abs(nextWidth - prev.width);
+        const deltaH = Math.abs(nextHeight - prev.height);
+        if (deltaW < 1 && deltaH < 1) return;
+
+        const scaleX = nextWidth / prev.width;
+        const scaleY = nextHeight / prev.height;
+
+        setPupilaDir((p) => scalePoint(p, scaleX, scaleY) || p);
+        setPupilaEsq((p) => scalePoint(p, scaleX, scaleY) || p);
+        setBordaOD((p) => scalePoint(p, scaleX, scaleY) || p);
+        setBordaOE((p) => scalePoint(p, scaleX, scaleY) || p);
+        setAvDA((p) => scalePoint(p, scaleX, scaleY));
+        setAvDB((p) => scalePoint(p, scaleX, scaleY));
+        setAvEA((p) => scalePoint(p, scaleX, scaleY));
+        setAvEB((p) => scalePoint(p, scaleX, scaleY));
+        setCoODA((p) => scalePoint(p, scaleX, scaleY));
+        setCoODB((p) => scalePoint(p, scaleX, scaleY));
+        setCoOEA((p) => scalePoint(p, scaleX, scaleY));
+        setCoOEB((p) => scalePoint(p, scaleX, scaleY));
+        setPontoArmacaoA((p) => scalePoint(p, scaleX, scaleY));
+        setPontoArmacaoB((p) => scalePoint(p, scaleX, scaleY));
+        setPonteEsqX((x) => clamp(x * scaleX, 8, nextWidth - 8));
+        setPonteDirX((x) => clamp(x * scaleX, 8, nextWidth - 8));
+        setCentroNasal((x) => clamp(x * scaleX, 8, nextWidth - 8));
+        setPointerPos((p) => scalePoint(p, scaleX, scaleY));
+
+        sceneSizeRef.current = { width: nextWidth, height: nextHeight };
+      });
+    });
+
+    obs.observe(containerRef.current);
+    return () => {
+      cancelAnimationFrame(frame);
+      obs.disconnect();
+    };
+  }, [imageReady, imageNatural.width, imageNatural.height]);
+
+  useEffect(() => {
     if (!imageReady || !image) return;
 
     const ponteMm = parseMm(ponteManual);
     if (modo === "armacao" && ponteMm <= 0) return;
 
-    const larguraRefCartaoPx = Math.abs(pontoReferencia.x2 - pontoReferencia.x1);
     const larguraRefPontePx = Math.abs(ponteDirX - ponteEsqX);
 
-    if (modo === "cartao" && larguraRefCartaoPx < 8) return;
     if (modo === "armacao" && larguraRefPontePx < 4) return;
 
-    // No modo armação, a escala real deve nascer da PT informada versus PT marcada na imagem.
-    const mmReferencia = modo === "cartao" ? LARGO_CARTAO_MM : ponteMm;
-    const larguraReferenciaPx = modo === "cartao" ? larguraRefCartaoPx : larguraRefPontePx;
+    // A escala real nasce da PT informada versus PT marcada na imagem.
+    const mmReferencia = ponteMm;
+    const larguraReferenciaPx = larguraRefPontePx;
     const escala = mmReferencia / larguraReferenciaPx;
     if (!Number.isFinite(escala) || escala <= 0) return;
 
     const dnpOD = (Math.abs(pupilaDir.x - centroNasal) * escala).toFixed(1);
     const dnpOE = (Math.abs(pupilaEsq.x - centroNasal) * escala).toFixed(1);
+    const dpBinocular = (Math.abs(pupilaEsq.x - pupilaDir.x) * escala).toFixed(1);
     const ponteFotoMm = (Math.abs(ponteDirX - ponteEsqX) * escala).toFixed(1);
     const alturaOD = (Math.abs(bordaOD.y - pupilaDir.y) * escala).toFixed(1);
     const alturaOE = (Math.abs(bordaOE.y - pupilaEsq.y) * escala).toFixed(1);
-    const alturaVerticalOD = avDA && avDB ? (Math.hypot(avDB.x - avDA.x, avDB.y - avDA.y) * escala).toFixed(1) : "";
-    const alturaVerticalOE = avEA && avEB ? (Math.hypot(avEB.x - avEA.x, avEB.y - avEA.y) * escala).toFixed(1) : "";
-    const coOD = coODA && coODB ? (Math.hypot(coODB.x - coODA.x, coODB.y - coODA.y) * escala).toFixed(1) : "";
-    const coOE = coOEA && coOEB ? (Math.hypot(coOEB.x - coOEA.x, coOEB.y - coOEA.y) * escala).toFixed(1) : "";
+    const alturaVerticalOD = avDA ? (Math.abs(bordaOD.y - avDA.y) * escala).toFixed(1) : "";
+    const alturaVerticalOE = avEA ? (Math.abs(bordaOE.y - avEA.y) * escala).toFixed(1) : "";
+    // Centro optico (CO): distancia da pupila ate a borda inferior da lente.
+    const coOD = alturaOD;
+    const coOE = alturaOE;
     const armacaoTotal =
       pontoArmacaoA && pontoArmacaoB
         ? (Math.hypot(pontoArmacaoB.x - pontoArmacaoA.x, pontoArmacaoB.y - pontoArmacaoA.y) * escala).toFixed(1)
@@ -201,6 +342,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     setAlturaVerticalOeMm((prev) => (prev === (alturaVerticalOE || "0.0") ? prev : alturaVerticalOE || "0.0"));
     setCoOdMm((prev) => (prev === (coOD || "0.0") ? prev : coOD || "0.0"));
     setCoOeMm((prev) => (prev === (coOE || "0.0") ? prev : coOE || "0.0"));
+    setDpBinocularMm((prev) => (prev === (dpBinocular || "0.0") ? prev : dpBinocular || "0.0"));
     setArmacaoTotalMm((prev) => (prev === (armacaoTotal || "0.0") ? prev : armacaoTotal || "0.0"));
     setPonteMedidaMm((prev) => (prev === ponteFotoMm ? prev : ponteFotoMm));
     setMmPorPixel((prev) => (Math.abs(prev - escala) < 0.000001 ? prev : escala));
@@ -263,8 +405,6 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   }, [
     image,
     imageReady,
-    pontoReferencia.x1,
-    pontoReferencia.x2,
     pupilaDir.x,
     pupilaDir.y,
     pupilaEsq.x,
@@ -305,13 +445,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
   function resetMarkers(width: number, height: number) {
     const midY = Math.round(height * 0.55);
-    const refY = Math.round(height * 0.72);
 
-    setPontoReferencia({
-      x1: Math.round(width * 0.33),
-      x2: Math.round(width * 0.67),
-      y: refY,
-    });
     setPupilaDir({ x: Math.round(width * 0.43), y: midY });
     setPupilaEsq({ x: Math.round(width * 0.57), y: midY });
     setCentroNasal(Math.round(width * 0.5));
@@ -319,9 +453,9 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     setPonteDirX(Math.round(width * 0.53));
     setBordaOD({ x: Math.round(width * 0.43), y: Math.round(height * 0.73) });
     setBordaOE({ x: Math.round(width * 0.57), y: Math.round(height * 0.73) });
-    setAvDA(null);
+    setAvDA({ x: Math.round(width * 0.43), y: Math.round(height * 0.38) });
     setAvDB(null);
-    setAvEA(null);
+    setAvEA({ x: Math.round(width * 0.57), y: Math.round(height * 0.38) });
     setAvEB(null);
     setCoODA(null);
     setCoODB(null);
@@ -329,10 +463,18 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     setCoOEB(null);
   }
 
-  function handleImageLoad() {
+  function handleImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    resetMarkers(rect.width, rect.height);
+
+    const naturalWidth = e.currentTarget.naturalWidth || 0;
+    const naturalHeight = e.currentTarget.naturalHeight || 0;
+    setImageNatural({ width: naturalWidth, height: naturalHeight });
+
+    const scene = calcSceneRect(rect.width, rect.height, naturalWidth, naturalHeight);
+    setSceneRect(scene);
+    sceneSizeRef.current = { width: scene.width, height: scene.height };
+    resetMarkers(scene.width, scene.height);
     setImageReady(true);
   }
 
@@ -417,6 +559,11 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   }
 
   async function capturarFotoCamera() {
+    if (sensorDisponivel && inclinacao !== null && !isReto) {
+      setCameraError("Ajuste o angulo do celular para vertical antes de capturar.");
+      return;
+    }
+
     const video = cameraVideoRef.current;
     if (!video) return;
 
@@ -494,6 +641,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     setAlturaVerticalOeMm("0.0");
     setCoOdMm("0.0");
     setCoOeMm("0.0");
+    setDpBinocularMm("0.0");
     setPonteManual("18");
     setPonteEsqX(170);
     setPonteDirX(200);
@@ -509,8 +657,6 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     setPontoArmacaoA(null);
     setPontoArmacaoB(null);
     setMedindoArmacaoTotal(false);
-    setMedindoAvD(false);
-    setMedindoAvE(false);
     setMedindoCoD(false);
     setMedindoCoE(false);
   }
@@ -525,8 +671,6 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   }
 
   function posicaoMarcador(id: MarkerId): MarkerPoint {
-    if (id === "ref1") return { x: pontoReferencia.x1, y: pontoReferencia.y };
-    if (id === "ref2") return { x: pontoReferencia.x2, y: pontoReferencia.y };
     if (id === "od") return pupilaDir;
     if (id === "oe") return pupilaEsq;
     if (id === "ponteEsq") return { x: ponteEsqX, y: (pupilaDir.y + pupilaEsq.y) / 2 };
@@ -545,14 +689,6 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   }
 
   function aplicarPosicaoMarcador(id: MarkerId, x: number, y: number) {
-    if (id === "ref1") {
-      setPontoReferencia((prev) => ({ ...prev, x1: x, y }));
-      return;
-    }
-    if (id === "ref2") {
-      setPontoReferencia((prev) => ({ ...prev, x2: x, y }));
-      return;
-    }
     if (id === "od") {
       setPupilaDir({ x, y });
       return;
@@ -621,26 +757,24 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     if (!dragId || !containerRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
-    const rawX = clientX - rect.left;
-    const rawY = clientY - rect.top;
-    const offsetX = (rect.width - rect.width * zoomLevel) / 2 + viewPan.x;
-    const offsetY = (rect.height - rect.height * zoomLevel) / 2 + viewPan.y;
+    const rawX = clientX - rect.left - sceneRect.x;
+    const rawY = clientY - rect.top - sceneRect.y;
+    const offsetX = (sceneRect.width - sceneRect.width * zoomLevel) / 2 + viewPan.x;
+    const offsetY = (sceneRect.height - sceneRect.height * zoomLevel) / 2 + viewPan.y;
 
     // Com origem fixa no canto superior esquerdo, o zoom nao desloca os marcadores.
-    let x = clamp((rawX - offsetX) / zoomLevel, 8, rect.width - 8);
-    let y = clamp((rawY - offsetY) / zoomLevel, 8, rect.height - 8);
+    let x = clamp((rawX - offsetX) / zoomLevel, 8, sceneRect.width - 8);
+    let y = clamp((rawY - offsetY) / zoomLevel, 8, sceneRect.height - 8);
 
     const snapsX = [
-      ...(mostrarRefs ? [pontoReferencia.x1, pontoReferencia.x2] : []),
       pupilaDir.x,
       pupilaEsq.x,
       ponteEsqX,
       ponteDirX,
       centroNasal,
-      rect.width / 2,
+      sceneRect.width / 2,
     ];
     const snapsY = [
-      pontoReferencia.y,
       pupilaDir.y,
       pupilaEsq.y,
       bordaOD.y,
@@ -649,7 +783,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       ...(avDB ? [avDB.y] : []),
       ...(avEA ? [avEA.y] : []),
       ...(avEB ? [avEB.y] : []),
-      rect.height / 2,
+      sceneRect.height / 2,
     ];
 
     x = snap(x, snapsX);
@@ -660,50 +794,27 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   function coordenadaBase(clientX: number, clientY: number): MarkerPoint | null {
     if (!containerRef.current) return null;
     const rect = containerRef.current.getBoundingClientRect();
-    const rawX = clientX - rect.left;
-    const rawY = clientY - rect.top;
-    const offsetX = (rect.width - rect.width * zoomLevel) / 2 + viewPan.x;
-    const offsetY = (rect.height - rect.height * zoomLevel) / 2 + viewPan.y;
-    const x = clamp((rawX - offsetX) / zoomLevel, 8, rect.width - 8);
-    const y = clamp((rawY - offsetY) / zoomLevel, 8, rect.height - 8);
+    const sceneClientX = clientX - rect.left;
+    const sceneClientY = clientY - rect.top;
+    const dentroAreaUtil =
+      sceneClientX >= sceneRect.x &&
+      sceneClientX <= sceneRect.x + sceneRect.width &&
+      sceneClientY >= sceneRect.y &&
+      sceneClientY <= sceneRect.y + sceneRect.height;
+    if (!dentroAreaUtil) return null;
+
+    const rawX = clientX - rect.left - sceneRect.x;
+    const rawY = clientY - rect.top - sceneRect.y;
+    const offsetX = (sceneRect.width - sceneRect.width * zoomLevel) / 2 + viewPan.x;
+    const offsetY = (sceneRect.height - sceneRect.height * zoomLevel) / 2 + viewPan.y;
+    const x = clamp((rawX - offsetX) / zoomLevel, 8, sceneRect.width - 8);
+    const y = clamp((rawY - offsetY) / zoomLevel, 8, sceneRect.height - 8);
     return { x, y };
   }
 
-  function onMove(e: ReactPointerEvent<HTMLDivElement>) {
-    moverMarcador(e.clientX, e.clientY);
-  }
-
-  function onPointerUpContainer(e: ReactPointerEvent<HTMLDivElement>) {
-    moverMarcador(e.clientX, e.clientY);
-    endDrag();
-  }
-
-  function onClickContainer(e: ReactMouseEvent<HTMLDivElement>) {
-    if (dragId) return;
-    const ponto = coordenadaBase(e.clientX, e.clientY);
-    if (!ponto) return;
-
-    if (medindoAvD) {
-      if (!avDA) {
-        setAvDA(ponto);
-        setAvDB(null);
-        return;
-      }
-      if (!avDB) {
-        setAvDB(ponto);
-      }
-      return;
-    }
-
-    if (medindoAvE) {
-      if (!avEA) {
-        setAvEA(ponto);
-        setAvEB(null);
-        return;
-      }
-      if (!avEB) {
-        setAvEB(ponto);
-      }
+  function confirmarPonto(ponto: MarkerPoint) {
+    if (sensorDisponivel && inclinacao !== null && !isReto) {
+      setCameraError("Ajuste o angulo do celular para vertical antes de confirmar o ponto.");
       return;
     }
 
@@ -742,6 +853,48 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     setPontoArmacaoB(ponto);
   }
 
+  function onMove(e: ReactPointerEvent<HTMLDivElement>) {
+    if (dragId) {
+      moverMarcador(e.clientX, e.clientY);
+      return;
+    }
+
+    if (!isPointerActive) return;
+    const ponto = coordenadaBase(e.clientX, e.clientY);
+    if (ponto) setPointerPos(ponto);
+  }
+
+  function onPointerDownContainer(e: ReactPointerEvent<HTMLDivElement>) {
+    if (dragId) return;
+    const modoClique = medindoCoD || medindoCoE || medindoArmacaoTotal;
+    if (!modoClique) return;
+
+    const ponto = coordenadaBase(e.clientX, e.clientY);
+    if (!ponto) return;
+
+    setIsPointerActive(true);
+    setPointerPos(ponto);
+  }
+
+  function onPointerUpContainer(e: ReactPointerEvent<HTMLDivElement>) {
+    if (dragId) {
+      moverMarcador(e.clientX, e.clientY);
+      endDrag();
+      return;
+    }
+
+    if (!isPointerActive || !pointerPos) return;
+    confirmarPonto(pointerPos);
+    setIsPointerActive(false);
+    setPointerPos(null);
+  }
+
+  function onPointerLeaveContainer() {
+    endDrag();
+    setIsPointerActive(false);
+    setPointerPos(null);
+  }
+
   function zoomIn() {
     setZoomLevel((prev) => Math.min(5, Number((prev + 0.25).toFixed(2))));
   }
@@ -762,61 +915,21 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   function ajustarFino(deltaX: number, deltaY: number) {
     if (!markerSelecionado || !containerRef.current) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
     const atual = posicaoMarcador(markerSelecionado);
     const passo = Number.isFinite(passoAjustePx) && passoAjustePx > 0 ? passoAjustePx : 1;
 
-    const x = clamp(atual.x + deltaX * passo, 8, rect.width - 8);
-    const y = clamp(atual.y + deltaY * passo, 8, rect.height - 8);
+    const x = clamp(atual.x + deltaX * passo, 8, sceneRect.width - 8);
+    const y = clamp(atual.y + deltaY * passo, 8, sceneRect.height - 8);
 
     aplicarPosicaoMarcador(markerSelecionado, x, y);
   }
 
-  function trocarModo(nextModo: ModoCalibracao) {
-    setModo(nextModo);
-    onChange({
-      ...data,
-      medidas: {
-        ...data.medidas,
-        modo_medicao: nextModo,
-      },
-    });
-  }
-
   function toggleMedicaoArmacaoTotal() {
     setMedindoArmacaoTotal((prev) => !prev);
-    setMedindoAvD(false);
-    setMedindoAvE(false);
     setMedindoCoD(false);
     setMedindoCoE(false);
     setPontoArmacaoA(null);
     setPontoArmacaoB(null);
-  }
-
-  function toggleMedicaoAvD() {
-    setMedindoAvD((prev) => {
-      const next = !prev;
-      if (next) {
-        setMedindoAvE(false);
-        setMedindoCoD(false);
-        setMedindoCoE(false);
-        setMedindoArmacaoTotal(false);
-      }
-      return next;
-    });
-  }
-
-  function toggleMedicaoAvE() {
-    setMedindoAvE((prev) => {
-      const next = !prev;
-      if (next) {
-        setMedindoAvD(false);
-        setMedindoCoD(false);
-        setMedindoCoE(false);
-        setMedindoArmacaoTotal(false);
-      }
-      return next;
-    });
   }
 
   function toggleMedicaoCoD() {
@@ -824,8 +937,6 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       const next = !prev;
       if (next) {
         setMedindoCoE(false);
-        setMedindoAvD(false);
-        setMedindoAvE(false);
         setMedindoArmacaoTotal(false);
       }
       return next;
@@ -837,8 +948,6 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       const next = !prev;
       if (next) {
         setMedindoCoD(false);
-        setMedindoAvD(false);
-        setMedindoAvE(false);
         setMedindoArmacaoTotal(false);
       }
       return next;
@@ -847,23 +956,42 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
   const diffPT = modo === "armacao" && parseMm(ponteManual) > 0 && parseMm(ponteMedidaMm) > 0 ? parseMm(ponteMedidaMm) - parseMm(ponteManual) : null;
 
-  const aguardandoSegundoAvD = medindoAvD && !!avDA && !avDB;
-  const aguardandoSegundoAvE = medindoAvE && !!avEA && !avEB;
   const aguardandoSegundoCoD = medindoCoD && !!coODA && !coODB;
   const aguardandoSegundoCoE = medindoCoE && !!coOEA && !coOEB;
   const aguardandoSegundoArmacao = medindoArmacaoTotal && !!pontoArmacaoA && !pontoArmacaoB;
 
+  const marcadorFoco = dragId ?? markerSelecionado;
+
   function marcadorDimmed(id: MarkerId) {
-    return dragId !== null && dragId !== id;
+    return marcadorFoco !== null && marcadorFoco !== id;
   }
 
-  const viewWidth = containerRef.current?.clientWidth ?? 0;
-  const viewHeight = containerRef.current?.clientHeight ?? 0;
+  function guiaOpacity(ids: MarkerId[]) {
+    if (!marcadorFoco) return 1;
+    return ids.includes(marcadorFoco) ? 1 : 0.2;
+  }
+
+  const viewWidth = sceneRect.width;
+  const viewHeight = sceneRect.height;
   const zoomOffsetX = (viewWidth - viewWidth * zoomLevel) / 2 + viewPan.x;
   const zoomOffsetY = (viewHeight - viewHeight * zoomLevel) / 2 + viewPan.y;
+  const bloqueioNivel = sensorDisponivel && inclinacao !== null && !isReto;
+
+  useEffect(() => {
+    if (!focoTelaCheia) return;
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setFocoTelaCheia(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [focoTelaCheia]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div
+      className={`space-y-8 animate-in fade-in duration-500 ${
+        focoTelaCheia ? "fixed inset-0 z-[90] overflow-auto bg-white p-4 md:p-6" : ""
+      }`}
+    >
       <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
         <div className="flex flex-col gap-4 border-b border-slate-50 pb-4 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
@@ -874,25 +1002,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex rounded-2xl bg-slate-100 p-1">
-              <button
-                type="button"
-                onClick={() => trocarModo("cartao")}
-                className={`rounded-xl px-4 py-2 text-[10px] font-black uppercase transition-all ${
-                  modo === "cartao" ? "bg-white text-cyan-600 shadow-sm" : "text-slate-400"
-                }`}
-              >
-                Usar Cartao
-              </button>
-              <button
-                type="button"
-                onClick={() => trocarModo("armacao")}
-                className={`rounded-xl px-4 py-2 text-[10px] font-black uppercase transition-all ${
-                  modo === "armacao" ? "bg-white text-cyan-600 shadow-sm" : "text-slate-400"
-                }`}
-              >
-                Usar Armacao
-              </button>
+            <div className="rounded-2xl bg-cyan-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-700">
+              Modo Armacao
             </div>
 
             {image && (
@@ -938,18 +1049,14 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               </div>
             )}
 
-            {image && (
-              <button
-                type="button"
-                onClick={() => setMostrarRefs((prev) => !prev)}
-                disabled={modo === "armacao"}
-                className="flex items-center gap-2 rounded-2xl bg-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 transition hover:bg-slate-200"
-                title={mostrarRefs ? "Ocultar REF1 e REF2" : "Mostrar REF1 e REF2"}
-              >
-                {mostrarRefs ? <EyeOff size={14} /> : <Eye size={14} />}
-                {modo === "armacao" ? "REF obrigatória" : mostrarRefs ? "Ocultar REF" : "Mostrar REF"}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setFocoTelaCheia((prev) => !prev)}
+              className="flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-slate-700"
+              title={focoTelaCheia ? "Sair da tela cheia" : "Entrar em tela cheia"}
+            >
+              {focoTelaCheia ? "Sair tela cheia" : "Tela cheia"}
+            </button>
 
             {image && (
               <button
@@ -961,32 +1068,6 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 title="Medir armação total por dois pontos"
               >
                 {medindoArmacaoTotal ? "Medição 2 pontos: ON" : "Medir armação total"}
-              </button>
-            )}
-
-            {image && (
-              <button
-                type="button"
-                onClick={toggleMedicaoAvD}
-                className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-[10px] font-black uppercase tracking-wider transition ${
-                  medindoAvD ? "bg-fuchsia-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                }`}
-                title="Definir AV D por dois pontos"
-              >
-                {medindoAvD ? "AV D 2 pontos: ON" : "AV D (A-B)"}
-              </button>
-            )}
-
-            {image && (
-              <button
-                type="button"
-                onClick={toggleMedicaoAvE}
-                className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-[10px] font-black uppercase tracking-wider transition ${
-                  medindoAvE ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                }`}
-                title="Definir AV E por dois pontos"
-              >
-                {medindoAvE ? "AV E 2 pontos: ON" : "AV E (A-B)"}
               </button>
             )}
 
@@ -1028,9 +1109,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               <Camera size={40} />
             </div>
             <p className="text-slate-400 font-bold italic text-center">
-              {modo === "cartao"
-                ? "Tire uma foto do paciente com um cartao abaixo do nariz"
-                : "Tire uma foto frontal do paciente usando a armacao escolhida"}
+              {"Tire uma foto frontal do paciente usando a armacao escolhida"}
             </p>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
               <p className="mb-1 text-[9px] font-black uppercase tracking-wider text-slate-400">Distancia da camera</p>
@@ -1062,6 +1141,15 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               >
                 Abrir camera
               </button>
+              {sensorDisponivel && inclinacao === null && (
+                <button
+                  type="button"
+                  onClick={() => void solicitarPermissaoSensor()}
+                  className="rounded-2xl bg-white px-5 py-3 text-[11px] font-black uppercase tracking-wider text-slate-600 transition hover:bg-slate-50"
+                >
+                  {solicitandoSensor ? "Ativando nivel..." : "Ativar nivel"}
+                </button>
+              )}
             </div>
 
             {cameraError && <p className="mt-3 text-center text-xs font-bold text-rose-500">{cameraError}</p>}
@@ -1083,11 +1171,11 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   </button>
                   <button
                     type="button"
-                    disabled={capturandoCamera}
+                    disabled={capturandoCamera || bloqueioNivel}
                     onClick={() => void capturarFotoCamera()}
                     className="rounded-xl bg-emerald-600 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {capturandoCamera ? "Capturando..." : "Capturar foto"}
+                    {bloqueioNivel ? "Ajuste o nivel" : capturandoCamera ? "Capturando..." : "Capturar foto"}
                   </button>
                 </div>
               </div>
@@ -1099,46 +1187,44 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div
               ref={containerRef}
+              onPointerDown={onPointerDownContainer}
               onPointerMove={onMove}
               onPointerUp={onPointerUpContainer}
-              onPointerLeave={endDrag}
-              onClick={onClickContainer}
+              onPointerLeave={onPointerLeaveContainer}
               className="lg:col-span-2 relative bg-slate-900 rounded-[32px] overflow-hidden shadow-2xl min-h-[420px] touch-none"
             >
               <div
-                className="absolute inset-0"
-                style={{ transform: `translate(${zoomOffsetX}px, ${zoomOffsetY}px) scale(${zoomLevel})`, transformOrigin: "top left" }}
+                className={`absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full border-2 px-5 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                  bloqueioNivel
+                    ? "animate-pulse border-rose-400 bg-rose-600/90 text-white"
+                    : "border-emerald-300 bg-emerald-500/85 text-white"
+                }`}
+              >
+                {bloqueioNivel
+                  ? "Incline o celular para vertical"
+                  : inclinacao === null
+                    ? "Nivel aguardando sensor"
+                    : `Angulo ok (${Math.abs(inclinacao).toFixed(1)}°)`}
+              </div>
+
+              <div
+                className="absolute"
+                style={{
+                  left: sceneRect.x,
+                  top: sceneRect.y,
+                  width: sceneRect.width,
+                  height: sceneRect.height,
+                  transform: `translate(${zoomOffsetX}px, ${zoomOffsetY}px) scale(${zoomLevel})`,
+                  transformOrigin: "top left",
+                }}
               >
                 <img
                   src={image}
-                  className="pointer-events-none w-full h-full object-contain opacity-60 select-none"
+                  className="pointer-events-none w-full h-full object-fill opacity-60 select-none"
                   alt="Medição"
                   onLoad={handleImageLoad}
                   draggable={false}
                 />
-
-                {mostrarRefs && (
-                  <>
-                    <Marcador
-                      label="Ref 1"
-                      color="border-yellow-400"
-                      x={pontoReferencia.x1}
-                      y={pontoReferencia.y}
-                      active={markerSelecionado === "ref1"}
-                      dimmed={marcadorDimmed("ref1")}
-                      onPointerDown={() => startDrag("ref1")}
-                    />
-                    <Marcador
-                      label="Ref 2"
-                      color="border-yellow-400"
-                      x={pontoReferencia.x2}
-                      y={pontoReferencia.y}
-                      active={markerSelecionado === "ref2"}
-                      dimmed={marcadorDimmed("ref2")}
-                      onPointerDown={() => startDrag("ref2")}
-                    />
-                  </>
-                )}
 
                 <Marcador
                   label="OD"
@@ -1159,8 +1245,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   onPointerDown={() => startDrag("oe")}
                 />
 
-                <MarcadorL
-                  label="H OD"
+                <HorizontalGuide
+                  label="Borda Inf OD"
                   x={bordaOD.x}
                   y={bordaOD.y}
                   active={markerSelecionado === "bordaOD"}
@@ -1168,11 +1254,10 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   onPointerDown={() => startDrag("bordaOD")}
                 />
 
-                <MarcadorL
-                  label="H OE"
+                <HorizontalGuide
+                  label="Borda Inf OE"
                   x={bordaOE.x}
                   y={bordaOE.y}
-                  mirrored
                   active={markerSelecionado === "bordaOE"}
                   dimmed={marcadorDimmed("bordaOE")}
                   onPointerDown={() => startDrag("bordaOE")}
@@ -1180,12 +1265,12 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
                 {avDA && (
                   <Marcador
-                    label="AV D-A"
+                    label="B Sup OD"
                     color="border-fuchsia-400"
                     x={avDA.x}
                     y={avDA.y}
                     active={markerSelecionado === "avDA"}
-                    dimmed={marcadorDimmed("avDA") || aguardandoSegundoAvD}
+                    dimmed={marcadorDimmed("avDA")}
                     onPointerDown={() => startDrag("avDA")}
                   />
                 )}
@@ -1202,12 +1287,12 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 )}
                 {avEA && (
                   <Marcador
-                    label="AV E-A"
+                    label="B Sup OE"
                     color="border-violet-400"
                     x={avEA.x}
                     y={avEA.y}
                     active={markerSelecionado === "avEA"}
-                    dimmed={marcadorDimmed("avEA") || aguardandoSegundoAvE}
+                    dimmed={marcadorDimmed("avEA")}
                     onPointerDown={() => startDrag("avEA")}
                   />
                 )}
@@ -1223,69 +1308,66 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   />
                 )}
 
-                {avDA && avDB && (
+                {avDA && (
                   <>
-                    <svg className="pointer-events-none absolute inset-0 h-full w-full">
-                      <line x1={avDA.x} y1={avDA.y} x2={avDB.x} y2={avDB.y} stroke="#E879F9" strokeWidth="2" strokeDasharray="6 4" />
+                    <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["avDA", "bordaOD", "od"]) }}>
+                      <line x1={avDA.x} y1={bordaOD.y} x2={avDA.x} y2={avDA.y} stroke="#E879F9" strokeWidth="2" strokeDasharray="6 4" />
+                      <line x1={avDA.x - 5} y1={bordaOD.y} x2={avDA.x + 5} y2={bordaOD.y} stroke="#E879F9" strokeWidth="2" />
+                      <line x1={avDA.x - 5} y1={avDA.y} x2={avDA.x + 5} y2={avDA.y} stroke="#E879F9" strokeWidth="2" />
                     </svg>
                     <div
                       className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-fuchsia-400 px-2 py-1 text-[9px] font-black uppercase text-slate-900 shadow"
-                      style={{ left: (avDA.x + avDB.x) / 2, top: (avDA.y + avDB.y) / 2 }}
+                      style={{ left: avDA.x + 28, top: (bordaOD.y + avDA.y) / 2, opacity: guiaOpacity(["avDA", "bordaOD", "od"]) }}
                     >
                       {alturaVerticalOdMm} mm
                     </div>
                   </>
                 )}
 
-                {avEA && avEB && (
+                {avEA && (
                   <>
-                    <svg className="pointer-events-none absolute inset-0 h-full w-full">
-                      <line x1={avEA.x} y1={avEA.y} x2={avEB.x} y2={avEB.y} stroke="#A78BFA" strokeWidth="2" strokeDasharray="6 4" />
+                    <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["avEA", "bordaOE", "oe"]) }}>
+                      <line x1={avEA.x} y1={bordaOE.y} x2={avEA.x} y2={avEA.y} stroke="#A78BFA" strokeWidth="2" strokeDasharray="6 4" />
+                      <line x1={avEA.x - 5} y1={bordaOE.y} x2={avEA.x + 5} y2={bordaOE.y} stroke="#A78BFA" strokeWidth="2" />
+                      <line x1={avEA.x - 5} y1={avEA.y} x2={avEA.x + 5} y2={avEA.y} stroke="#A78BFA" strokeWidth="2" />
                     </svg>
                     <div
                       className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-400 px-2 py-1 text-[9px] font-black uppercase text-slate-900 shadow"
-                      style={{ left: (avEA.x + avEB.x) / 2, top: (avEA.y + avEB.y) / 2 }}
+                      style={{ left: avEA.x + 28, top: (bordaOE.y + avEA.y) / 2, opacity: guiaOpacity(["avEA", "bordaOE", "oe"]) }}
                     >
                       {alturaVerticalOeMm} mm
                     </div>
                   </>
                 )}
 
-                {modo === "armacao" ? (
-                  <>
-                    <div
-                      className={`absolute inset-y-0 w-[2px] cursor-ew-resize ${
-                        markerSelecionado === "ponteEsq" ? "bg-fuchsia-300" : "bg-fuchsia-100/90"
-                      }`}
-                      style={{ left: ponteEsqX, opacity: marcadorDimmed("ponteEsq") ? 0.35 : 1 }}
-                      onPointerDown={() => startDrag("ponteEsq")}
-                    />
-                    <div
-                      className={`absolute inset-y-0 w-[2px] cursor-ew-resize ${
-                        markerSelecionado === "ponteDir" ? "bg-fuchsia-300" : "bg-fuchsia-100/90"
-                      }`}
-                      style={{ left: ponteDirX, opacity: marcadorDimmed("ponteDir") ? 0.35 : 1 }}
-                      onPointerDown={() => startDrag("ponteDir")}
-                    />
-                    <div className="absolute inset-y-0 w-[1px] bg-white/60" style={{ left: centroNasal }} />
-                    <div
-                      className="pointer-events-none absolute rounded-full bg-fuchsia-300 px-2 py-1 text-[8px] font-black uppercase text-slate-900 shadow"
-                      style={{ left: (ponteEsqX + ponteDirX) / 2 - 26, top: 12 }}
-                    >
-                      PT {ponteMedidaMm} mm
-                    </div>
-                  </>
-                ) : (
+                <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["od", "oe", "bordaOD", "bordaOE"]) }}>
+                  <line x1={pupilaDir.x} y1={pupilaDir.y} x2={bordaOD.x} y2={bordaOD.y} stroke="#34D399" strokeWidth="2" strokeDasharray="5 4" />
+                  <line x1={pupilaEsq.x} y1={pupilaEsq.y} x2={bordaOE.x} y2={bordaOE.y} stroke="#34D399" strokeWidth="2" strokeDasharray="5 4" />
+                </svg>
+
+                <>
                   <div
-                    className={`absolute inset-y-0 w-1 cursor-ew-resize flex items-center justify-center ${
-                      markerSelecionado === "ponte" ? "bg-cyan-300/90" : "bg-white/60"
+                    className={`absolute inset-y-0 w-[2px] cursor-ew-resize ${
+                      markerSelecionado === "ponteEsq" ? "bg-fuchsia-300" : "bg-fuchsia-100/90"
                     }`}
-                    style={{ left: centroNasal }}
-                    onPointerDown={() => startDrag("ponte")}
+                    style={{ left: ponteEsqX, opacity: guiaOpacity(["ponteEsq", "ponteDir"]) }}
+                    onPointerDown={() => startDrag("ponteEsq")}
+                  />
+                  <div
+                    className={`absolute inset-y-0 w-[2px] cursor-ew-resize ${
+                      markerSelecionado === "ponteDir" ? "bg-fuchsia-300" : "bg-fuchsia-100/90"
+                    }`}
+                    style={{ left: ponteDirX, opacity: guiaOpacity(["ponteEsq", "ponteDir"]) }}
+                    onPointerDown={() => startDrag("ponteDir")}
+                  />
+                  <div className="absolute inset-y-0 w-[1px] bg-white/60" style={{ left: centroNasal }} />
+                  <div
+                    className="pointer-events-none absolute rounded-full bg-fuchsia-300 px-2 py-1 text-[8px] font-black uppercase text-slate-900 shadow"
+                    style={{ left: (ponteEsqX + ponteDirX) / 2 - 26, top: 12 }}
                   >
-                    <div className="bg-white text-slate-900 text-[8px] font-black px-2 py-1 rounded-full uppercase shadow-lg">Ponte</div>
+                    PT {ponteMedidaMm} mm
                   </div>
-                )}
+                </>
 
                 {pontoArmacaoA && (
                   <Marcador
@@ -1339,27 +1421,17 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
               <div className="absolute left-4 top-4 rounded-xl border border-white/10 bg-black/45 p-3 text-[10px] font-medium text-white backdrop-blur">
                 <p>
-                  1. Alinhe <span className="font-black text-yellow-300">REF1 e REF2</span> nos extremos da referência ({modo === "cartao" ? "cartao" : "ponte"})
+                  1. Alinhe as guias da <span className="font-black text-fuchsia-300">ponte</span> nos extremos internos da armacao
                 </p>
                 <p>
                   2. Alinhe os <span className="font-black text-cyan-300">cianos</span> no centro das pupilas
                 </p>
                 <p>
-                  3. Ajuste os <span className="font-black text-emerald-300">marcadores em L</span> na borda inferior interna de cada lente
+                  3. Ajuste as <span className="font-black text-emerald-300">guias horizontais</span> na borda inferior interna de cada lente
                 </p>
                 {medindoArmacaoTotal && (
                   <p>
                     4. Clique em <span className="font-black text-amber-300">dois pontos (A e B)</span> para medir a armação total
-                  </p>
-                )}
-                {medindoAvD && (
-                  <p>
-                    5. Clique em <span className="font-black text-fuchsia-300">dois pontos (A e B)</span> para medir AV D
-                  </p>
-                )}
-                {medindoAvE && (
-                  <p>
-                    6. Clique em <span className="font-black text-violet-300">dois pontos (A e B)</span> para medir AV E
                   </p>
                 )}
               </div>
@@ -1367,6 +1439,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               <div className="absolute left-3 bottom-3 flex items-center gap-2 rounded-full bg-black/35 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white/90">
                 <MousePointer2 size={12} /> Arraste os marcadores
               </div>
+
             </div>
 
             <div className="space-y-6">
@@ -1457,9 +1530,13 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   <MedidaBox label="DNP Esquerda" value={data.medidas.oe_dnp} unit="mm" />
                 </div>
 
+                <div className="mt-4">
+                  <MedidaBox label="DP Binocular" value={dpBinocularMm} unit="mm" />
+                </div>
+
                 <div className="mt-4 grid grid-cols-2 gap-4">
-                  <MedidaBox label="Altura OD" value={alturaOdMm} unit="mm" />
-                  <MedidaBox label="Altura OE" value={alturaOeMm} unit="mm" />
+                  <MedidaBox label="CO OD" value={coOdMm} unit="mm" />
+                  <MedidaBox label="CO OE" value={coOeMm} unit="mm" />
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-4">
@@ -1483,9 +1560,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 <div className="mt-3 rounded-2xl bg-white border border-slate-100 p-3">
                   <p className="text-[9px] font-black uppercase text-slate-400">Modo de calibracao</p>
                   <p className="text-xs font-bold text-slate-700">
-                    {modo === "cartao"
-                      ? "Cartao (85.6 mm fixo)"
-                      : `Armacao (PT informada ${ponteManual || "--"} mm x PT marcada)`}
+                    {`Armacao (PT informada ${ponteManual || "--"} mm x PT marcada)`}
                   </p>
                   {modo === "armacao" && (
                     <div className="mt-1 flex items-center justify-between gap-2">
@@ -1549,7 +1624,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               <div className="p-6 bg-cyan-600 rounded-[32px] text-white shadow-xl shadow-cyan-100">
                 <p className="text-[10px] font-black uppercase opacity-70 tracking-widest">Dica Técnica</p>
                 <p className="text-sm font-medium italic mt-2 leading-relaxed">
-                  Alinhe os marcadores amarelos com as bordas do cartão para calibrar a escala real em milímetros.
+                  O CO e a altura inferior usam a distancia entre o centro da pupila e a borda inferior da lente (guia verde).
                 </p>
               </div>
             </div>
@@ -1593,34 +1668,41 @@ function Marcador({ label, color, x, y, active = false, dimmed = false, onPointe
   );
 }
 
-type MarcadorLProps = {
+type HorizontalGuideProps = {
   label: string;
   x: number;
   y: number;
-  mirrored?: boolean;
   active?: boolean;
   dimmed?: boolean;
   onPointerDown: () => void;
 };
 
-function MarcadorL({ label, x, y, mirrored = false, active = false, dimmed = false, onPointerDown }: MarcadorLProps) {
+function HorizontalGuide({ label, x, y, active = false, dimmed = false, onPointerDown }: HorizontalGuideProps) {
+  const segmentoPx = 220;
+
   return (
-    <button
-      type="button"
-      onPointerDown={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onPointerDown();
-      }}
-      className={`absolute -translate-x-1/2 -translate-y-1/2 h-8 w-8 cursor-move ${active ? "ring-2 ring-white/90 rounded" : ""} ${dimmed ? "opacity-35" : "opacity-100"}`}
-      style={{ left: x, top: y }}
+    <div
+      className={`absolute -translate-x-1/2 -translate-y-1/2 ${dimmed ? "opacity-25" : "opacity-100"}`}
+      style={{ left: x, top: y, width: segmentoPx }}
     >
-      <span className={`absolute top-0 h-8 w-[2px] rounded bg-emerald-300 shadow ${mirrored ? "right-0" : "left-0"}`} />
-      <span className={`absolute bottom-0 h-[2px] w-8 rounded bg-emerald-300 shadow ${mirrored ? "right-0" : "left-0"}`} />
-      <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/45 px-2 py-0.5 text-[8px] font-black uppercase text-white backdrop-blur">
+      <div className="h-[2px] w-full rounded-full bg-emerald-300/90 shadow" />
+      <button
+        type="button"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onPointerDown();
+        }}
+        className={`absolute top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-emerald-300 bg-slate-900/80 ${active ? "ring-2 ring-white/90" : ""}`}
+        style={{ left: "50%" }}
+      >
+        <span className="absolute left-1/2 top-1/2 h-3 w-[1px] -translate-x-1/2 -translate-y-1/2 bg-emerald-100" />
+        <span className="absolute left-1/2 top-1/2 h-[1px] w-3 -translate-x-1/2 -translate-y-1/2 bg-emerald-100" />
+      </button>
+      <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/45 px-2 py-0.5 text-[8px] font-black uppercase text-white backdrop-blur">
         {label}
       </span>
-    </button>
+    </div>
   );
 }
 

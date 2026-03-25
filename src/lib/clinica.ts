@@ -65,18 +65,25 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
     profile = (profilesRes.data ?? null) as { clinica_id?: string } | null;
   }
 
+  // Mantém a prioridade original de clinica, mas trata MASTER como exceção.
   const clinicaId = perfil?.clinica_id ?? profile?.clinica_id ?? metadataClinicaId;
-  const funcao = perfil?.funcao ?? metadataFuncao ?? "admin_clinica";
 
-  if (!clinicaId) {
-    throw new Error("Perfil sem clinica vinculada. Atualize a tabela perfis e tente novamente.");
+  // Normaliza a função (força lower case) e define um padrão 'vendas'
+  // para forçar a busca real no banco quando não houver valor explícito.
+  const rawFuncao = (perfil?.funcao ?? metadataFuncao ?? "vendas").toLowerCase();
+  const isMaster = rawFuncao === "master";
+
+  // Se não houver clinica vinculada e o usuário não for master, erro.
+  if (!clinicaId && !isMaster) {
+    throw new Error("Perfil sem clinica vinculada. Contate o administrador.");
   }
 
   return {
     userId: user.id,
-    clinicaId,
-    funcao,
-    isMaster: funcao === "master",
+    // Se for master e nao tiver clinicaId, retorna 'master' para queries globais.
+    clinicaId: clinicaId || "master",
+    funcao: rawFuncao,
+    isMaster,
   };
 }
 

@@ -79,9 +79,16 @@ export default function GestaoEquipePage() {
 
     setSalvando(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Sessão inválida. Faça login novamente.');
+
       const res = await fetch('/api/admin/create-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           clinica_id: clinicaId,
           nome_completo: nome.trim(),

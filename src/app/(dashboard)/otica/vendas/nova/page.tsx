@@ -451,6 +451,15 @@ function NovaVendaStepperContent() {
         data_encomenda: vendaData.dataEncomenda || null,
         previsao_entrega: vendaData.previsaoEntrega || null,
         status_os: vendaData.statusOS,
+        od_dnp: parseNumeroNullable(vendaData.medidas.od_dnp),
+        oe_dnp: parseNumeroNullable(vendaData.medidas.oe_dnp),
+        co_od: parseNumeroNullable(vendaData.medidas.co_od),
+        co_oe: parseNumeroNullable(vendaData.medidas.co_oe),
+        altura_vertical_od: parseNumeroNullable(vendaData.medidas.altura_vertical_od),
+        altura_vertical_oe: parseNumeroNullable(vendaData.medidas.altura_vertical_oe),
+        armacao_total_mm: parseNumeroNullable(vendaData.medidas.armacao_total_mm),
+        armacao_ponte_pt: parseNumeroNullable(vendaData.medidas.armacao_ponte_pt),
+        escala_usada: vendaData.medidas.escala_usada ?? null,
         pupilometro_foto_url: vendaData.pupilometroFotoStorageUrl || null,
       });
 

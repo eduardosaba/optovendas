@@ -162,7 +162,7 @@ export async function proxy(req: NextRequest) {
     const perfilRes = await supabase.from("perfis").select("funcao").eq("id", user?.id).maybeSingle();
     const perfil = (perfilRes.data ?? null) as { funcao?: string } | null;
 
-    if (!perfil || perfil.funcao !== "master") {
+    if (!perfil || String(perfil.funcao ?? "").toLowerCase() !== "master") {
       const redirectUrl = req.nextUrl.clone();
       redirectUrl.pathname = "/consultorio";
       return NextResponse.redirect(redirectUrl);

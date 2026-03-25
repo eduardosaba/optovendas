@@ -44,11 +44,17 @@ export default function GestaoEquipeOticaPage() {
     
     setSalvando(true);
     try {
+      const internalApiKey = process.env.NEXT_PUBLIC_INTERNAL_API_KEY;
+      if (!internalApiKey) throw new Error("NEXT_PUBLIC_INTERNAL_API_KEY não configurada.");
+
       const ctx = await resolveClinicaContext();
       // Use a API server-side para criar o usuário (cria auth user + profile)
       const res = await fetch('/api/otica/invite', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-key': internalApiKey,
+        },
         body: JSON.stringify({
           email: inviteEmail.toLowerCase().trim(),
           clinica_id: ctx.clinicaId,

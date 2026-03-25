@@ -31,56 +31,48 @@ export default function DashboardLayout({
   const { nomeSistema, logoSistema, corPrimaria } = useConfig();
   const [loading, setLoading] = useState(true);
   const [possuiOtica, setPossuiOtica] = useState(true);
+  const [role, setRole] = useState<string>("");
   const [isMaster, setIsMaster] = useState(false);
-  const [role, setRole] = useState("consultorio");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [layoutHydrated, setLayoutHydrated] = useState(false);
 
   useEffect(() => {
-    setLayoutHydrated(true);
-  }, []);
+    async function initLayout() {
+      setMounted(true);
+      try {
+        const ctx = await resolveClinicaContext();
 
-  useEffect(() => {
-    let mounted = true;
+        const f = (ctx.funcao || "").toLowerCase();
+        setRole(f);
+        setIsMaster(!!ctx.isMaster || f === "master");
 
-    async function loadClinicaFlags() {
-        try {
-          const ctx = await resolveClinicaContext();
-
-          const clinicaRes = await supabase
-            .from("clinicas")
-            .select("possui_otica, plano_tipo")
-            .eq("id", ctx.clinicaId)
-            .single();
-          const clinica = (clinicaRes.data ?? null) as { possui_otica?: boolean; plano_tipo?: string } | null;
-
-          if (mounted) {
-            setPossuiOtica(clinica?.possui_otica ?? true);
-            setIsMaster(ctx.isMaster);
-            const f = (ctx.funcao || "").toLowerCase();
-            if (f === "master") setRole("master");
-            else if (f === "admin" || f === "admin_clinica") setRole("admin");
-            else if (f === "consultorio" || f === "optometrista") setRole("consultorio");
-            else if (f === "vendas" || f === "atendente") setRole("vendas");
-            else if (f === "financeiro") setRole("financeiro");
-            else setRole("consultorio");
-            setLoading(false);
-          }
-        } catch (err) {
-          console.error("Erro ao carregar contexto:", err);
-          if (mounted) {
-            setLoading(false);
-            router.replace("/login");
+        if (ctx.clinicaId && ctx.clinicaId !== "master") {
+          try {
+            const { data } = await supabase
+              .from("clinicas")
+              .select("possui_otica")
+              .eq("id", ctx.clinicaId)
+              .single();
+            setPossuiOtica(data?.possui_otica ?? true);
+          } catch {
+            setPossuiOtica(true);
           }
         }
+      } catch (err) {
+        console.error("Erro no Layout:", err);
+        router.replace("/login");
+      } finally {
+        setLoading(false);
+        setLayoutHydrated(true);
+      }
     }
 
-    loadClinicaFlags();
+    initLayout();
+  }, [pathname]);
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  // Não renderiza até o cliente estar montado para evitar hydration mismatch
+  if (!mounted) return null;
 
   const navItems = [
     {
@@ -88,63 +80,49 @@ export default function DashboardLayout({
       label: "Consultório",
       iconPath: "M12 21a7 7 0 1 0-7-7 7 7 0 0 0 7 7Zm0 0v-3.5m-3.5 0h7",
       iconClass: "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
-      show: role === "master" || role === "admin" || role === "consultorio",
+      show: ["master", "admin", "consultorio"].includes(role),
     },
     {
       href: "/consultorio/pacientes",
       label: "Pacientes",
       iconPath: "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m17 0h2m-2 0h-3m-8 0H4m5-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 1a3 3 0 1 0 0-6",
       iconClass: "bg-sky-50 text-sky-600 group-hover:bg-sky-100",
-      show: role === "master" || role === "admin" || role === "consultorio",
+      show: ["master", "admin", "consultorio"].includes(role),
     },
     {
       href: "/otica",
       label: "Ótica",
       iconPath: "M3 12h18m-15 0a3 3 0 1 0 0.01 0M18 12a3 3 0 1 0 0.01 0",
       iconClass: "bg-violet-50 text-violet-600 group-hover:bg-violet-100",
-      show: !loading && possuiOtica && (role === "master" || role === "admin" || role === "vendas"),
+      show: (isMaster || possuiOtica) && ["master", "admin", "vendas", "atendente"].includes(role),
     },
     {
       href: "/clientes",
       label: "Clientes",
       iconPath: "M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2m15 0h7M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8.5-2h6m-3-3v6",
       iconClass: "bg-cyan-50 text-cyan-600 group-hover:bg-cyan-100",
-      show: role === "master" || role === "admin" || role === "vendas",
+      show: ["master", "admin", "vendas", "atendente"].includes(role),
     },
     {
       href: "/financeiro",
       label: "Financeiro Ótica",
       iconPath: "M3 7h18v10H3zM16 12h3",
       iconClass: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100",
-      show: role === "master" || role === "admin" || role === "financeiro",
+      show: ["master", "admin", "financeiro"].includes(role),
     },
     {
       href: "/comunicacao",
       label: "Comunicação",
       iconPath: "M4 5h16v10H8l-4 4V5Z",
       iconClass: "bg-orange-50 text-orange-600 group-hover:bg-orange-100",
-      show: role === "master" || role === "admin" || role === "consultorio" || role === "vendas",
-    },
-    {
-      href: "/consultorio/primeiros-passos",
-      label: "Primeiros Passos",
-      iconPath: "M5 3v18m0-12h11l-2 3 2 3H5",
-      iconClass: "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
-      show: role === "master" || role === "admin" || role === "consultorio",
-    },
-    {
-      href: "/consultorio/termos",
-      label: "Termos e LGPD",
-      iconPath: "M8 3h8l4 4v14H8zM16 3v4h4M11 13l2 2 4-4",
-      iconClass: "bg-rose-50 text-rose-600 group-hover:bg-rose-100",
-      show: role === "master" || role === "admin" || role === "consultorio",
+      show: ["master", "admin", "consultorio", "vendas"].includes(role),
     },
     {
       href: "/admin/equipe",
       label: "Equipe",
       iconPath: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 1a2.5 2.5 0 1 0 0-5m-12 13a6 6 0 0 1 12 0m-2.5 0a4.5 4.5 0 0 1 7.5-3.4",
       iconClass: "bg-cyan-50 text-cyan-600 group-hover:bg-cyan-100",
-      show: role === "master" || role === "admin",
+      show: ["master", "admin"].includes(role),
     },
     {
       href: "/perfil",
@@ -168,7 +146,7 @@ export default function DashboardLayout({
           )}
         </div>
 
-        <nav className="flex-1 space-y-2">
+        <nav className="flex-1 overflow-y-auto space-y-2 pr-2">
           {navItems.map((item) => {
             const isActive = isActivePath(item.href);
 
@@ -196,24 +174,25 @@ export default function DashboardLayout({
             );
           })}
 
-          {isMaster && (
-            <Link
-              href="/admin"
-              className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
-                isActivePath("/admin") ? "bg-rose-50" : "hover:bg-rose-50/80"
-              }`}
-            >
-              <span
-                className={`grid h-11 w-11 place-items-center rounded-2xl text-[11px] font-black tracking-wide transition-all ${
-                  isActivePath("/admin") ? "bg-rose-500 text-white" : "bg-rose-100 text-rose-500"
+          {/* BLOCO DE SEGURANÇA PARA MASTER */}
+          {(isMaster || role === "master") && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <Link
+                href="/admin"
+                className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
+                  isActivePath("/admin") ? "bg-rose-50 text-rose-600" : "text-rose-400 hover:text-rose-600"
                 }`}
               >
-                <NavIcon path="M12 3l7 4v5c0 5-3.5 7.7-7 9-3.5-1.3-7-4-7-9V7l7-4Z" />
-              </span>
-              <span className={`text-sm font-bold transition-colors ${isActivePath("/admin") ? "text-rose-600" : "text-rose-500"}`}>
-                Torre de Controle
-              </span>
-            </Link>
+                <span
+                  className={`grid h-11 w-11 place-items-center rounded-2xl ${
+                    isActivePath("/admin") ? "bg-rose-500 text-white" : "bg-rose-50 text-rose-500"
+                  }`}
+                >
+                  <NavIcon path="M12 3l7 4v5c0 5-3.5 7.7-7 9-3.5-1.3-7-4-7-9V7l7-4Z" />
+                </span>
+                <span className="text-sm font-black italic">Torre de Controle</span>
+              </Link>
+            </div>
           )}
         </nav>
       </aside>
@@ -240,7 +219,7 @@ export default function DashboardLayout({
                   Fechar
                 </button>
               </div>
-              <nav className="space-y-2 text-sm">
+              <nav className="space-y-2 text-sm overflow-y-auto pr-2">
                 {navItems.map((item) => {
                   const isActive = isActivePath(item.href);
 
