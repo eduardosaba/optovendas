@@ -262,6 +262,18 @@ export default function ConsultorioPage() {
                 tint="bg-rose-100 text-rose-600"
               />
               <DocShortcut
+                href="/consultorio/fechamento"
+                label="Fechamento"
+                iconPath="M3 3h18v14H3zM7 7h10"
+                tint="bg-emerald-100 text-emerald-600"
+              />
+              <DocShortcut
+                href="/consultorio/ranking-cidades"
+                label="Ranking Cidades"
+                iconPath="M4 6h16M4 12h10M4 18h6"
+                tint="bg-blue-100 text-blue-600"
+              />
+              <DocShortcut
                 href="/consultorio/encaminhamento"
                 label="Encaminhamento"
                 iconPath="M4 8h16v10H4zM8 5h8"

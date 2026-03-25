@@ -17,13 +17,38 @@ type Props = {
 export default function Step4Fechamento({ data, onChange, termoTexto, cidadePadraoVenda }: Props) {
   const [assinaturaCapturada, setAssinaturaCapturada] = useState(Boolean(data.assinatura));
 
-  const subtotal = Number(data.financeiro.total || 0);
+  const totalFinal = Number(data.financeiro.total || 0);
   const desconto = Number(data.financeiro.desconto || 0);
+  const subtotal = Math.max(0, totalFinal + desconto);
+  const tipoFechamento = data.financeiro.tipoFechamento || "entrada_crediario";
+  const valorEntrada = Math.max(0, Number(data.financeiro.valorEntrada || 0));
+  const saldoRestante = Math.max(0, totalFinal - valorEntrada);
+  const statusFinanceiro =
+    tipoFechamento === "total"
+      ? "pago"
+      : tipoFechamento === "pendente"
+        ? "pendente"
+        : valorEntrada > 0
+          ? "pago_parcial"
+          : "pendente";
 
-  const totalFinal = useMemo(() => Math.max(0, subtotal - desconto), [subtotal, desconto]);
+  const statusLaboratorio = useMemo(() => {
+    if (statusFinanceiro === "pendente") return "Bloqueado (aguardando pagamento)";
+    return "Liberado para produção";
+  }, [statusFinanceiro]);
 
   const atualizarFinanceiro = (
-    campo: "desconto" | "metodo" | "qtdParcelas" | "primeiroVencimento" | "total",
+    campo:
+      | "desconto"
+      | "metodo"
+      | "qtdParcelas"
+      | "primeiroVencimento"
+      | "total"
+      | "tipoFechamento"
+      | "valorEntrada"
+      | "formaEntrada"
+      | "saldoRestante"
+      | "statusFinanceiro",
     valor: string | number,
   ) => {
     onChange({
@@ -127,21 +152,99 @@ export default function Step4Fechamento({ data, onChange, termoTexto, cidadePadr
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Forma de Recebimento</label>
-              <select
-                value={data.financeiro.metodo}
-                onChange={(e) => atualizarFinanceiro("metodo", e.target.value)}
-                className="w-full p-5 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500"
-              >
-                <option value="A Vista">À Vista (PIX / Dinheiro)</option>
-                <option value="Cartão Débito/Crédito">Cartão de Crédito/Débito</option>
-                <option value="Crediário Próprio">Crediário Próprio</option>
-                <option value="Boleto">Boleto Bancário</option>
-              </select>
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Modalidade de Fechamento</label>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => atualizarFinanceiro("tipoFechamento", "total")}
+                  className={`rounded-2xl px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider transition ${
+                    tipoFechamento === "total" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  Pagamento Total
+                </button>
+                <button
+                  type="button"
+                  onClick={() => atualizarFinanceiro("tipoFechamento", "entrada_entrega")}
+                  className={`rounded-2xl px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider transition ${
+                    tipoFechamento === "entrada_entrega" ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  Entrada + Saldo na Entrega
+                </button>
+                <button
+                  type="button"
+                  onClick={() => atualizarFinanceiro("tipoFechamento", "entrada_crediario")}
+                  className={`rounded-2xl px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider transition ${
+                    tipoFechamento === "entrada_crediario" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  Entrada + Crediario
+                </button>
+                <button
+                  type="button"
+                  onClick={() => atualizarFinanceiro("tipoFechamento", "pendente")}
+                  className={`rounded-2xl px-4 py-3 text-left text-[10px] font-black uppercase tracking-wider transition ${
+                    tipoFechamento === "pendente" ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  Pendente / Negociar
+                </button>
+              </div>
             </div>
 
-            {data.financeiro.metodo.toLowerCase().includes("crediario") && (
+            {tipoFechamento !== "pendente" && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Forma de Recebimento</label>
+                <select
+                  value={data.financeiro.metodo}
+                  onChange={(e) => atualizarFinanceiro("metodo", e.target.value)}
+                  className="w-full p-5 bg-slate-50 rounded-2xl border-none font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500"
+                >
+                  <option value="A Vista">À Vista (PIX / Dinheiro)</option>
+                  <option value="Cartão Débito/Crédito">Cartão de Crédito/Débito</option>
+                  <option value="Crediário Próprio">Crediário Próprio</option>
+                  <option value="Boleto">Boleto Bancário</option>
+                </select>
+              </div>
+            )}
+
+            {(tipoFechamento === "entrada_entrega" || tipoFechamento === "entrada_crediario") && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Valor da Entrada</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={totalFinal}
+                    value={valorEntrada}
+                    onChange={(e) => {
+                      const entrada = Math.max(0, Math.min(totalFinal, Number(e.target.value) || 0));
+                      atualizarFinanceiro("valorEntrada", entrada);
+                      atualizarFinanceiro("saldoRestante", Math.max(0, totalFinal - entrada));
+                      atualizarFinanceiro("statusFinanceiro", entrada > 0 ? "pago_parcial" : "pendente");
+                    }}
+                    className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Forma da Entrada</label>
+                  <select
+                    value={data.financeiro.formaEntrada || "pix"}
+                    onChange={(e) => atualizarFinanceiro("formaEntrada", e.target.value)}
+                    className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-700"
+                  >
+                    <option value="pix">PIX</option>
+                    <option value="dinheiro">Dinheiro</option>
+                    <option value="cartao_debito">Cartão Débito</option>
+                    <option value="cartao_credito">Cartão Crédito</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {(tipoFechamento === "entrada_crediario" || (tipoFechamento === "pendente" && data.financeiro.metodo.toLowerCase().includes("crediario"))) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Parcelas</label>
@@ -162,6 +265,15 @@ export default function Step4Fechamento({ data, onChange, termoTexto, cidadePadr
                 </div>
               </div>
             )}
+
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Status financeiro</p>
+              <p className="mt-1 text-sm font-black text-slate-800">{statusFinanceiro.replace("_", " ").toUpperCase()}</p>
+              <p className="mt-2 text-[11px] font-bold text-slate-600">
+                Entrada: R$ {valorEntrada.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} • Saldo: R$ {saldoRestante.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </p>
+              <p className="mt-1 text-[11px] font-bold text-slate-600">Laboratório: {statusLaboratorio}</p>
+            </div>
           </div>
         </section>
 

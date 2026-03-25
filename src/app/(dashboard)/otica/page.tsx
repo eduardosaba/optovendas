@@ -205,6 +205,15 @@ export default function OticaPage() {
         />
 
         <MenuCard
+          href="/otica/vendas/pendentes"
+          title="Vendas Pendentes"
+          desc="Follow-up de clientes sem pagamento para negociar entrada, saldo ou crediário."
+          icon={<AlertCircle size={24} />}
+          color="text-rose-600"
+          bgColor="bg-rose-50"
+        />
+
+        <MenuCard
           href="/clientes"
           title="Clientes"
           desc="Base unificada de pacientes e clientes para cadastro, busca e atualização comercial."
@@ -230,6 +239,15 @@ export default function OticaPage() {
           icon={<Ruler size={24} />}
           color="text-cyan-700"
           bgColor="bg-cyan-50"
+        />
+
+        <MenuCard
+          href="/otica/medidas/conferencia"
+          title="Dashboard de Conferência"
+          desc="Valide rapidamente as 10 últimas fotos de medidas e a qualidade por vendedor."
+          icon={<Monitor size={24} />}
+          color="text-indigo-600"
+          bgColor="bg-indigo-50"
         />
 
         <MenuCard

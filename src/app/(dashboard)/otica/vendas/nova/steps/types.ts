@@ -64,6 +64,11 @@ export type FinanceiroData = {
   metodo: string;
   qtdParcelas: string;
   primeiroVencimento: string;
+  tipoFechamento?: "total" | "entrada_entrega" | "entrada_crediario" | "pendente";
+  valorEntrada?: number;
+  formaEntrada?: string;
+  saldoRestante?: number;
+  statusFinanceiro?: "pago" | "pago_parcial" | "pendente";
 };
 
 export type ReceitaManualData = {

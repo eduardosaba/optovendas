@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChangeEvent, PointerEvent as ReactPointerEvent } from "react";
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, Minus, MousePointer2, Plus, RefreshCw, Ruler } from "lucide-react";
+import type { ChangeEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, Minus, MousePointer2, Plus, RefreshCw, Ruler, Target } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { VendaData } from "./types";
 
@@ -169,6 +169,9 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [focoTelaCheia, setFocoTelaCheia] = useState(false);
   const [imageNatural, setImageNatural] = useState({ width: 0, height: 0 });
   const [sceneRect, setSceneRect] = useState<SceneRect>({ x: 0, y: 0, width: 0, height: 0 });
+  const [showDNP, setShowDNP] = useState(true);
+  const [showAltura, setShowAltura] = useState(true);
+  const [showPonte, setShowPonte] = useState(true);
 
   useEffect(() => {
     setImage(data.pupilometroFoto || null);
@@ -334,15 +337,22 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
         : "";
     const ptConferida = modo !== "armacao" || Math.abs(Number(ponteFotoMm) - ponteMm) <= 0.5;
     const altura = ((Number(alturaOD) + Number(alturaOE)) / 2).toFixed(1);
+    const proximoDnpOD = showDNP ? dnpOD : "";
+    const proximoDnpOE = showDNP ? dnpOE : "";
+    const proximaAltura = showAltura ? altura : "";
+    const proximoCoOD = showAltura ? coOD : "";
+    const proximoCoOE = showAltura ? coOE : "";
+    const proximaAlturaVerticalOD = showAltura ? alturaVerticalOD : "";
+    const proximaAlturaVerticalOE = showAltura ? alturaVerticalOE : "";
     const escalaFixada = Number(escala.toFixed(6));
 
     setAlturaOdMm((prev) => (prev === alturaOD ? prev : alturaOD));
     setAlturaOeMm((prev) => (prev === alturaOE ? prev : alturaOE));
-    setAlturaVerticalOdMm((prev) => (prev === (alturaVerticalOD || "0.0") ? prev : alturaVerticalOD || "0.0"));
-    setAlturaVerticalOeMm((prev) => (prev === (alturaVerticalOE || "0.0") ? prev : alturaVerticalOE || "0.0"));
-    setCoOdMm((prev) => (prev === (coOD || "0.0") ? prev : coOD || "0.0"));
-    setCoOeMm((prev) => (prev === (coOE || "0.0") ? prev : coOE || "0.0"));
-    setDpBinocularMm((prev) => (prev === (dpBinocular || "0.0") ? prev : dpBinocular || "0.0"));
+    setAlturaVerticalOdMm((prev) => (prev === (proximaAlturaVerticalOD || "") ? prev : proximaAlturaVerticalOD || ""));
+    setAlturaVerticalOeMm((prev) => (prev === (proximaAlturaVerticalOE || "") ? prev : proximaAlturaVerticalOE || ""));
+    setCoOdMm((prev) => (prev === (proximoCoOD || "") ? prev : proximoCoOD || ""));
+    setCoOeMm((prev) => (prev === (proximoCoOE || "") ? prev : proximoCoOE || ""));
+    setDpBinocularMm((prev) => (prev === (showDNP ? dpBinocular : "") ? prev : showDNP ? dpBinocular : ""));
     setArmacaoTotalMm((prev) => (prev === (armacaoTotal || "0.0") ? prev : armacaoTotal || "0.0"));
     setPonteMedidaMm((prev) => (prev === ponteFotoMm ? prev : ponteFotoMm));
     setMmPorPixel((prev) => (Math.abs(prev - escala) < 0.000001 ? prev : escala));
@@ -371,14 +381,14 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     }
 
     const precisaAtualizarMedidas =
-      data.medidas.od_dnp !== dnpOD ||
-      data.medidas.oe_dnp !== dnpOE ||
-      data.medidas.altura !== altura ||
+      data.medidas.od_dnp !== proximoDnpOD ||
+      data.medidas.oe_dnp !== proximoDnpOE ||
+      data.medidas.altura !== proximaAltura ||
       (data.medidas.armacao_ponte_pt || "") !== ponteManual ||
-      (data.medidas.co_od || "") !== coOD ||
-      (data.medidas.co_oe || "") !== coOE ||
-      (data.medidas.altura_vertical_od || "") !== alturaVerticalOD ||
-      (data.medidas.altura_vertical_oe || "") !== alturaVerticalOE ||
+      (data.medidas.co_od || "") !== proximoCoOD ||
+      (data.medidas.co_oe || "") !== proximoCoOE ||
+      (data.medidas.altura_vertical_od || "") !== proximaAlturaVerticalOD ||
+      (data.medidas.altura_vertical_oe || "") !== proximaAlturaVerticalOE ||
       (data.medidas.armacao_total_mm || "") !== armacaoTotal ||
       data.medidas.escala_usada !== escalaFixada ||
       data.medidas.modo_medicao !== modo;
@@ -389,14 +399,14 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       ...data,
       medidas: {
         ...data.medidas,
-        od_dnp: dnpOD,
-        oe_dnp: dnpOE,
-        altura,
+        od_dnp: proximoDnpOD,
+        oe_dnp: proximoDnpOE,
+        altura: proximaAltura,
         armacao_ponte_pt: ponteManual,
-        co_od: coOD,
-        co_oe: coOE,
-        altura_vertical_od: alturaVerticalOD,
-        altura_vertical_oe: alturaVerticalOE,
+        co_od: proximoCoOD,
+        co_oe: proximoCoOE,
+        altura_vertical_od: proximaAlturaVerticalOD,
+        altura_vertical_oe: proximaAlturaVerticalOE,
         armacao_total_mm: armacaoTotal,
         escala_usada: escalaFixada,
         modo_medicao: modo,
@@ -438,6 +448,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     pontoArmacaoB?.y,
     modo,
     ponteManual,
+    showDNP,
+    showAltura,
     bloquearSemConferenciaPT,
     onChange,
     data,
@@ -1185,6 +1197,12 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-3 -mb-3 flex flex-wrap items-center gap-2 rounded-3xl border border-slate-100 bg-white/90 p-2 shadow-sm backdrop-blur">
+              <ToggleButton active={showPonte} onClick={() => setShowPonte((prev) => !prev)} label="Ponte" icon={<Ruler size={14} />} />
+              <ToggleButton active={showDNP} onClick={() => setShowDNP((prev) => !prev)} label="DNP" icon={<Target size={14} />} />
+              <ToggleButton active={showAltura} onClick={() => setShowAltura((prev) => !prev)} label="Altura (H)" icon={<ArrowDown size={14} />} />
+            </div>
+
             <div
               ref={containerRef}
               onPointerDown={onPointerDownContainer}
@@ -1226,44 +1244,52 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   draggable={false}
                 />
 
-                <Marcador
-                  label="OD"
-                  color="border-cyan-400"
-                  x={pupilaDir.x}
-                  y={pupilaDir.y}
-                  active={markerSelecionado === "od"}
-                  dimmed={marcadorDimmed("od")}
-                  onPointerDown={() => startDrag("od")}
-                />
-                <Marcador
-                  label="OE"
-                  color="border-cyan-400"
-                  x={pupilaEsq.x}
-                  y={pupilaEsq.y}
-                  active={markerSelecionado === "oe"}
-                  dimmed={marcadorDimmed("oe")}
-                  onPointerDown={() => startDrag("oe")}
-                />
+                {(showDNP || showAltura) && (
+                  <>
+                    <Marcador
+                      label="OD"
+                      color="border-cyan-400"
+                      x={pupilaDir.x}
+                      y={pupilaDir.y}
+                      active={markerSelecionado === "od"}
+                      dimmed={marcadorDimmed("od")}
+                      onPointerDown={() => startDrag("od")}
+                    />
+                    <Marcador
+                      label="OE"
+                      color="border-cyan-400"
+                      x={pupilaEsq.x}
+                      y={pupilaEsq.y}
+                      active={markerSelecionado === "oe"}
+                      dimmed={marcadorDimmed("oe")}
+                      onPointerDown={() => startDrag("oe")}
+                    />
+                  </>
+                )}
 
-                <HorizontalGuide
-                  label="Borda Inf OD"
-                  x={bordaOD.x}
-                  y={bordaOD.y}
-                  active={markerSelecionado === "bordaOD"}
-                  dimmed={marcadorDimmed("bordaOD")}
-                  onPointerDown={() => startDrag("bordaOD")}
-                />
+                {showAltura && (
+                  <>
+                    <HorizontalGuide
+                      label="Borda Inf OD"
+                      x={bordaOD.x}
+                      y={bordaOD.y}
+                      active={markerSelecionado === "bordaOD"}
+                      dimmed={marcadorDimmed("bordaOD")}
+                      onPointerDown={() => startDrag("bordaOD")}
+                    />
 
-                <HorizontalGuide
-                  label="Borda Inf OE"
-                  x={bordaOE.x}
-                  y={bordaOE.y}
-                  active={markerSelecionado === "bordaOE"}
-                  dimmed={marcadorDimmed("bordaOE")}
-                  onPointerDown={() => startDrag("bordaOE")}
-                />
+                    <HorizontalGuide
+                      label="Borda Inf OE"
+                      x={bordaOE.x}
+                      y={bordaOE.y}
+                      active={markerSelecionado === "bordaOE"}
+                      dimmed={marcadorDimmed("bordaOE")}
+                      onPointerDown={() => startDrag("bordaOE")}
+                    />
+                  </>
+                )}
 
-                {avDA && (
+                {showAltura && avDA && (
                   <Marcador
                     label="B Sup OD"
                     color="border-fuchsia-400"
@@ -1274,7 +1300,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                     onPointerDown={() => startDrag("avDA")}
                   />
                 )}
-                {avDB && (
+                {showAltura && avDB && (
                   <Marcador
                     label="AV D-B"
                     color="border-fuchsia-400"
@@ -1285,7 +1311,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                     onPointerDown={() => startDrag("avDB")}
                   />
                 )}
-                {avEA && (
+                {showAltura && avEA && (
                   <Marcador
                     label="B Sup OE"
                     color="border-violet-400"
@@ -1296,7 +1322,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                     onPointerDown={() => startDrag("avEA")}
                   />
                 )}
-                {avEB && (
+                {showAltura && avEB && (
                   <Marcador
                     label="AV E-B"
                     color="border-violet-400"
@@ -1308,7 +1334,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   />
                 )}
 
-                {avDA && (
+                {showAltura && avDA && (
                   <>
                     <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["avDA", "bordaOD", "od"]) }}>
                       <line x1={avDA.x} y1={bordaOD.y} x2={avDA.x} y2={avDA.y} stroke="#E879F9" strokeWidth="2" strokeDasharray="6 4" />
@@ -1324,7 +1350,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   </>
                 )}
 
-                {avEA && (
+                {showAltura && avEA && (
                   <>
                     <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["avEA", "bordaOE", "oe"]) }}>
                       <line x1={avEA.x} y1={bordaOE.y} x2={avEA.x} y2={avEA.y} stroke="#A78BFA" strokeWidth="2" strokeDasharray="6 4" />
@@ -1340,12 +1366,15 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   </>
                 )}
 
-                <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["od", "oe", "bordaOD", "bordaOE"]) }}>
-                  <line x1={pupilaDir.x} y1={pupilaDir.y} x2={bordaOD.x} y2={bordaOD.y} stroke="#34D399" strokeWidth="2" strokeDasharray="5 4" />
-                  <line x1={pupilaEsq.x} y1={pupilaEsq.y} x2={bordaOE.x} y2={bordaOE.y} stroke="#34D399" strokeWidth="2" strokeDasharray="5 4" />
-                </svg>
+                {showAltura && (
+                  <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["od", "oe", "bordaOD", "bordaOE"]) }}>
+                    <line x1={pupilaDir.x} y1={pupilaDir.y} x2={bordaOD.x} y2={bordaOD.y} stroke="#34D399" strokeWidth="2" strokeDasharray="5 4" />
+                    <line x1={pupilaEsq.x} y1={pupilaEsq.y} x2={bordaOE.x} y2={bordaOE.y} stroke="#34D399" strokeWidth="2" strokeDasharray="5 4" />
+                  </svg>
+                )}
 
-                <>
+                {showPonte && (
+                  <>
                   <div
                     className={`absolute inset-y-0 w-[2px] cursor-ew-resize ${
                       markerSelecionado === "ponteEsq" ? "bg-fuchsia-300" : "bg-fuchsia-100/90"
@@ -1367,7 +1396,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   >
                     PT {ponteMedidaMm} mm
                   </div>
-                </>
+                  </>
+                )}
 
                 {pontoArmacaoA && (
                   <Marcador
@@ -1429,6 +1459,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 <p>
                   3. Ajuste as <span className="font-black text-emerald-300">guias horizontais</span> na borda inferior interna de cada lente
                 </p>
+                <p className="text-[9px] opacity-80">Ative/desative guias na barra superior conforme a medida desejada.</p>
                 {medindoArmacaoTotal && (
                   <p>
                     4. Clique em <span className="font-black text-amber-300">dois pontos (A e B)</span> para medir a armação total
@@ -1525,28 +1556,36 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 </div>
 
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Resultados Calculados</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <MedidaBox label="DNP Direita" value={data.medidas.od_dnp} unit="mm" />
-                  <MedidaBox label="DNP Esquerda" value={data.medidas.oe_dnp} unit="mm" />
-                </div>
+                {showDNP && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <MedidaBox label="DNP Direita" value={data.medidas.od_dnp} unit="mm" />
+                      <MedidaBox label="DNP Esquerda" value={data.medidas.oe_dnp} unit="mm" />
+                    </div>
 
-                <div className="mt-4">
-                  <MedidaBox label="DP Binocular" value={dpBinocularMm} unit="mm" />
-                </div>
+                    <div className="mt-4">
+                      <MedidaBox label="DP Binocular" value={dpBinocularMm} unit="mm" />
+                    </div>
+                  </>
+                )}
 
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <MedidaBox label="CO OD" value={coOdMm} unit="mm" />
-                  <MedidaBox label="CO OE" value={coOeMm} unit="mm" />
-                </div>
+                {showAltura && (
+                  <>
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      <MedidaBox label="CO OD" value={coOdMm} unit="mm" />
+                      <MedidaBox label="CO OE" value={coOeMm} unit="mm" />
+                    </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-4">
-                  <MedidaBox label="Altura Vertical OD" value={alturaVerticalOdMm} unit="mm" />
-                  <MedidaBox label="Altura Vertical OE" value={alturaVerticalOeMm} unit="mm" />
-                </div>
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      <MedidaBox label="Altura Vertical OD" value={alturaVerticalOdMm} unit="mm" />
+                      <MedidaBox label="Altura Vertical OE" value={alturaVerticalOeMm} unit="mm" />
+                    </div>
 
-                <div className="mt-4">
-                  <MedidaBox label="Altura Média (H)" value={data.medidas.altura} unit="mm" />
-                </div>
+                    <div className="mt-4">
+                      <MedidaBox label="Altura Média (H)" value={data.medidas.altura} unit="mm" />
+                    </div>
+                  </>
+                )}
 
                 <div className="mt-4">
                   <MedidaBox label="Armação Total (A-B)" value={data.medidas.armacao_total_mm || "--"} unit="mm" />
@@ -1711,6 +1750,28 @@ type MedidaBoxProps = {
   value: string;
   unit: string;
 };
+
+type ToggleButtonProps = {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon: ReactNode;
+};
+
+function ToggleButton({ active, onClick, label, icon }: ToggleButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-2xl px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+        active ? "bg-cyan-600 text-white shadow-lg shadow-cyan-100" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
 
 function MedidaBox({ label, value, unit }: MedidaBoxProps) {
   return (

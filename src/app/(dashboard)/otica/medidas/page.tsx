@@ -89,6 +89,13 @@ export default function MedidasPage() {
         >
           <ClipboardCheck size={16} /> Usar na Nova Venda
         </Link>
+
+        <Link
+          href="/otica/medidas/conferencia"
+          className="inline-flex items-center gap-2 rounded-2xl border border-cyan-100 bg-cyan-50 px-6 py-3 text-xs font-black uppercase tracking-wider text-cyan-700 transition-all hover:bg-cyan-100"
+        >
+          <Ruler size={16} /> Dashboard de Conferencia
+        </Link>
       </header>
 
       <Step3Medidas data={dados} onChange={setDados} clinicaId={clinicaId} />

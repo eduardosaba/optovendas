@@ -30,6 +30,9 @@ type AgendaAtiva = {
   clinicaId?: string;
 };
 
+type TipoAtendimento = "interno" | "externo";
+type ModeloCobranca = "pago" | "gratuito";
+
 const AGENDA_ATIVA_KEY = "optovendas-agenda-ativa";
 
 type ReceitaHistorico = {
@@ -116,6 +119,11 @@ export default function NovoAtendimentoPage() {
   const [notaRodapeReceita, setNotaRodapeReceita] = useState("Valido por 6 meses.");
   const [configUnidade, setConfigUnidade] = useState<any | null>(null);
   const [agendaAtiva, setAgendaAtiva] = useState<AgendaAtiva | null>(null);
+  const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimento>("interno");
+  const [localidadeAtendimento, setLocalidadeAtendimento] = useState("");
+  const [modeloCobranca, setModeloCobranca] = useState<ModeloCobranca>("pago");
+  const [valorConsulta, setValorConsulta] = useState("0");
+  const [formaPagamento, setFormaPagamento] = useState("pix");
   const toast = useToast();
   const { corPrimaria } = useConfig();
   const searchParams = useSearchParams();
@@ -207,6 +215,12 @@ export default function NovoAtendimentoPage() {
 
     loadInitial();
   }, []);
+
+  useEffect(() => {
+    if (!agendaAtiva?.cidade) return;
+    setTipoAtendimento("externo");
+    setLocalidadeAtendimento((prev) => prev || agendaAtiva.cidade);
+  }, [agendaAtiva?.cidade]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -409,9 +423,60 @@ export default function NovoAtendimentoPage() {
           tipo_documento: "Receita",
           nota_rodape: notaRodapeReceita,
         },
-      ]);
+      ]).select("id");
 
       if (receitaInsert.error) throw receitaInsert.error;
+
+      const receitaData = (receitaInsert.data as Array<{ id: string }> | null) ?? [];
+      let receitaIdGerada: string | null = receitaData[0]?.id ?? null;
+      if (!receitaIdGerada) {
+        const receitaBusca = await supabase
+          .from("receitas_optometricas")
+          .select("id")
+          .eq("paciente_id", pacienteFinalId)
+          .order("criado_em", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        receitaIdGerada = (receitaBusca.data as { id?: string } | null)?.id ?? null;
+      }
+
+      const valorConsultaNum = Math.max(0, Number((valorConsulta || "0").replace(",", ".")) || 0);
+      const isGratuito = modeloCobranca === "gratuito";
+      const statusPagamento = isGratuito ? "isento" : valorConsultaNum > 0 ? "pago" : "pendente";
+
+      const consRes = await supabase
+        .from("consultorio_receitas")
+        .insert({
+          clinica_id: ctx.clinicaId,
+          paciente_id: pacienteFinalId,
+          profissional_id: ctx.userId,
+          valor_final: isGratuito ? 0 : valorConsultaNum,
+          forma_pagamento: isGratuito ? null : formaPagamento,
+          status_pagamento: statusPagamento,
+          data_atendimento: new Date().toISOString().slice(0, 10),
+          observacoes: isGratuito ? "Atendimento gratuito" : "Atendimento pago",
+          receita_id: receitaIdGerada,
+          localidade: (localidadeAtendimento || agendaAtiva?.cidade || "").trim() || null,
+          tipo_atendimento: tipoAtendimento,
+          modelo_cobranca: modeloCobranca,
+        })
+        .select("id")
+        .single();
+
+      if (consRes.error) throw consRes.error;
+
+      if (!isGratuito && valorConsultaNum > 0) {
+        const finRes = await supabase.from("financeiro_consultorio").insert({
+          consulta_id: consRes.data.id,
+          clinica_id: ctx.clinicaId,
+          paciente_id: pacienteFinalId,
+          valor: valorConsultaNum,
+          forma_pagamento: formaPagamento,
+          categoria: "consulta_particular",
+          vendedor_id: ctx.userId,
+        });
+        if (finRes.error) throw finRes.error;
+      }
 
       toast.success("Atendimento salvo com sucesso.");
 
@@ -523,6 +588,94 @@ export default function NovoAtendimentoPage() {
             </div>
 
             <FichaAnamnese value={anamnese} onChange={setAnamnese} />
+
+            <section className="bg-white p-6 rounded-[28px] border border-slate-100 space-y-4">
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Modelo de Atendimento</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTipoAtendimento("interno")}
+                  className={`rounded-2xl px-4 py-3 text-left text-xs font-black uppercase tracking-wider ${
+                    tipoAtendimento === "interno" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  Atendimento Interno
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTipoAtendimento("externo")}
+                  className={`rounded-2xl px-4 py-3 text-left text-xs font-black uppercase tracking-wider ${
+                    tipoAtendimento === "externo" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  Atendimento Externo
+                </button>
+              </div>
+
+              {tipoAtendimento === "externo" && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Localidade (cidade)</label>
+                  <input
+                    value={localidadeAtendimento}
+                    onChange={(e) => setLocalidadeAtendimento(e.target.value)}
+                    placeholder="Ex: Serrinha"
+                    className="w-full rounded-2xl border-none bg-slate-50 p-4 font-bold text-slate-700"
+                  />
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-3">
+                <p className="text-xs font-black uppercase tracking-wider text-emerald-700">Cobranca da Consulta</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setModeloCobranca("gratuito")}
+                    className={`rounded-2xl px-4 py-3 text-left text-xs font-black uppercase tracking-wider ${
+                      modeloCobranca === "gratuito" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"
+                    }`}
+                  >
+                    Gratuito (social)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModeloCobranca("pago")}
+                    className={`rounded-2xl px-4 py-3 text-left text-xs font-black uppercase tracking-wider ${
+                      modeloCobranca === "pago" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"
+                    }`}
+                  >
+                    Pago (particular)
+                  </button>
+                </div>
+
+                {modeloCobranca === "pago" && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Valor da consulta</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={valorConsulta}
+                        onChange={(e) => setValorConsulta(e.target.value)}
+                        className="mt-1 w-full rounded-xl border-none bg-white p-3 font-bold text-slate-700"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Forma de pagamento</label>
+                      <select
+                        value={formaPagamento}
+                        onChange={(e) => setFormaPagamento(e.target.value)}
+                        className="mt-1 w-full rounded-xl border-none bg-white p-3 font-bold text-slate-700"
+                      >
+                        <option value="pix">PIX</option>
+                        <option value="dinheiro">Dinheiro</option>
+                        <option value="cartao">Cartao</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         )}
 

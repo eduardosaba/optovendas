@@ -18,6 +18,9 @@ type PacienteRel = {
 };
 
 type VendaRel = {
+  status_financeiro?: string | null;
+  tipo_fechamento?: string | null;
+  saldo_restante?: number | null;
   pacientes?: PacienteRel | PacienteRel[] | null;
 };
 
@@ -99,6 +102,11 @@ function getPacienteFromOS(os: OSRow): PacienteRel | undefined | null {
   return Array.isArray(pacientes) ? pacientes[0] : pacientes;
 }
 
+function getVendaFromOS(os: OSRow): VendaRel | null {
+  if (!os.vendas) return null;
+  return Array.isArray(os.vendas) ? os.vendas[0] ?? null : os.vendas;
+}
+
 function proximoStatus(atual: StatusOS, direcao: -1 | 1): StatusOS | null {
   const idx = STATUS_OS.findIndex((s) => s.value === atual);
   const nextIdx = idx + direcao;
@@ -139,7 +147,7 @@ export default function DashboardOS() {
           supabase
             .from("ordens_servico")
             .select(
-              "id, numero_os, status_os, previsao_entrega, data_encomenda, data_entrega_real, laboratorio_nome, armacao_modelo, armacao_tipo, material_lente, pupilometro_foto_url, vendas(pacientes(nome_completo, cidade_atendimento)), estoque_armacoes(foto_url)"
+              "id, numero_os, status_os, previsao_entrega, data_encomenda, data_entrega_real, laboratorio_nome, armacao_modelo, armacao_tipo, material_lente, pupilometro_foto_url, vendas(status_financeiro, tipo_fechamento, saldo_restante, pacientes(nome_completo, cidade_atendimento)), estoque_armacoes(foto_url)"
             )
             .eq("clinica_id", ctx.clinicaId)
             .order("previsao_entrega", { ascending: true }),
@@ -172,6 +180,12 @@ export default function DashboardOS() {
   }, [ordens, filtros, apenasAtrasadas, statusRapido]);
 
   async function atualizarStatus(os: OSRow, status: StatusOS) {
+    const venda = getVendaFromOS(os);
+    if ((venda?.status_financeiro || "").toLowerCase() === "pendente") {
+      toast.error("OS bloqueada: pagamento pendente. Regularize o financeiro para liberar produção.");
+      return;
+    }
+
     setMovendoId(os.id);
     try {
       const res = await supabase.from("ordens_servico").update({ status_os: status }).eq("id", os.id);
@@ -196,8 +210,13 @@ export default function DashboardOS() {
     await atualizarStatus(os, next);
   }
 
-  function onDragStartCard(osId: string) {
-    setDraggingId(osId);
+  function onDragStartCard(os: OSRow) {
+    const venda = getVendaFromOS(os);
+    if ((venda?.status_financeiro || "").toLowerCase() === "pendente") {
+      toast.info("OS bloqueada por pendencia financeira.");
+      return;
+    }
+    setDraggingId(os.id);
   }
 
   function onDragEndCard() {
@@ -328,6 +347,9 @@ export default function DashboardOS() {
           <Link href="/otica/vendas/nova" className="rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50">
             Nova Venda / OS
           </Link>
+          <Link href="/otica/vendas/pendentes" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 font-semibold text-rose-700 hover:bg-rose-100">
+            Vendas Pendentes
+          </Link>
           <Link href="/otica/estoque" className="rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50">
             Estoque
           </Link>
@@ -408,6 +430,8 @@ export default function DashboardOS() {
                   {itens.map((os) => {
                     const atrasado = emAtraso(os.previsao_entrega, os.status_os);
                     const paciente = getPacienteFromOS(os);
+                    const venda = getVendaFromOS(os);
+                    const bloqueadaFinanceiro = (venda?.status_financeiro || "").toLowerCase() === "pendente";
                     const statusAtual = normalizarStatus(os.status_os);
                     const podeVoltar = Boolean(proximoStatus(statusAtual, -1));
                     const podeAvancar = Boolean(proximoStatus(statusAtual, 1));
@@ -415,12 +439,12 @@ export default function DashboardOS() {
                     return (
                       <article
                         key={os.id}
-                        draggable
-                        onDragStart={() => onDragStartCard(os.id)}
+                        draggable={!bloqueadaFinanceiro}
+                        onDragStart={() => onDragStartCard(os)}
                         onDragEnd={onDragEndCard}
                         className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                           atrasado ? "border-red-200" : "border-slate-200"
-                        } ${draggingId === os.id ? "opacity-60" : ""}`}
+                        } ${draggingId === os.id ? "opacity-60" : ""} ${bloqueadaFinanceiro ? "ring-1 ring-rose-200 bg-rose-50/40" : ""}`}
                       >
                         <div className="mb-2 flex items-start justify-between gap-2">
                           <div>
@@ -436,6 +460,12 @@ export default function DashboardOS() {
                           </span>
                         </div>
 
+                        {bloqueadaFinanceiro && (
+                          <div className="mb-2 rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-rose-700">
+                            Financeiro pendente - producao bloqueada
+                          </div>
+                        )}
+
                         <p className="text-sm font-semibold leading-tight text-slate-800">
                           {paciente?.nome_completo ?? "Paciente nao identificado"}
                         </p>
@@ -449,7 +479,7 @@ export default function DashboardOS() {
                         <div className="mt-3 grid grid-cols-2 gap-2">
                           <button
                             type="button"
-                            disabled={!podeVoltar || movendoId === os.id}
+                            disabled={!podeVoltar || movendoId === os.id || bloqueadaFinanceiro}
                             onClick={() => void moverColuna(os, -1)}
                             className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-bold hover:bg-slate-200 disabled:opacity-40"
                           >
@@ -457,7 +487,7 @@ export default function DashboardOS() {
                           </button>
                           <button
                             type="button"
-                            disabled={!podeAvancar || movendoId === os.id}
+                            disabled={!podeAvancar || movendoId === os.id || bloqueadaFinanceiro}
                             onClick={() => void moverColuna(os, 1)}
                             className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] font-bold hover:bg-slate-200 disabled:opacity-40"
                           >
@@ -498,8 +528,9 @@ export default function DashboardOS() {
                         {status.value === "Laboratorio" && (
                           <button
                             type="button"
+                            disabled={bloqueadaFinanceiro}
                             onClick={() => abrirConferencia(os)}
-                            className="mt-2 w-full rounded-lg bg-emerald-600 px-2 py-2 text-[11px] font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700"
+                            className="mt-2 w-full rounded-lg bg-emerald-600 px-2 py-2 text-[11px] font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
                           >
                             Conferir Chegada
                           </button>

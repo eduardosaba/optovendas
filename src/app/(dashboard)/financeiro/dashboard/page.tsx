@@ -19,6 +19,28 @@ type InstallmentRow = {
   vencimento: string;
   status?: string | null;
   pago_em?: string | null;
+  payments?:
+    | {
+        vendas?:
+          | {
+              localidade_venda?: string | null;
+            }
+          | Array<{
+              localidade_venda?: string | null;
+            }>
+          | null;
+      }
+    | Array<{
+        vendas?:
+          | {
+              localidade_venda?: string | null;
+            }
+          | Array<{
+              localidade_venda?: string | null;
+            }>
+          | null;
+      }>
+    | null;
 };
 
 type IndicatorBg = "bg-blue-50" | "bg-rose-50" | "bg-emerald-50";
@@ -61,6 +83,9 @@ function diasAtraso(vencimento: string) {
 export default function DashboardFinanceiroPage() {
   const [rows, setRows] = useState<InstallmentRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [origem, setOrigem] = useState<"todos" | "interno" | "externo">("todos");
 
   useEffect(() => {
     async function carregar() {
@@ -69,7 +94,7 @@ export default function DashboardFinanceiroPage() {
         const ctx = await resolveClinicaContext();
         const { data } = await supabase
           .from("installments")
-          .select("id, valor_parcela, vencimento, status, pago_em")
+          .select("id, valor_parcela, vencimento, status, pago_em, payments(vendas(localidade_venda))")
           .eq("clinica_id", ctx.clinicaId)
           .order("vencimento", { ascending: true });
 
@@ -97,6 +122,16 @@ export default function DashboardFinanceiroPage() {
     let c31Mais = 0;
 
     rows.forEach((r) => {
+      const pay = Array.isArray(r.payments) ? r.payments[0] : r.payments;
+      const venda = Array.isArray(pay?.vendas) ? pay?.vendas[0] : pay?.vendas;
+      const isExterno = Boolean((venda?.localidade_venda || "").trim());
+      const origemOk = origem === "todos" || (origem === "externo" ? isExterno : !isExterno);
+
+      const vencDate = new Date(r.vencimento);
+      const inicioOk = !dataInicio || vencDate >= new Date(`${dataInicio}T00:00:00`);
+      const fimOk = !dataFim || vencDate <= new Date(`${dataFim}T23:59:59`);
+      if (!origemOk || !inicioOk || !fimOk) return;
+
       const valor = toNumber(r.valor_parcela);
       const venc = new Date(r.vencimento);
       const pago = (r.status ?? "").toLowerCase() === "pago";
@@ -124,7 +159,15 @@ export default function DashboardFinanceiroPage() {
     });
 
     return { aReceberMes, vencidosTotal, recebidoHoje, c1a10, c11a30, c31Mais };
-  }, [rows]);
+  }, [rows, dataInicio, dataFim, origem]);
+
+  const resumoFiltro = useMemo(() => {
+    const partes: string[] = [];
+    if (origem !== "todos") partes.push(origem === "externo" ? "Atendimento externo" : "Atendimento interno");
+    if (dataInicio) partes.push(`De ${new Date(`${dataInicio}T00:00:00`).toLocaleDateString("pt-BR")}`);
+    if (dataFim) partes.push(`Ate ${new Date(`${dataFim}T00:00:00`).toLocaleDateString("pt-BR")}`);
+    return partes.length > 0 ? partes.join(" • ") : "Sem filtro ativo";
+  }, [origem, dataInicio, dataFim]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
@@ -146,6 +189,54 @@ export default function DashboardFinanceiroPage() {
       </header>
 
       {loading ? <p className="text-slate-500">Carregando indicadores...</p> : null}
+
+      <section className="grid grid-cols-1 items-end gap-3 rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm md:grid-cols-4">
+        <div>
+          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Data inicio</p>
+          <input
+            type="date"
+            value={dataInicio}
+            onChange={(e) => setDataInicio(e.target.value)}
+            className="w-full rounded-xl border-none bg-slate-50 p-3 text-xs font-black text-slate-700"
+          />
+        </div>
+        <div>
+          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Data fim</p>
+          <input
+            type="date"
+            value={dataFim}
+            onChange={(e) => setDataFim(e.target.value)}
+            className="w-full rounded-xl border-none bg-slate-50 p-3 text-xs font-black text-slate-700"
+          />
+        </div>
+        <div>
+          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Origem</p>
+          <select
+            value={origem}
+            onChange={(e) => setOrigem(e.target.value as "todos" | "interno" | "externo")}
+            className="w-full rounded-xl border-none bg-slate-50 p-3 text-xs font-black text-slate-700"
+          >
+            <option value="todos">Todos atendimentos</option>
+            <option value="interno">Somente interno</option>
+            <option value="externo">Somente externo</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setDataInicio("");
+            setDataFim("");
+            setOrigem("todos");
+          }}
+          className="rounded-xl bg-slate-100 px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-600 hover:bg-slate-200"
+        >
+          Limpar filtros
+        </button>
+      </section>
+
+      <div className="rounded-2xl border border-slate-100 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-wider text-slate-500">
+        Filtro ativo: {resumoFiltro}
+      </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         <IndicatorCard

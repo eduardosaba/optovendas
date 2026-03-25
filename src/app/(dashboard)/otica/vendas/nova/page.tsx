@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import BotaoImpressaoTermica from "@/components/otica/BotaoImpressaoTermica";
+import PDFCarneCrediario from "@/components/otica/PDFCarneCrediario";
 import PDFComprovanteVenda, {
   type ComprovanteOS,
   type ComprovantePaciente,
@@ -133,7 +134,18 @@ function NovaVendaStepperContent() {
     termoQuebraAceito: false,
     assinatura: "",
     medidas: { od_dnp: "", oe_dnp: "", altura: "" },
-    financeiro: { total: 0, desconto: 0, metodo: "A Vista", qtdParcelas: "3", primeiroVencimento: "" },
+    financeiro: {
+      total: 0,
+      desconto: 0,
+      metodo: "A Vista",
+      qtdParcelas: "3",
+      primeiroVencimento: "",
+      tipoFechamento: "entrada_crediario",
+      valorEntrada: 0,
+      formaEntrada: "pix",
+      saldoRestante: 0,
+      statusFinanceiro: "pendente",
+    },
     pupilometroFoto: "",
   });
 
@@ -288,8 +300,19 @@ function NovaVendaStepperContent() {
     }
 
     if (step === 3) {
-      if (!vendaData.medidas.od_dnp || !vendaData.medidas.oe_dnp) {
-        toast.info("Preencha OD e OE DNP antes de avançar.");
+      const temAlgumaMedida = Boolean(
+        vendaData.medidas.od_dnp ||
+          vendaData.medidas.oe_dnp ||
+          vendaData.medidas.altura ||
+          vendaData.medidas.co_od ||
+          vendaData.medidas.co_oe ||
+          vendaData.medidas.altura_vertical_od ||
+          vendaData.medidas.altura_vertical_oe ||
+          vendaData.medidas.armacao_total_mm,
+      );
+
+      if (!temAlgumaMedida) {
+        toast.info("Ative ao menos uma guia e registre pelo menos uma medida antes de avançar.");
         return false;
       }
     }
@@ -307,10 +330,25 @@ function NovaVendaStepperContent() {
   }
 
   function criarParcelasCrediario(total: number): ComprovanteParcela[] {
-    if (!vendaData.financeiro.metodo.toLowerCase().includes("crediario")) return [];
+    const tipo = vendaData.financeiro.tipoFechamento || "entrada_crediario";
+    const entrada = Math.max(0, Number(vendaData.financeiro.valorEntrada || 0));
+    const saldo = Math.max(0, Number((total - entrada).toFixed(2)));
+
+    if (tipo === "total") return [];
+    if (tipo === "entrada_entrega") {
+      if (saldo <= 0) return [];
+      const venc = vendaData.previsaoEntrega || vendaData.financeiro.primeiroVencimento || new Date().toISOString().slice(0, 10);
+      return [{ numero: 1, vencimento: venc, valor: saldo }];
+    }
+
+    const isCrediario = tipo === "entrada_crediario" || (tipo === "pendente" && vendaData.financeiro.metodo.toLowerCase().includes("crediario"));
+    if (!isCrediario) return [];
+
+    const baseParcelamento = tipo === "pendente" ? total : saldo;
+    if (baseParcelamento <= 0) return [];
 
     const qtd = Math.max(1, Number(vendaData.financeiro.qtdParcelas) || 1);
-    const valorParcela = total / qtd;
+    const valorParcela = baseParcelamento / qtd;
     const inicio = vendaData.financeiro.primeiroVencimento
       ? new Date(vendaData.financeiro.primeiroVencimento)
       : new Date();
@@ -406,6 +444,17 @@ function NovaVendaStepperContent() {
       }
 
       const valorTotal = Number(vendaData.financeiro.total || 0);
+      const tipoFechamento = vendaData.financeiro.tipoFechamento || "entrada_crediario";
+      const valorEntrada = Math.max(0, Math.min(valorTotal, Number(vendaData.financeiro.valorEntrada || 0)));
+      const saldoRestante = Math.max(0, Number((valorTotal - valorEntrada).toFixed(2)));
+      const statusFinanceiro =
+        tipoFechamento === "total"
+          ? "pago"
+          : tipoFechamento === "pendente"
+            ? "pendente"
+            : valorEntrada > 0
+              ? "pago_parcial"
+              : "pendente";
       const localidadeVendaFinal =
         vendaData.localidadeVenda.trim() ||
         (vendaData.vendaManual ? vendaData.clienteManualCidade.trim() : pacienteCidadeAtendimento.trim()) ||
@@ -424,6 +473,11 @@ function NovaVendaStepperContent() {
           valor_final: valorTotal,
           vendedor_id: vendaData.vendedorId || user?.id || null,
           localidade_venda: localidadeVendaFinal,
+          valor_entrada: valorEntrada,
+          forma_entrada: vendaData.financeiro.formaEntrada || null,
+          saldo_restante: saldoRestante,
+          tipo_fechamento: tipoFechamento,
+          status_financeiro: statusFinanceiro,
         })
         .select("id")
         .single();
@@ -464,6 +518,59 @@ function NovaVendaStepperContent() {
       });
 
       if (osRes.error) throw new Error(osRes.error.message);
+
+      // Registra entrada imediata no fluxo de caixa quando houver sinal.
+      if (valorEntrada > 0) {
+        const fluxoEntrada = await supabase.from("fluxo_caixa").insert({
+          clinica_id: clinicaId,
+          tipo: "entrada",
+          origem: "entrada_venda_otica",
+          referencia_id: vendaRes.data.id,
+          descricao: `Entrada da venda ${vendaRes.data.id.slice(0, 8)} (${vendaData.financeiro.formaEntrada || "nao informada"})`,
+          valor: valorEntrada,
+          data_movimento: new Date().toISOString().slice(0, 10),
+        });
+        if (fluxoEntrada.error) throw new Error(fluxoEntrada.error.message);
+      }
+
+      const parcelasGeradas = criarParcelasCrediario(valorTotal);
+      const precisaGerarPayment = parcelasGeradas.length > 0;
+      if (precisaGerarPayment) {
+        const paymentTotal = parcelasGeradas.reduce((acc, p) => acc + p.valor, 0);
+        const primeiraData = parcelasGeradas[0]?.vencimento || new Date().toISOString().slice(0, 10);
+        const diaVencimento = Number(primeiraData.slice(8, 10));
+
+        const payRes = await supabase
+          .from("payments")
+          .insert({
+            clinica_id: clinicaId,
+            venda_id: vendaRes.data.id,
+            paciente_id: pacienteIdFinal,
+            metodo: tipoFechamento === "entrada_entrega" ? "saldo_entrega" : "crediario",
+            valor_total: Number(paymentTotal.toFixed(2)),
+            quantidade_parcelas: parcelasGeradas.length,
+            dia_vencimento: Number.isFinite(diaVencimento) ? diaVencimento : null,
+            status: "aberto",
+          })
+          .select("id")
+          .single();
+
+        if (payRes.error || !payRes.data?.id) {
+          throw new Error(payRes.error?.message ?? "Falha ao criar pagamento/parcelas.");
+        }
+
+        const installmentsPayload = parcelasGeradas.map((parcela) => ({
+          payment_id: payRes.data.id,
+          clinica_id: clinicaId,
+          numero_parcela: parcela.numero,
+          valor_parcela: Number(parcela.valor.toFixed(2)),
+          vencimento: parcela.vencimento,
+          status: "pendente",
+        }));
+
+        const instRes = await supabase.from("installments").insert(installmentsPayload);
+        if (instRes.error) throw new Error(instRes.error.message);
+      }
 
       if (vendaData.armacaoId) {
         const baixaRes = await supabase.rpc("baixar_estoque", {
@@ -539,7 +646,7 @@ function NovaVendaStepperContent() {
       setComprovante({
         venda: {
           valor_total: valorTotal,
-          metodo_pagamento: vendaData.financeiro.metodo,
+          metodo_pagamento: tipoFechamento === "pendente" ? "Pendente / Negociar" : vendaData.financeiro.metodo,
         },
         paciente: {
           nome_completo: pacienteSelecionado?.nome_completo ?? "Paciente",
@@ -662,6 +769,21 @@ function NovaVendaStepperContent() {
               Gerar PDF (A4)
             </PDFDownloadLink>
             <BotaoImpressaoTermica {...comprovante} />
+            {comprovante.parcelas.length > 0 && (
+              <PDFDownloadLink
+                document={
+                  <PDFCarneCrediario
+                    pacienteNome={comprovante.paciente.nome_completo}
+                    numeroOs={comprovante.os.numero_os}
+                    parcelas={comprovante.parcelas}
+                    valorTotal={comprovante.parcelas.reduce((acc, p) => acc + Number(p.valor || 0), 0)}
+                  />
+                }
+                className="w-full p-4 bg-indigo-600 text-white rounded-2xl font-black text-xs text-center uppercase tracking-widest hover:bg-indigo-700 transition-all sm:col-span-2"
+              >
+                Gerar Carnê do Crediário
+              </PDFDownloadLink>
+            )}
           </div>
         </section>
       )}
