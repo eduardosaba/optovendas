@@ -10,6 +10,8 @@ type ConfigState = {
   corPrimaria: string;
   logoSistema: string;
   corTemaUnidade: string;
+  pix_chave?: string | null;
+  pix_tipo?: string | null;
 };
 
 const DEFAULT_CONFIG: ConfigState = {
@@ -18,6 +20,8 @@ const DEFAULT_CONFIG: ConfigState = {
   corPrimaria: "#2563eb",
   logoSistema: "https://ggpjfyejksxphmzdscro.supabase.co/storage/v1/object/public/logo/Opto%20(1).png",
   corTemaUnidade: "#2563eb",
+  pix_chave: undefined,
+  pix_tipo: undefined,
 };
 
 const ConfigContext = createContext<ConfigState>(DEFAULT_CONFIG);
@@ -29,7 +33,7 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
     async function loadConfig() {
       try {
         const [sisRes, ctxRes] = await Promise.all([
-          supabase.from("config_sistema").select("nome_sistema, versao, logo_url, cor_primaria").eq("id", 1).maybeSingle(),
+          supabase.from("config_sistema").select("nome_sistema, versao, logo_url, cor_primaria, pix_chave, pix_tipo").eq("id", 1).maybeSingle(),
           resolveClinicaContext().catch(() => null),
         ]);
 
@@ -53,6 +57,8 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
           versao?: string | null;
           logo_url?: string | null;
           cor_primaria?: string | null;
+          pix_chave?: string | null;
+          pix_tipo?: string | null;
         } | null;
 
         const novoConfig: ConfigState = {
@@ -61,6 +67,8 @@ export function ConfigProvider({ children }: { children: React.ReactNode }) {
           corPrimaria: sis?.cor_primaria || DEFAULT_CONFIG.corPrimaria,
           logoSistema: sis?.logo_url || DEFAULT_CONFIG.logoSistema,
           corTemaUnidade,
+          pix_chave: sis?.pix_chave || undefined,
+          pix_tipo: sis?.pix_tipo || undefined,
         };
 
         setConfig(novoConfig);

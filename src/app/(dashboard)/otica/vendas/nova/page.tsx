@@ -493,7 +493,15 @@ function NovaVendaStepperContent() {
         if (typeof vendaData.medida_obrigatoria !== 'undefined') payload.medida_obrigatoria = vendaData.medida_obrigatoria;
         if (typeof vendaData.status_medida !== 'undefined') payload.status_medida = vendaData.status_medida;
         if (Object.keys(payload).length > 0) {
-          await supabase.from('vendas').update(payload).eq('id', vendaRes.data.id);
+          try {
+            await fetch('/api/otica/vendas/update-attachments', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ venda_id: vendaRes.data.id, ...payload }),
+            });
+          } catch (err) {
+            console.warn('Falha ao persistir anexos/medidas na venda via API:', err);
+          }
         }
       } catch (err) {
         console.warn('Falha ao persistir anexos/medidas na venda:', err);
@@ -851,6 +859,27 @@ function NovaVendaStepperContent() {
 }
 
 export default function NovaVendaPage() {
+  // Listen for forced finalize events from child components (e.g., Step4)
+  useEffect(() => {
+    function onForceFinalize() {
+      // attempt to finalize as if the user clicked the final button
+      const btn = document.querySelector('button[aria-label="finalizar-venda-trigger"]') as HTMLButtonElement | null;
+      // if there's a direct finalize function call available on window, prefer it
+      // otherwise, trigger the existing finalize button in the footer
+      if (typeof (window as any).__opv_finalize === 'function') {
+        (window as any).__opv_finalize();
+      } else if (btn) {
+        btn.click();
+      } else {
+        // fallback: dispatch a save event that will eventually call finalize
+        window.dispatchEvent(new CustomEvent('opv:save'));
+      }
+    }
+
+    window.addEventListener('opv:forceFinalize', onForceFinalize);
+    return () => window.removeEventListener('opv:forceFinalize', onForceFinalize);
+  }, []);
+
   return (
     <Suspense fallback={<div className="p-20 text-center text-slate-400 font-black animate-pulse">CARREGANDO MÓDULO DE VENDAS...</div>}>
       <NovaVendaStepperContent />
