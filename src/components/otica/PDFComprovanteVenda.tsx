@@ -1,3 +1,4 @@
+"use client";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { fmtNumber, fmtEixo, v } from "@/lib/refracaoFormat";
 

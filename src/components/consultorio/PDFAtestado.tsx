@@ -1,3 +1,4 @@
+"use client";
 import { Document, Page, StyleSheet, Text, View, Image } from "@react-pdf/renderer";
 
 const LOGO_SISTEMA_DEFAULT = "https://sua-url.com/logo-optovendas-padrao.png";

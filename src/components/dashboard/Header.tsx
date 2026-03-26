@@ -14,14 +14,10 @@ import {
   User,
   Maximize2,
   Minimize2,
-  Sun,
-  Moon,
 } from "lucide-react";
 import { FocusContext } from "@/context/FocusContext";
-import { ThemeContext } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
-import { resolveClinicaContext } from "@/lib/clinica";
 
 type DashboardHeaderProps = {
   onOpenMobileMenu: () => void;
@@ -61,43 +57,44 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     let active = true;
 
     async function carregarDadosUsuario() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!active || !user) return;
-      setEmail(user.email ?? "");
-
-      const perfilRes = await supabase
-        .from("perfis")
-        .select("nome, foto_url, funcao, clinica_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (!active) return;
-
-      const p = (perfilRes.data ?? null) as Perfil | null;
-      setPerfil(p);
-
       try {
-        const ctx = await resolveClinicaContext();
-        if (active) setClinicaId(ctx.clinicaId);
-      } catch {
-        // fallback para clinica do proprio perfil
-      }
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      if (p?.clinica_id) {
-        if (!clinicaId) setClinicaId(p.clinica_id);
-        const clinicaRes = await supabase
-          .from("clinicas")
-          .select("nome_fantasia")
-          .eq("id", p.clinica_id)
+        const user = session?.user ?? null;
+        if (!active || !user) return;
+
+        setEmail(user.email ?? "");
+
+        const perfilRes = await supabase
+          .from("perfis")
+          .select("nome, foto_url, funcao, clinica_id")
+          .eq("id", user.id)
           .maybeSingle();
 
         if (!active) return;
 
-        const nome = (clinicaRes.data as { nome_fantasia?: string | null } | null)?.nome_fantasia;
-        if (nome) setNomeClinica(nome);
+        const p = (perfilRes.data ?? null) as Perfil | null;
+        setPerfil(p);
+
+        const effectiveClinicaId = p?.clinica_id ?? null;
+        if (effectiveClinicaId) {
+          setClinicaId((prev) => prev ?? effectiveClinicaId);
+
+          const clinicaRes = await supabase
+            .from("clinicas")
+            .select("nome_fantasia")
+            .eq("id", effectiveClinicaId)
+            .maybeSingle();
+
+          if (!active) return;
+
+          const nome = (clinicaRes.data as { nome_fantasia?: string | null } | null)?.nome_fantasia;
+          if (nome) setNomeClinica(nome);
+        }
+      } catch (err) {
+        console.warn("Falha ao carregar dados do header:", err);
       }
     }
 
@@ -331,19 +328,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             )}
           </FocusContext.Consumer>
 
-          {/* Theme Toggle */}
-          <ThemeContext.Consumer>
-            {(t) => (
-              <button
-                type="button"
-                onClick={() => t?.toggleTheme()}
-                title={t?.theme === "dark" ? "Tema claro" : "Tema escuro"}
-                className="p-2 text-slate-400 transition-colors hover:text-cyan-600"
-              >
-                {t?.theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
-            )}
-          </ThemeContext.Consumer>
+          {/* Theme toggle temporariamente desativado */}
 
           <button type="button" className="relative p-2 text-slate-400 transition-colors hover:text-cyan-600" aria-label="Notificacoes">
             <Bell size={22} />

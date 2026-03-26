@@ -10,7 +10,7 @@ import { useConfig } from "@/context/ConfigContext";
 import DashboardHeader from "@/components/dashboard/Header";
 import FocusProvider, { FocusContext } from "@/context/FocusContext";
 import { useRef } from "react";
-import ThemeProvider, { ThemeContext } from "@/context/ThemeContext";
+import ThemeProvider from "@/context/ThemeContext";
 
 const WelcomeTour = dynamic(() => import("@/components/onboarding/WelcomeTour"), {
   ssr: false,
@@ -39,6 +39,8 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [layoutHydrated, setLayoutHydrated] = useState(false);
+  const [shortcutsMinimized, setShortcutsMinimized] = useState(false);
+  const mainRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     async function initLayout() {
@@ -71,8 +73,8 @@ export default function DashboardLayout({
       }
     }
 
-    initLayout();
-  }, [pathname]);
+    void initLayout();
+  }, [router]);
 
   // Não renderiza até o cliente estar montado para evitar hydration mismatch
   if (!mounted) return null;
@@ -138,11 +140,8 @@ export default function DashboardLayout({
 
   const isActivePath = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-  const mainRef = useRef<HTMLDivElement | null>(null);
-
   function KeyboardShortcuts() {
     const focus = useContext(FocusContext);
-    const theme = useContext(ThemeContext);
 
     useEffect(() => {
       function onKey(e: KeyboardEvent) {
@@ -156,8 +155,8 @@ export default function DashboardLayout({
           focus?.toggleFocusMode();
         }
         if (key === "d") {
-          e.preventDefault();
-          theme?.toggleTheme();
+          // Atalho de tema temporariamente desativado.
+          return;
         }
         if (key === "s") {
           e.preventDefault();
@@ -168,7 +167,7 @@ export default function DashboardLayout({
 
       window.addEventListener("keydown", onKey as any);
       return () => window.removeEventListener("keydown", onKey as any);
-    }, [focus, theme]);
+    }, [focus]);
 
     return null;
   }
@@ -245,10 +244,10 @@ export default function DashboardLayout({
           }
         </FocusContext.Consumer>
 
-      <div className="md:pl-[20rem]">
-        <FocusContext.Consumer>
-          {(ctx) => (ctx?.isFocusMode ? null : <DashboardHeader onOpenMobileMenu={() => setMobileMenuOpen((v) => !v)} />)}
-        </FocusContext.Consumer>
+      <FocusContext.Consumer>
+        {(ctx) => (
+          <div className={ctx?.isFocusMode ? "" : "md:pl-[20rem]"}>
+            {ctx?.isFocusMode ? null : <DashboardHeader onOpenMobileMenu={() => setMobileMenuOpen((v) => !v)} />}
 
         {mobileMenuOpen && (
           <div className="fixed inset-0 z-50 md:hidden">
@@ -307,23 +306,34 @@ export default function DashboardLayout({
 
         {/* Shortcuts help bar */}
         <div className="fixed right-4 bottom-4 z-50 hidden flex-col gap-2 rounded-xl bg-white/80 p-3 shadow-lg backdrop-blur sm:flex">
-          <div className="text-xs font-bold text-slate-700">Atalhos</div>
-          <div className="flex gap-2">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">F</div>
-            <div className="text-xs text-slate-600">Foco</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs font-bold text-slate-700">Atalhos</div>
+            <button
+              type="button"
+              onClick={() => setShortcutsMinimized((v) => !v)}
+              className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
+              aria-label={shortcutsMinimized ? "Expandir atalhos" : "Minimizar atalhos"}
+            >
+              {shortcutsMinimized ? "Abrir" : "Min"}
+            </button>
           </div>
-          <div className="flex gap-2">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">D</div>
-            <div className="text-xs text-slate-600">Tema</div>
-          </div>
-          <div className="flex gap-2">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">S</div>
-            <div className="text-xs text-slate-600">Salvar</div>
-          </div>
-          <div className="flex gap-2">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">Esc</div>
-            <div className="text-xs text-slate-600">Sair</div>
-          </div>
+
+          {!shortcutsMinimized && (
+            <>
+              <div className="flex gap-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">F</div>
+                <div className="text-xs text-slate-600">Foco</div>
+              </div>
+              <div className="flex gap-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">S</div>
+                <div className="text-xs text-slate-600">Salvar</div>
+              </div>
+              <div className="flex gap-2">
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">Esc</div>
+                <div className="text-xs text-slate-600">Sair</div>
+              </div>
+            </>
+          )}
         </div>
 
         <FocusContext.Consumer>
@@ -360,7 +370,9 @@ export default function DashboardLayout({
             {isMaster ? "Torre" : "Otica"}
           </Link>
         </nav>
-      </div>
+          </div>
+        )}
+      </FocusContext.Consumer>
     </div>
       </FocusProvider>
     </ThemeProvider>

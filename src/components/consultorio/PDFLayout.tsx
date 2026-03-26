@@ -1,4 +1,5 @@
 import React from "react";
+"use client";
 import { View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 
 type Clinica = {

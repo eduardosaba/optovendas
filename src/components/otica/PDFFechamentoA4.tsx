@@ -1,3 +1,4 @@
+"use client";
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 
 type FechamentoDados = {

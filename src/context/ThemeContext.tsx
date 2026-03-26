@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useEffect, useState } from "react";
+import React, { createContext, useCallback, useLayoutEffect } from "react";
 
 type Theme = "light" | "dark";
 
@@ -17,34 +17,33 @@ export const ThemeContext = createContext<ThemeContextType>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
+  const forceLightTheme = useCallback(() => {
     try {
-      const val = localStorage.getItem("opv_theme");
-      return (val as Theme) || "light";
-    } catch {
-      return "light";
-    }
-  });
-
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-    try {
-      if (t === "dark") document.documentElement.classList.add("dark");
-      else document.documentElement.classList.remove("dark");
-      localStorage.setItem("opv_theme", t);
+      document.documentElement.classList.remove("dark");
+      document.body.classList.remove("dark");
+      document.documentElement.style.colorScheme = "light";
+      document.documentElement.setAttribute("data-theme", "light");
+      localStorage.setItem("opv_theme", "light");
     } catch {
       // ignore
     }
   }, []);
 
-  const toggleTheme = useCallback(() => setTheme(theme === "dark" ? "light" : "dark"), [theme, setTheme]);
+  const setTheme = useCallback((_t: Theme) => {
+    // Temporariamente bloqueado em modo claro.
+    forceLightTheme();
+  }, [forceLightTheme]);
 
-  useEffect(() => {
-    setTheme(theme);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const toggleTheme = useCallback(() => {
+    // Temporariamente bloqueado em modo claro.
+    forceLightTheme();
+  }, [forceLightTheme]);
 
-  return <ThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>{children}</ThemeContext.Provider>;
+  useLayoutEffect(() => {
+    forceLightTheme();
+  }, [forceLightTheme]);
+
+  return <ThemeContext.Provider value={{ theme: "light", setTheme, toggleTheme }}>{children}</ThemeContext.Provider>;
 }
 
 export default ThemeProvider;

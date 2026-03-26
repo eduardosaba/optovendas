@@ -15,12 +15,24 @@ export const FocusContext = createContext<FocusContextType>({
 });
 
 export function FocusProvider({ children, focusRef }: { children: React.ReactNode; focusRef?: React.RefObject<HTMLElement | null> }) {
-  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(true);
+
+  const forceLightUi = useCallback(() => {
+    try {
+      document.documentElement.classList.remove("dark");
+      document.body.classList.remove("dark");
+      document.documentElement.style.colorScheme = "light";
+      localStorage.setItem("opv_theme", "light");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const enterFullscreen = useCallback(async () => {
     try {
       if (document.fullscreenElement) return;
-      const target = (focusRef?.current ?? document.documentElement) as Element;
+      // Fullscreen no documento inteiro evita fundo preto quando o alvo e um container interno.
+      const target = document.documentElement as Element;
       await (target as any).requestFullscreen?.();
     } catch {
       // ignore
@@ -39,15 +51,19 @@ export function FocusProvider({ children, focusRef }: { children: React.ReactNod
   const setFocus = useCallback(
     (v: boolean) => {
       setIsFocusMode(v);
+      forceLightUi();
       if (v) void enterFullscreen();
       else void exitFullscreen();
     },
-    [enterFullscreen, exitFullscreen]
+    [enterFullscreen, exitFullscreen, forceLightUi]
   );
 
   const toggleFocusMode = useCallback(() => setFocus(!isFocusMode), [setFocus, isFocusMode]);
 
   useEffect(() => {
+    // Não tenta entrar em fullscreen automaticamente sem gesto do usuário.
+    forceLightUi();
+
     function onFullscreenChange() {
       // if user exited fullscreen (ESC), sync state
       const active = !!document.fullscreenElement;
@@ -67,7 +83,7 @@ export function FocusProvider({ children, focusRef }: { children: React.ReactNod
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+  }, [forceLightUi]);
 
   return (
     <FocusContext.Provider value={{ isFocusMode, setIsFocusMode: setFocus, toggleFocusMode }}>
