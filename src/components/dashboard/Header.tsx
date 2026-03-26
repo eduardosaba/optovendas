@@ -12,7 +12,13 @@ import {
   Settings,
   ShieldCheck,
   User,
+  Maximize2,
+  Minimize2,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { FocusContext } from "@/context/FocusContext";
+import { ThemeContext } from "@/context/ThemeContext";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { resolveClinicaContext } from "@/lib/clinica";
@@ -311,6 +317,34 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
         </button>
 
         <div className="ml-auto flex items-center gap-4">
+          {/* Focus / Fullscreen Toggle */}
+          <FocusContext.Consumer>
+            {(ctx) => (
+              <button
+                type="button"
+                onClick={() => ctx?.toggleFocusMode()}
+                title={ctx?.isFocusMode ? "Sair do modo foco" : "Entrar no modo foco"}
+                className="p-2 text-slate-400 transition-colors hover:text-cyan-600"
+              >
+                {ctx?.isFocusMode ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+              </button>
+            )}
+          </FocusContext.Consumer>
+
+          {/* Theme Toggle */}
+          <ThemeContext.Consumer>
+            {(t) => (
+              <button
+                type="button"
+                onClick={() => t?.toggleTheme()}
+                title={t?.theme === "dark" ? "Tema claro" : "Tema escuro"}
+                className="p-2 text-slate-400 transition-colors hover:text-cyan-600"
+              >
+                {t?.theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+            )}
+          </ThemeContext.Consumer>
+
           <button type="button" className="relative p-2 text-slate-400 transition-colors hover:text-cyan-600" aria-label="Notificacoes">
             <Bell size={22} />
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full border-2 border-white bg-rose-500" />

@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useContext } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useConfig } from "@/context/ConfigContext";
 import DashboardHeader from "@/components/dashboard/Header";
+import FocusProvider, { FocusContext } from "@/context/FocusContext";
+import { useRef } from "react";
+import ThemeProvider, { ThemeContext } from "@/context/ThemeContext";
 
 const WelcomeTour = dynamic(() => import("@/components/onboarding/WelcomeTour"), {
   ssr: false,
@@ -135,70 +138,117 @@ export default function DashboardLayout({
 
   const isActivePath = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
+  const mainRef = useRef<HTMLDivElement | null>(null);
+
+  function KeyboardShortcuts() {
+    const focus = useContext(FocusContext);
+    const theme = useContext(ThemeContext);
+
+    useEffect(() => {
+      function onKey(e: KeyboardEvent) {
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName ?? "";
+        if (tag === "INPUT" || tag === "TEXTAREA" || (target as HTMLElement)?.isContentEditable) return;
+
+        const key = e.key.toLowerCase();
+        if (key === "f") {
+          e.preventDefault();
+          focus?.toggleFocusMode();
+        }
+        if (key === "d") {
+          e.preventDefault();
+          theme?.toggleTheme();
+        }
+        if (key === "s") {
+          e.preventDefault();
+          // dispatch a custom save event for pages to listen
+          window.dispatchEvent(new CustomEvent("opv:save"));
+        }
+      }
+
+      window.addEventListener("keydown", onKey as any);
+      return () => window.removeEventListener("keydown", onKey as any);
+    }, [focus, theme]);
+
+    return null;
+  }
+
   return (
-    <div className="min-h-screen bg-transparent">
-      <aside className="fixed left-5 top-5 hidden h-[calc(100vh-40px)] w-72 flex-col rounded-[40px] border border-slate-100 bg-white/95 p-7 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)] backdrop-blur md:flex">
-        <div className="mb-10 flex items-center gap-3">
-          {logoSistema ? (
-            <img src={logoSistema} alt={nomeSistema || "OptoVendas"} className="h-24 w-auto object-contain" />
-          ) : (
-            <h1 className="text-2xl font-black tracking-tight text-slate-900" style={{ color: corPrimaria }}>{nomeSistema || "OptoVendas"}</h1>
-          )}
-        </div>
+    <ThemeProvider>
+      {/* mainRef is the content area that will enter fullscreen */}
+      <FocusProvider focusRef={mainRef}>
+        <div className="min-h-screen bg-transparent">
+          <KeyboardShortcuts />
+        <FocusContext.Consumer>
+          {(ctx) =>
+            ctx?.isFocusMode ? null : (
+              <aside className="fixed left-5 top-5 hidden h-[calc(100vh-40px)] w-72 flex-col rounded-[40px] border border-slate-100 bg-white/95 p-7 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)] backdrop-blur md:flex">
+                <div className="mb-10 flex items-center gap-3">
+                  {logoSistema ? (
+                    <img src={logoSistema} alt={nomeSistema || "OptoVendas"} className="h-24 w-auto object-contain" />
+                  ) : (
+                    <h1 className="text-2xl font-black tracking-tight text-slate-900" style={{ color: corPrimaria }}>{nomeSistema || "OptoVendas"}</h1>
+                  )}
+                </div>
 
-        <nav className="flex-1 overflow-y-auto space-y-2 pr-2">
-          {navItems.map((item) => {
-            const isActive = isActivePath(item.href);
+                <nav className="flex-1 overflow-y-auto space-y-2 pr-2">
+                  {navItems.map((item) => {
+                    const isActive = isActivePath(item.href);
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
-                  isActive ? "bg-slate-50" : "hover:bg-slate-50/90"
-                }`}
-              >
-                <span
-                  className={`grid h-11 w-11 place-items-center rounded-2xl text-[11px] font-black tracking-wide transition-all ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-[0_20px_40px_-20px_rgba(37,99,235,0.9)]"
-                      : item.iconClass
-                  }`}
-                >
-                  <NavIcon path={item.iconPath} />
-                </span>
-                <span className={`text-sm font-bold transition-colors ${isActive ? "text-slate-900" : "text-slate-500 group-hover:text-slate-700"}`}>
-                  {item.label}
-                </span>
-              </Link>
-            );
-          })}
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
+                          isActive ? "bg-slate-50" : "hover:bg-slate-50/90"
+                        }`}
+                      >
+                        <span
+                          className={`grid h-11 w-11 place-items-center rounded-2xl text-[11px] font-black tracking-wide transition-all ${
+                            isActive
+                              ? "bg-blue-600 text-white shadow-[0_20px_40px_-20px_rgba(37,99,235,0.9)]"
+                              : item.iconClass
+                          }`}
+                        >
+                          <NavIcon path={item.iconPath} />
+                        </span>
+                        <span className={`text-sm font-bold transition-colors ${isActive ? "text-slate-900" : "text-slate-500 group-hover:text-slate-700"}`}>
+                          {item.label}
+                        </span>
+                      </Link>
+                    );
+                  })}
 
-          {/* BLOCO DE SEGURANÇA PARA MASTER */}
-          {(isMaster || role === "master") && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
-              <Link
-                href="/admin"
-                className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
-                  isActivePath("/admin") ? "bg-rose-50 text-rose-600" : "text-rose-400 hover:text-rose-600"
-                }`}
-              >
-                <span
-                  className={`grid h-11 w-11 place-items-center rounded-2xl ${
-                    isActivePath("/admin") ? "bg-rose-500 text-white" : "bg-rose-50 text-rose-500"
-                  }`}
-                >
-                  <NavIcon path="M12 3l7 4v5c0 5-3.5 7.7-7 9-3.5-1.3-7-4-7-9V7l7-4Z" />
-                </span>
-                <span className="text-sm font-black italic">Torre de Controle</span>
-              </Link>
-            </div>
-          )}
-        </nav>
-      </aside>
+                  {/* BLOCO DE SEGURANÇA PARA MASTER */}
+                  {(isMaster || role === "master") && (
+                    <div className="mt-4 pt-4 border-t border-slate-100">
+                      <Link
+                        href="/admin"
+                        className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
+                          isActivePath("/admin") ? "bg-rose-50 text-rose-600" : "text-rose-400 hover:text-rose-600"
+                        }`}
+                      >
+                        <span
+                          className={`grid h-11 w-11 place-items-center rounded-2xl ${
+                            isActivePath("/admin") ? "bg-rose-500 text-white" : "bg-rose-50 text-rose-500"
+                          }`}
+                        >
+                          <NavIcon path="M12 3l7 4v5c0 5-3.5 7.7-7 9-3.5-1.3-7-4-7-9V7l7-4Z" />
+                        </span>
+                        <span className="text-sm font-black italic">Torre de Controle</span>
+                      </Link>
+                    </div>
+                  )}
+                </nav>
+              </aside>
+            )
+          }
+        </FocusContext.Consumer>
 
       <div className="md:pl-[20rem]">
-        <DashboardHeader onOpenMobileMenu={() => setMobileMenuOpen((v) => !v)} />
+        <FocusContext.Consumer>
+          {(ctx) => (ctx?.isFocusMode ? null : <DashboardHeader onOpenMobileMenu={() => setMobileMenuOpen((v) => !v)} />)}
+        </FocusContext.Consumer>
 
         {mobileMenuOpen && (
           <div className="fixed inset-0 z-50 md:hidden">
@@ -250,10 +300,48 @@ export default function DashboardLayout({
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto p-4 pb-24 md:p-10 md:pb-10">
+        <main ref={mainRef} className={`flex-1 overflow-y-auto p-4 pb-24 md:p-10 md:pb-10 transition-all duration-500`}>
           {children}
           {layoutHydrated ? <WelcomeTour /> : null}
         </main>
+
+        {/* Shortcuts help bar */}
+        <div className="fixed right-4 bottom-4 z-50 hidden flex-col gap-2 rounded-xl bg-white/80 p-3 shadow-lg backdrop-blur sm:flex">
+          <div className="text-xs font-bold text-slate-700">Atalhos</div>
+          <div className="flex gap-2">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">F</div>
+            <div className="text-xs text-slate-600">Foco</div>
+          </div>
+          <div className="flex gap-2">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">D</div>
+            <div className="text-xs text-slate-600">Tema</div>
+          </div>
+          <div className="flex gap-2">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">S</div>
+            <div className="text-xs text-slate-600">Salvar</div>
+          </div>
+          <div className="flex gap-2">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">Esc</div>
+            <div className="text-xs text-slate-600">Sair</div>
+          </div>
+        </div>
+
+        <FocusContext.Consumer>
+          {(ctx) =>
+            ctx?.isFocusMode ? (
+              <div className="fixed left-4 top-4 z-[60]">
+                <button
+                  type="button"
+                  onClick={() => ctx.setIsFocusMode(false)}
+                  className="rounded-full bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:scale-105 transition-transform"
+                  title="Sair do modo foco"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : null
+          }
+        </FocusContext.Consumer>
 
         <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 border-t border-slate-200/80 bg-white/95 backdrop-blur md:hidden">
           <Link href={(role === "master" || role === "admin" || role === "consultorio") ? "/consultorio" : role === "financeiro" ? "/financeiro" : "/otica"} className="px-2 py-3 text-center text-xs font-semibold text-slate-700">
@@ -274,5 +362,7 @@ export default function DashboardLayout({
         </nav>
       </div>
     </div>
+      </FocusProvider>
+    </ThemeProvider>
   );
 }

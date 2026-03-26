@@ -54,7 +54,10 @@ function IconStroke({ path }: { path: string }) {
 
 function ActionTile({ href, title, description, icon, accent = "bg-white" }: { href: string; title: string; description: string; icon: React.ReactNode; accent?: string }) {
   return (
-    <Link href={href} className={`group flex h-64 flex-col justify-between rounded-[40px] border border-slate-100 p-8 shadow-[0_28px_70px_-55px_rgba(15,23,42,0.9)] transition-all hover:-translate-y-1 hover:shadow-[0_30px_80px_-48px_rgba(15,23,42,0.45)] ${accent}`}>
+    <Link
+      href={href}
+      className={`group flex h-64 flex-col justify-between rounded-[40px] border border-slate-100 p-8 shadow-[0_28px_70px_-55px_rgba(15,23,42,0.9)] transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl ${accent}`}
+    >
       {icon}
       <div>
         <h3 className="text-2xl font-black text-slate-900">{title}</h3>
@@ -66,7 +69,7 @@ function ActionTile({ href, title, description, icon, accent = "bg-white" }: { h
 
 function DocShortcut({ href, label, iconPath, tint }: { href: string; label: string; iconPath: string; tint: string }) {
   return (
-    <Link href={href} className="group flex flex-col items-center gap-3 rounded-[30px] border border-slate-100 bg-white p-6 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+    <Link href={href} className="group flex flex-col items-center gap-3 rounded-[30px] border border-slate-100 bg-white p-6 text-center shadow-sm transition-all duration-500 hover:-translate-y-1 hover:shadow-2xl">
       <div className={`grid h-12 w-12 place-items-center rounded-2xl ${tint}`}>
         <IconStroke path={iconPath} />
       </div>

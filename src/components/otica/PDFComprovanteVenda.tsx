@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { fmtNumber, fmtEixo, v } from "@/lib/refracaoFormat";
 
 type TipoPapel = "A4" | "termica";
 
@@ -154,6 +155,7 @@ export default function PDFComprovanteVenda({
 }: PDFComprovanteVendaProps) {
   const isTermica = tipoPapel === "termica";
   const styles = criarEstilos(isTermica);
+  const receita = os.receita || {} as any;
   const pageSize: "A4" | [number, number] = isTermica ? [226.77, 841.89] : "A4";
   const hoje = new Date().toLocaleDateString("pt-BR");
   const metodo = venda.metodo_pagamento || "Nao informado";
@@ -217,6 +219,36 @@ export default function PDFComprovanteVenda({
             )}
           </View>
 
+          {/* Prescription preview when available */}
+          {os.receita && (
+            <View style={[styles.section, { marginTop: 8 }]}>
+              <Text style={styles.label}>PRESCRIÇÃO</Text>
+              <View style={{ marginTop: 6, borderWidth: 1, borderColor: "#e6eef6", borderRadius: 8, overflow: "hidden" }}>
+                <View style={{ flexDirection: "row", backgroundColor: "#0f172a", padding: 6 }}>
+                  <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Olho</Text>
+                  <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Esférico</Text>
+                  <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Cilíndrico</Text>
+                  <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Eixo</Text>
+                </View>
+                <View style={{ flexDirection: "row", padding: 8, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}>
+                  <Text style={{ width: "25%", fontWeight: "bold", color: "#475569" }}>Direito (OD)</Text>
+                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(os.receita.od_esferico)}</Text>
+                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(os.receita.od_cilindrico)}</Text>
+                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtEixo(os.receita.od_eixo)}</Text>
+                </View>
+                <View style={{ flexDirection: "row", padding: 8 }}>
+                  <Text style={{ width: "25%", fontWeight: "bold", color: "#475569" }}>Esquerdo (OE)</Text>
+                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(os.receita.oe_esferico)}</Text>
+                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(os.receita.oe_cilindrico)}</Text>
+                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtEixo(os.receita.oe_eixo)}</Text>
+                </View>
+              </View>
+              <View style={{ marginTop: 6 }}>
+                <Text>Adição: {os.receita.adicao ?? "-"} | DP: {os.receita.dp_dnp ?? "-"}</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.footer}>
             <Text>Previsao de Entrega: {fmtData(os.previsao_entrega)}</Text>
             <Text style={{ marginTop: 8 }}>
@@ -250,11 +282,31 @@ export default function PDFComprovanteVenda({
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>MONTAGEM</Text>
-            <Text>Tipo: {os.armacao_tipo || "-"}</Text>
-            <Text>Modelo: {os.armacao_modelo || "-"}</Text>
-            <Text>Material da Lente: {os.material_lente || "-"}</Text>
-            <Text>Previsao Entrega: {fmtData(os.previsao_entrega)}</Text>
+            <Text style={styles.label}>PRESCRIÇÃO (Receita)</Text>
+            <View style={{ marginTop: 8, borderWidth: 1, borderColor: "#e6eef6", borderRadius: 8, overflow: "hidden" }}>
+              <View style={{ flexDirection: "row", backgroundColor: "#0f172a", padding: 6 }}>
+                <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Olho</Text>
+                <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Esférico</Text>
+                <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Cilíndrico</Text>
+                <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Eixo</Text>
+              </View>
+              <View style={{ flexDirection: "row", padding: 8, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}>
+                <Text style={{ width: "25%", fontWeight: "bold", color: "#475569" }}>Direito (OD)</Text>
+                <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(receita.od_esferico)}</Text>
+                <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(receita.od_cilindrico)}</Text>
+                <Text style={{ width: "25%", textAlign: "center" }}>{fmtEixo(receita.od_eixo)}</Text>
+              </View>
+              <View style={{ flexDirection: "row", padding: 8 }}>
+                <Text style={{ width: "25%", fontWeight: "bold", color: "#475569" }}>Esquerdo (OE)</Text>
+                <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(receita.oe_esferico)}</Text>
+                <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(receita.oe_cilindrico)}</Text>
+                <Text style={{ width: "25%", textAlign: "center" }}>{fmtEixo(receita.oe_eixo)}</Text>
+              </View>
+            </View>
+
+            <View style={{ marginTop: 8 }}>
+              <Text>Adição: {receita.adicao ?? "-"} | DP: {receita.dp_dnp ?? "-"}</Text>
+            </View>
           </View>
 
           <View style={styles.footer}>

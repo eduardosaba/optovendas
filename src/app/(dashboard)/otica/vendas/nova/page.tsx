@@ -312,8 +312,8 @@ function NovaVendaStepperContent() {
       );
 
       if (!temAlgumaMedida) {
-        toast.info("Ative ao menos uma guia e registre pelo menos uma medida antes de avançar.");
-        return false;
+        // Tornar medidas opcionais: apenas informar, não bloquear avanço
+        toast.info("Nenhuma medida registrada — você pode continuar e medir depois.");
       }
     }
 
@@ -484,6 +484,19 @@ function NovaVendaStepperContent() {
 
       if (vendaRes.error || !vendaRes.data?.id) {
         throw new Error(vendaRes.error?.message ?? "Falha ao criar venda.");
+      }
+
+      // Persist anexos_urls and medida flags into the venda record if present
+      try {
+        const payload: any = {};
+        if (Array.isArray(vendaData.anexos_urls) && vendaData.anexos_urls.length > 0) payload.anexos_urls = vendaData.anexos_urls;
+        if (typeof vendaData.medida_obrigatoria !== 'undefined') payload.medida_obrigatoria = vendaData.medida_obrigatoria;
+        if (typeof vendaData.status_medida !== 'undefined') payload.status_medida = vendaData.status_medida;
+        if (Object.keys(payload).length > 0) {
+          await supabase.from('vendas').update(payload).eq('id', vendaRes.data.id);
+        }
+      } catch (err) {
+        console.warn('Falha ao persistir anexos/medidas na venda:', err);
       }
 
       const armacaoModelo = armacaoSelecionada
@@ -803,7 +816,19 @@ function NovaVendaStepperContent() {
             disabled={salvando}
             className="flex items-center gap-2 px-10 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-xl shadow-slate-200 hover:bg-cyan-600 transition-all"
           >
-            Proximo Passo <ChevronRight size={20} />
+            {step === 3 && !(
+              vendaData.medidas.od_dnp ||
+              vendaData.medidas.oe_dnp ||
+              vendaData.medidas.altura ||
+              vendaData.medidas.co_od ||
+              vendaData.medidas.co_oe ||
+              vendaData.medidas.altura_vertical_od ||
+              vendaData.medidas.altura_vertical_oe ||
+              vendaData.medidas.armacao_total_mm
+            )
+              ? 'Medir Depois'
+              : 'Proximo Passo'}
+            <ChevronRight size={20} />
           </button>
         ) : (
           <button

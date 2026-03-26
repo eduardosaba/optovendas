@@ -110,6 +110,9 @@ export type VendaData = {
   pupilometroFoto: string;
   pupilometroFotoStorageUrl?: string;
   vendedorId?: string | null;
+  anexos_urls?: string[];
+  medida_obrigatoria?: boolean;
+  status_medida?: string;
 };
 
 export const VALOR_CARTAO_MM = 85.6;
