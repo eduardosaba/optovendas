@@ -138,7 +138,7 @@ export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEsto
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Tipo de Armação (Preço)</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Tipo de Armação</label>
               <select
                 value={data.armacaoTipoId}
                 onChange={(e) => onChange({ ...data, armacaoTipoId: e.target.value })}

@@ -4,6 +4,7 @@
 CREATE TABLE IF NOT EXISTS public.otica_tratamentos (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   clinica_id uuid,
+  otica_id uuid NULL,
   nome text NOT NULL,
   descricao text,
   preco numeric(12,2),
@@ -13,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.otica_tratamentos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_otica_tratamentos_clinica ON public.otica_tratamentos (clinica_id);
+CREATE INDEX IF NOT EXISTS idx_otica_tratamentos_otica_id ON public.otica_tratamentos (otica_id);
 
 -- função para atualizar updated_at
 CREATE OR REPLACE FUNCTION public.set_updated_at()

@@ -52,7 +52,9 @@ export default function QuickAddProduto({ tipo, aoFinalizar, aoFechar }: Props) 
         if (!error && data && data.length) aoFinalizar(data[0]);
         else console.error("Erro ao salvar lente rápido:", error);
       } else {
-        const payload = { clinica_id, nome: form.modelo, preco: form.preco };
+        const otica_id = (ctx as any)?.oticaId ?? null;
+        const payload: any = { clinica_id, nome: form.modelo, preco: form.preco };
+        if (otica_id) payload.otica_id = otica_id;
         const { data, error } = await supabase.from("clinica_tratamentos").insert([payload]).select();
         if (!error && data && data.length) aoFinalizar(data[0]);
         else console.error("Erro ao salvar tratamento rápido:", error);

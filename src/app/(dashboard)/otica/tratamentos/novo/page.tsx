@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from '@/components/ui/ToastProvider';
+import { resolveClinicaContext } from '@/lib/clinica';
 
 export default function NovoTratamentoPage() {
   const router = useRouter();
@@ -19,19 +20,17 @@ export default function NovoTratamentoPage() {
     try {
       const body = { nome, descricao, preco: preco ? Number(preco) : null, ativo };
       const { supabase } = await import('@/lib/supabase');
-      const userRes = await supabase.auth.getUser();
-      const uid = userRes?.data?.user?.id ?? null;
-      let clinicaId: string | null = null;
-      if (uid) {
-        const prof = await supabase.from('profiles').select('clinica_id').eq('id', uid).maybeSingle();
-        clinicaId = prof?.data?.clinica_id ?? null;
-      }
+      const ctx = await resolveClinicaContext();
+      const clinicaId = ctx.clinicaId;
+      const oticaId = (ctx as any)?.oticaId ?? null;
       if (!clinicaId) {
         toast.error('Perfil sem clínica. Verifique seu login.');
         setSaving(false);
         return;
       }
-      const res = await supabase.from('clinica_tratamentos').insert({ ...body, clinica_id: clinicaId }).select('id').maybeSingle();
+      const payload: any = { ...body, clinica_id: clinicaId };
+      if (oticaId) payload.otica_id = oticaId;
+      const res = await supabase.from('clinica_tratamentos').insert(payload).select('id').maybeSingle();
       if (res.error) throw res.error;
       router.push('/otica/tratamentos');
     } catch (err: any) {

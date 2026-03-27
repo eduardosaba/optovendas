@@ -4,19 +4,45 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
-import { Glasses, Plus, Trash2, ArrowLeft } from "lucide-react";
+import { Glasses, Plus, Trash2, ArrowLeft, Edit3, X } from "lucide-react";
 import Link from "next/link";
 
 export default function CadastroTiposArmacaoPage() {
   const [tipos, setTipos] = useState<any[]>([]);
   const [nome, setNome] = useState("");
   const [preco, setPreco] = useState("");
+  const [editing, setEditing] = useState<any | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editPreco, setEditPreco] = useState("");
   const toast = useToast();
 
   async function carregar() {
     const ctx = await resolveClinicaContext();
     const { data } = await supabase.from("otica_tipos_armacao").select("*").eq("clinica_id", ctx.clinicaId).order("nome");
     setTipos(data || []);
+  }
+
+  function iniciarEdicao(t: any) {
+    setEditing(t);
+    setEditNome(t.nome ?? "");
+    setEditPreco((t.preco_venda ?? 0).toString());
+  }
+
+  function cancelarEdicao() {
+    setEditing(null);
+    setEditNome("");
+    setEditPreco("");
+  }
+
+  async function salvarEdicao() {
+    if (!editing) return;
+    if (!editNome || !editPreco) return toast.info("Informe nome e valor.");
+    const ctx = await resolveClinicaContext();
+    const { error } = await supabase.from("otica_tipos_armacao").update({ nome: editNome, preco_venda: Number(editPreco.replace(',', '.')) }).eq('id', editing.id).eq('clinica_id', ctx.clinicaId);
+    if (error) return toast.error(`Falha ao salvar: ${error.message}`);
+    cancelarEdicao();
+    carregar();
+    toast.success('Alteração salva.');
   }
 
   useEffect(() => { carregar(); }, []);
@@ -69,17 +95,45 @@ export default function CadastroTiposArmacaoPage() {
                 <p className="text-xs font-bold text-cyan-600 uppercase tracking-tighter">R$ {Number(t.preco_venda).toFixed(2)}</p>
               </div>
             </div>
-            <button onClick={async () => { 
-                if(confirm("Excluir?")) { 
-                    await supabase.from("otica_tipos_armacao").delete().eq("id", t.id); 
-                    carregar(); 
-                } 
-            }} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
-              <Trash2 size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={() => iniciarEdicao(t)} className="p-2 text-slate-400 hover:text-cyan-600 transition-colors">
+                <Edit3 size={18} />
+              </button>
+              <button onClick={async () => { 
+                  if(confirm("Excluir?")) { 
+                      await supabase.from("otica_tipos_armacao").delete().eq("id", t.id); 
+                      carregar(); 
+                  } 
+              }} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
+                <Trash2 size={18} />
+              </button>
+            </div>
           </div>
         ))}
       </div>
+
+      {editing ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white w-full max-w-lg rounded-2xl p-6">
+            <header className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black">Editar Tipo de Armação</h3>
+              <button onClick={cancelarEdicao} className="p-2 text-slate-400 hover:text-slate-700"><X size={18} /></button>
+            </header>
+            <div className="space-y-3">
+              <label className="block"><span className="text-sm">Nome</span>
+                <input value={editNome} onChange={e => setEditNome(e.target.value)} className="mt-1 block w-full rounded-md border px-3 py-2" />
+              </label>
+              <label className="block"><span className="text-sm">Preço</span>
+                <input value={editPreco} onChange={e => setEditPreco(e.target.value)} className="mt-1 block w-full rounded-md border px-3 py-2" />
+              </label>
+            </div>
+            <div className="mt-4 flex gap-2 justify-end">
+              <button onClick={cancelarEdicao} className="px-4 py-2 rounded bg-slate-100">Cancelar</button>
+              <button onClick={salvarEdicao} className="px-4 py-2 rounded bg-cyan-600 text-white">Salvar</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

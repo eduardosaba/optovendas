@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 export type ClinicaContext = {
   userId: string;
   clinicaId: string;
+  oticaId?: string | null;
   funcao: string;
   isMaster: boolean;
 };
@@ -23,7 +24,7 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
 
   const userId = user.id;
 
-  type PerfilRow = { clinica_id?: string; funcao?: string };
+  type PerfilRow = { clinica_id?: string; funcao?: string; otica_id?: string };
 
   async function lerPerfilAtual(): Promise<PerfilRow | null> {
     const perfisRes = await supabase
@@ -49,12 +50,13 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
 
   const metadataClinicaId = (user.user_metadata?.clinica_id as string | undefined) ?? undefined;
   const metadataFuncao = (user.user_metadata?.funcao as string | undefined) ?? undefined;
+  const metadataOticaId = (user.user_metadata?.otica_id as string | undefined) ?? undefined;
 
-  let profile: { clinica_id?: string } | null = null;
+  let profile: { clinica_id?: string; otica_id?: string } | null = null;
   if (!perfil?.clinica_id && !metadataClinicaId) {
     const profilesRes = await supabase
       .from("profiles")
-      .select("clinica_id")
+      .select("clinica_id, otica_id")
       .eq("user_id", userId)
       .maybeSingle();
 
@@ -67,6 +69,7 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
 
   // Mantém a prioridade original de clinica, mas trata MASTER como exceção.
   const clinicaId = perfil?.clinica_id ?? profile?.clinica_id ?? metadataClinicaId;
+  const oticaId = perfil?.otica_id ?? profile?.otica_id ?? metadataOticaId ?? null;
 
   // Normaliza a função (força lower case) e define um padrão 'vendas'
   // para forçar a busca real no banco quando não houver valor explícito.
@@ -82,6 +85,7 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
     userId: user.id,
     // Se for master e nao tiver clinicaId, retorna 'master' para queries globais.
     clinicaId: clinicaId || "master",
+    oticaId,
     funcao: rawFuncao,
     isMaster,
   };

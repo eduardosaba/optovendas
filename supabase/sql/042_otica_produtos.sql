@@ -23,6 +23,7 @@ create index if not exists idx_otica_lentes_clinica_id on public.otica_lentes(cl
 create table if not exists public.otica_tratamentos (
   id uuid default gen_random_uuid() primary key,
   clinica_id uuid not null references public.clinicas(id) on delete cascade,
+  otica_id uuid null,
   nome text not null,
   descricao text,
   preco_adicional numeric default 0,
@@ -31,5 +32,6 @@ create table if not exists public.otica_tratamentos (
 );
 
 create index if not exists idx_otica_tratamentos_clinica_id on public.otica_tratamentos(clinica_id);
+create index if not exists idx_otica_tratamentos_otica_id on public.otica_tratamentos(otica_id);
 
 -- Observação: execute este arquivo no SQL Editor do Supabase para aplicar a migração.

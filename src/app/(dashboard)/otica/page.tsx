@@ -244,6 +244,15 @@ export default function OticaPage() {
         />
 
         <MenuCard
+          href="/otica/armacoes-tipos"
+          title="Tipos de Armação"
+          desc="Gerencie categorias e preços das armações."
+          icon={<Glasses size={24} />}
+          color="text-cyan-700"
+          bgColor="bg-cyan-50"
+        />
+
+        <MenuCard
           href="/otica/tratamentos"
           title="Tratamentos"
           desc="Cadastre e configure tratamentos: antirreflexo, blue light e transições."
