@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
+import { useToast } from '@/components/ui/ToastProvider';
 import { Save, X } from "lucide-react";
 
 type Props = {
@@ -19,12 +20,30 @@ export default function QuickAddProduto({ tipo, aoFinalizar, aoFechar }: Props) 
     preco: 0,
     tipo_lente: "Multifocal",
   });
+  const toast = useToast();
 
   const salvarRapido = async () => {
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
-      const clinica_id = ctx.clinicaId;
+      let clinica_id = ctx?.clinicaId ?? null;
+      if (!clinica_id) {
+        // fallback: try to read from user profile
+        try {
+          const sess = await supabase.auth.getUser();
+          const uid = sess?.data?.user?.id ?? null;
+          if (uid) {
+            const prof = await supabase.from('profiles').select('clinica_id').eq('id', uid).maybeSingle();
+            clinica_id = prof?.data?.clinica_id ?? clinica_id;
+          }
+        } catch (e) {
+          console.warn('failed to read profile for clinica_id', e);
+        }
+      }
+      if (!clinica_id) {
+        toast.error('Perfil sem clínica. Não é possível salvar tratamento.');
+        return;
+      }
 
       if (tipo === "lente") {
         const nome = `${form.fabricante} ${form.modelo}`.trim();

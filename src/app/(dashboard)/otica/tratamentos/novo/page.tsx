@@ -18,8 +18,20 @@ export default function NovoTratamentoPage() {
     setSaving(true);
     try {
       const body = { nome, descricao, preco: preco ? Number(preco) : null, ativo };
-      const user = (await import('@/lib/supabase')).supabase;
-      const res = await user.from('clinica_tratamentos').insert({ ...body, clinica_id: (await user.auth.getUser()).data.user ? (await user.from('profiles').select('clinica_id').eq('id', (await user.auth.getUser()).data.user!.id).maybeSingle()).data?.clinica_id : null }).select('id').maybeSingle();
+      const { supabase } = await import('@/lib/supabase');
+      const userRes = await supabase.auth.getUser();
+      const uid = userRes?.data?.user?.id ?? null;
+      let clinicaId: string | null = null;
+      if (uid) {
+        const prof = await supabase.from('profiles').select('clinica_id').eq('id', uid).maybeSingle();
+        clinicaId = prof?.data?.clinica_id ?? null;
+      }
+      if (!clinicaId) {
+        toast.error('Perfil sem clínica. Verifique seu login.');
+        setSaving(false);
+        return;
+      }
+      const res = await supabase.from('clinica_tratamentos').insert({ ...body, clinica_id: clinicaId }).select('id').maybeSingle();
       if (res.error) throw res.error;
       router.push('/otica/tratamentos');
     } catch (err: any) {
