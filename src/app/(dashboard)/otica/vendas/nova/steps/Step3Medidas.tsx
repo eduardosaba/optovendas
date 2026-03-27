@@ -570,6 +570,38 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     }
   }
 
+  function dataURLtoFile(dataurl: string, filename: string) {
+    const arr = dataurl.split(",");
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  }
+
+  async function handleCameraCapture(base64: string) {
+    setCameraOpen(false);
+    setImage(base64);
+    setImageReady(false);
+
+    try {
+      const file = dataURLtoFile(base64, `pupil_${Date.now()}.jpg`);
+      const storageUrl = await uploadFotoStorage(file);
+      onChange({
+        ...data,
+        pupilometroFoto: base64,
+        pupilometroFotoStorageUrl: storageUrl || data.pupilometroFotoStorageUrl || "",
+      });
+    } catch (err) {
+      console.error("Erro ao salvar foto capturada:", err);
+      onChange({ ...data, pupilometroFoto: base64 });
+    }
+  }
+
   async function capturarFotoCamera() {
     if (sensorDisponivel && inclinacao !== null && !isReto) {
       setCameraError("Ajuste o angulo do celular para vertical antes de capturar.");

@@ -7,6 +7,7 @@ import { FileDown, PackageSearch, Truck, Wrench, CheckCircle2, Layers, X, Calend
 import { supabase } from "@/lib/supabase";
 import FiltrosOS, { type FiltrosOSValue } from "@/components/otica/FiltrosOS";
 import PDFTicketLaboratorio from "@/components/otica/PDFTicketLaboratorio";
+import PDFRomaneioLab from "@/components/otica/PDFRomaneioLab";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -422,7 +423,20 @@ export default function DashboardOS() {
                       {status.icon}
                       {status.label}
                     </span>
-                    <span className="rounded-full bg-white/20 px-2 py-1 text-xs">{itens.length}</span>
+
+                    <div className="flex items-center gap-2">
+                      {status.value === "Laboratorio" && itens.length > 0 && (
+                        <PDFDownloadLink
+                          document={<PDFRomaneioLab ordens={itens} clinica={clinica} />}
+                          fileName={`romaneio-lab-${new Date().toISOString().split("T")[0]}.pdf`}
+                          className="bg-white/20 hover:bg-white/40 px-2 py-1 rounded-lg text-[10px] flex items-center gap-1 transition-all"
+                        >
+                          {({ loading }: any) => (loading ? "Gerando..." : "📄 Romaneio")}
+                        </PDFDownloadLink>
+                      )}
+
+                      <span className="rounded-full bg-white/20 px-2 py-1 text-xs">{itens.length}</span>
+                    </div>
                   </h2>
                 </div>
 

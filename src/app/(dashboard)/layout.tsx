@@ -353,21 +353,25 @@ export default function DashboardLayout({
           }
         </FocusContext.Consumer>
 
-        <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-5 border-t border-slate-200/80 bg-white/95 backdrop-blur md:hidden">
-          <Link href={(role === "master" || role === "admin" || role === "consultorio") ? "/consultorio" : role === "financeiro" ? "/financeiro" : "/otica"} className="px-2 py-3 text-center text-xs font-semibold text-slate-700">
-            Inicio
+        <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-4 border-t border-slate-200/80 bg-white/95 backdrop-blur md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <Link href={(role === "master" || role === "admin" || role === "consultorio") ? "/consultorio" : role === "financeiro" ? "/financeiro" : "/otica"} className="flex flex-col items-center justify-center gap-1 px-2 py-2 text-center text-xs font-semibold text-slate-700">
+            <span className="text-2xl">🏠</span>
+            <span className="text-[10px]">Início</span>
           </Link>
-          <Link href={(role === "master" || role === "admin" || role === "financeiro") ? "/financeiro" : "/otica"} className="px-2 py-3 text-center text-xs font-semibold text-slate-700">
-            Caixa
+
+          <Link href="/otica/vendas/nova" className="flex flex-col items-center justify-center gap-1 px-2 py-2 text-center text-xs font-semibold text-slate-700">
+            <span className="text-2xl">👓</span>
+            <span className="text-[10px]">Nova Venda</span>
           </Link>
-          <Link href={(role === "master" || role === "admin" || role === "consultorio" || role === "vendas") ? "/comunicacao" : "/perfil"} className="px-2 py-3 text-center text-xs font-semibold text-slate-700">
-            Zap
+
+          <Link href="/otica" className="flex flex-col items-center justify-center gap-1 px-2 py-2 text-center text-xs font-semibold text-slate-700">
+            <span className="text-2xl">📋</span>
+            <span className="text-[10px]">Minhas OS</span>
           </Link>
-          <Link href={(role === "master" || role === "admin") ? "/admin/equipe" : "/perfil"} className="px-2 py-3 text-center text-xs font-semibold text-slate-700">
-            {role === "master" || role === "admin" ? "Equipe" : "Perfil"}
-          </Link>
-          <Link href={isMaster ? "/admin" : "/otica"} className="px-2 py-3 text-center text-xs font-semibold text-slate-700">
-            {isMaster ? "Torre" : "Otica"}
+
+          <Link href="/perfil" className="flex flex-col items-center justify-center gap-1 px-2 py-2 text-center text-xs font-semibold text-slate-700">
+            <span className="text-2xl">👤</span>
+            <span className="text-[10px]">Perfil</span>
           </Link>
         </nav>
           </div>

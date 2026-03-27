@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import ToastProvider from "@/components/ui/ToastProvider";
+import SyncProvider from "@/context/SyncContext";
 import { ConfigProvider } from "@/context/ConfigContext";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -37,9 +38,11 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning className={`${inter.variable}`}>
       <body className="antialiased selection:bg-cyan-100 selection:text-cyan-900 bg-slate-50 text-slate-900 font-sans">
         <ConfigProvider>
-          <ToastProvider>
-            <main className="min-h-screen">{children}</main>
-          </ToastProvider>
+          <SyncProvider>
+            <ToastProvider>
+              <main className="min-h-screen">{children}</main>
+            </ToastProvider>
+          </SyncProvider>
         </ConfigProvider>
       </body>
     </html>

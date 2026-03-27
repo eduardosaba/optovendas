@@ -15,6 +15,8 @@ import {
   Settings,
   Monitor,
   Package,
+  Glasses,
+  BadgePercent,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -230,6 +232,24 @@ export default function OticaPage() {
           color="text-cyan-600"
           bgColor="bg-cyan-50"
           thumbnails={metrics.estoqueThumbnails}
+        />
+
+        <MenuCard
+          href="/otica/lentes"
+          title="Catálogo de Lentes"
+          desc="Gerencie o catálogo de lentes, preços base e tratamentos disponíveis."
+          icon={<Glasses size={24} />}
+          color="text-cyan-700"
+          bgColor="bg-cyan-50"
+        />
+
+        <MenuCard
+          href="/otica/tratamentos"
+          title="Tratamentos"
+          desc="Cadastre e configure tratamentos: antirreflexo, blue light e transições."
+          icon={<BadgePercent size={24} />}
+          color="text-emerald-600"
+          bgColor="bg-emerald-50"
         />
 
         <MenuCard

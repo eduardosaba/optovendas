@@ -17,6 +17,7 @@ import {
   Save,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { addPendingVenda } from "@/lib/syncQueue";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import BotaoImpressaoTermica from "@/components/otica/BotaoImpressaoTermica";
@@ -30,6 +31,7 @@ import PDFComprovanteVenda, {
 } from "@/components/otica/PDFComprovanteVenda";
 import Step1Cliente from "./steps/Step1Cliente";
 import Step2Produtos from "./steps/Step2Produtos";
+import QuickAddProduto from "@/components/otica/QuickAddProduto";
 import Step3Medidas from "./steps/Step3Medidas";
 import Step4Fechamento from "./steps/Step4Fechamento";
 import type {
@@ -100,6 +102,8 @@ function NovaVendaStepperContent() {
   const [armacoesEstoque, setArmacoesEstoque] = useState<ArmacaoEstoque[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [comprovante, setComprovante] = useState<ComprovanteData | null>(null);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddTipo, setQuickAddTipo] = useState<"lente" | "tratamento">("lente");
 
   const [vendaData, setVendaData] = useState<VendaData>({
     vendaManual: false,
@@ -460,30 +464,47 @@ function NovaVendaStepperContent() {
         (vendaData.vendaManual ? vendaData.clienteManualCidade.trim() : pacienteCidadeAtendimento.trim()) ||
         null;
 
-      const vendaRes = await supabase
-        .from("vendas")
-        .insert({
-          clinica_id: clinicaId,
-          paciente_id: pacienteIdFinal,
-          receita_id: receitaIdFinal,
-          status: "aberta",
-          armacao_propria: vendaData.armacaoPropria,
-          termo_quebra_aceito: vendaData.armacaoPropria ? vendaData.termoQuebraAceito : false,
-          valor_total: valorTotal,
-          valor_final: valorTotal,
-          vendedor_id: vendaData.vendedorId || user?.id || null,
-          localidade_venda: localidadeVendaFinal,
-          valor_entrada: valorEntrada,
-          forma_entrada: vendaData.financeiro.formaEntrada || null,
-          saldo_restante: saldoRestante,
-          tipo_fechamento: tipoFechamento,
-          status_financeiro: statusFinanceiro,
-        })
-        .select("id")
-        .single();
+      let vendaRes: any = null;
+      if (typeof window !== "undefined" && !navigator.onLine) {
+        // Offline: persiste job completo na fila local para sincronização posterior
+        const job = {
+          type: "finalize_venda",
+          clinicaId,
+          vendaData,
+          numeroFinal,
+          criadoEm: new Date().toISOString(),
+          criadoPor: user?.id || null,
+        };
+        await addPendingVenda(job);
+        toast.info("Você está offline. A venda foi salva no aparelho e será enviada assim que houver sinal!");
+        // construir resposta parcial para UI (sem id)
+        vendaRes = { data: { id: null }, offlineSaved: true };
+      } else {
+        vendaRes = await supabase
+          .from("vendas")
+          .insert({
+            clinica_id: clinicaId,
+            paciente_id: pacienteIdFinal,
+            receita_id: receitaIdFinal,
+            status: "aberta",
+            armacao_propria: vendaData.armacaoPropria,
+            termo_quebra_aceito: vendaData.armacaoPropria ? vendaData.termoQuebraAceito : false,
+            valor_total: valorTotal,
+            valor_final: valorTotal,
+            vendedor_id: vendaData.vendedorId || user?.id || null,
+            localidade_venda: localidadeVendaFinal,
+            valor_entrada: valorEntrada,
+            forma_entrada: vendaData.financeiro.formaEntrada || null,
+            saldo_restante: saldoRestante,
+            tipo_fechamento: tipoFechamento,
+            status_financeiro: statusFinanceiro,
+          })
+          .select("id")
+          .single();
 
-      if (vendaRes.error || !vendaRes.data?.id) {
-        throw new Error(vendaRes.error?.message ?? "Falha ao criar venda.");
+        if (vendaRes.error || !vendaRes.data?.id) {
+          throw new Error(vendaRes.error?.message ?? "Falha ao criar venda.");
+        }
       }
 
       // Persist anexos_urls and medida flags into the venda record if present
@@ -513,32 +534,228 @@ function NovaVendaStepperContent() {
 
       const armacaoTipo = armacaoSelecionada?.cor ?? tipoArmacaoSelecionado?.nome ?? null;
 
-      const osRes = await supabase.from("ordens_servico").insert({
-        venda_id: vendaRes.data.id,
-        clinica_id: clinicaId,
-        receita_id: receitaIdFinal,
-        armacao_id: vendaData.armacaoId || null,
-        numero_os: numeroFinal,
-        laboratorio_nome: vendaData.laboratorioNome || null,
-        armacao_modelo: armacaoModelo,
-        armacao_tipo: armacaoTipo,
-        material_lente: lenteSelecionada?.nome ?? null,
-        data_encomenda: vendaData.dataEncomenda || null,
-        previsao_entrega: vendaData.previsaoEntrega || null,
-        status_os: vendaData.statusOS,
-        od_dnp: parseNumeroNullable(vendaData.medidas.od_dnp),
-        oe_dnp: parseNumeroNullable(vendaData.medidas.oe_dnp),
-        co_od: parseNumeroNullable(vendaData.medidas.co_od),
-        co_oe: parseNumeroNullable(vendaData.medidas.co_oe),
-        altura_vertical_od: parseNumeroNullable(vendaData.medidas.altura_vertical_od),
-        altura_vertical_oe: parseNumeroNullable(vendaData.medidas.altura_vertical_oe),
-        armacao_total_mm: parseNumeroNullable(vendaData.medidas.armacao_total_mm),
-        armacao_ponte_pt: parseNumeroNullable(vendaData.medidas.armacao_ponte_pt),
-        escala_usada: vendaData.medidas.escala_usada ?? null,
-        pupilometro_foto_url: vendaData.pupilometroFotoStorageUrl || null,
-      });
+      if (vendaRes.data?.id) {
+        const osRes = await supabase.from("ordens_servico").insert({
+          venda_id: vendaRes.data.id,
+          clinica_id: clinicaId,
+          receita_id: receitaIdFinal,
+          armacao_id: vendaData.armacaoId || null,
+          numero_os: numeroFinal,
+          laboratorio_nome: vendaData.laboratorioNome || null,
+          armacao_modelo: armacaoModelo,
+          armacao_tipo: armacaoTipo,
+          material_lente: lenteSelecionada?.nome ?? null,
+          data_encomenda: vendaData.dataEncomenda || null,
+          previsao_entrega: vendaData.previsaoEntrega || null,
+          status_os: vendaData.statusOS,
+          od_dnp: parseNumeroNullable(vendaData.medidas.od_dnp),
+          oe_dnp: parseNumeroNullable(vendaData.medidas.oe_dnp),
+          co_od: parseNumeroNullable(vendaData.medidas.co_od),
+          co_oe: parseNumeroNullable(vendaData.medidas.co_oe),
+          altura_vertical_od: parseNumeroNullable(vendaData.medidas.altura_vertical_od),
+          altura_vertical_oe: parseNumeroNullable(vendaData.medidas.altura_vertical_oe),
+          armacao_total_mm: parseNumeroNullable(vendaData.medidas.armacao_total_mm),
+          armacao_ponte_pt: parseNumeroNullable(vendaData.medidas.armacao_ponte_pt),
+          escala_usada: vendaData.medidas.escala_usada ?? null,
+          pupilometro_foto_url: vendaData.pupilometroFotoStorageUrl || null,
+        });
 
-      if (osRes.error) throw new Error(osRes.error.message);
+        if (osRes.error) throw new Error(osRes.error.message);
+
+        // Registra entrada imediata no fluxo de caixa quando houver sinal.
+        if (valorEntrada > 0) {
+          const fluxoEntrada = await supabase.from("fluxo_caixa").insert({
+            clinica_id: clinicaId,
+            tipo: "entrada",
+            origem: "entrada_venda_otica",
+            referencia_id: vendaRes.data.id,
+            descricao: `Entrada da venda ${vendaRes.data.id.slice(0, 8)} (${vendaData.financeiro.formaEntrada || "nao informada"})`,
+            valor: valorEntrada,
+            data_movimento: new Date().toISOString().slice(0, 10),
+          });
+          if (fluxoEntrada.error) throw new Error(fluxoEntrada.error.message);
+        }
+
+        const parcelasGeradas = criarParcelasCrediario(valorTotal);
+        const precisaGerarPayment = parcelasGeradas.length > 0;
+        if (precisaGerarPayment) {
+          const paymentTotal = parcelasGeradas.reduce((acc, p) => acc + p.valor, 0);
+          const primeiraData = parcelasGeradas[0]?.vencimento || new Date().toISOString().slice(0, 10);
+          const diaVencimento = Number(primeiraData.slice(8, 10));
+
+          const payRes = await supabase
+            .from("payments")
+            .insert({
+              clinica_id: clinicaId,
+              venda_id: vendaRes.data.id,
+              paciente_id: pacienteIdFinal,
+              metodo: tipoFechamento === "entrada_entrega" ? "saldo_entrega" : "crediario",
+              valor_total: Number(paymentTotal.toFixed(2)),
+              quantidade_parcelas: parcelasGeradas.length,
+              dia_vencimento: Number.isFinite(diaVencimento) ? diaVencimento : null,
+              status: "aberto",
+            })
+            .select("id")
+            .single();
+
+          if (payRes.error || !payRes.data?.id) {
+            throw new Error(payRes.error?.message ?? "Falha ao criar pagamento/parcelas.");
+          }
+
+          const installmentsPayload = parcelasGeradas.map((parcela) => ({
+            payment_id: payRes.data.id,
+            clinica_id: clinicaId,
+            numero_parcela: parcela.numero,
+            valor_parcela: Number(parcela.valor.toFixed(2)),
+            vencimento: parcela.vencimento,
+            status: "pendente",
+          }));
+
+          const instRes = await supabase.from("installments").insert(installmentsPayload);
+          if (instRes.error) throw new Error(instRes.error.message);
+        }
+
+        if (vendaData.armacaoId) {
+          const baixaRes = await supabase.rpc("baixar_estoque", {
+            p_id: vendaData.armacaoId,
+            p_qtd: 1,
+          });
+          if (baixaRes.error) throw new Error(baixaRes.error.message);
+        }
+
+        if (vendaData.armacaoPropria && vendaData.assinatura) {
+          const ipOrigem = await obterIpOrigem();
+          const termoRes = await supabase
+            .from("termos_aceite")
+            .insert({
+              clinica_id: clinicaId,
+              paciente_id: pacienteIdFinal,
+              venda_id: vendaRes.data.id,
+              criado_por: user?.id ?? null,
+              tipo_termo: "Responsabilidade_Armacao",
+              termo_texto: TERMO_ARMACAO_PROPRIA,
+              assinatura_base64: vendaData.assinatura,
+              ip_origem: ipOrigem,
+            })
+            .select("id")
+            .single();
+
+          if (termoRes.error || !termoRes.data?.id) {
+            throw new Error(termoRes.error?.message ?? "Falha ao registrar termo de armacao propria.");
+          }
+
+          const linkTermoRes = await supabase
+            .from("vendas")
+            .update({ termo_responsabilidade_id: termoRes.data.id })
+            .eq("id", vendaRes.data.id);
+
+          if (linkTermoRes.error) throw new Error(linkTermoRes.error.message);
+        }
+
+        const pacienteSelecionado = vendaData.vendaManual
+          ? {
+              nome_completo: vendaData.clienteManualNome,
+              cidade_atendimento: vendaData.clienteManualCidade || null,
+              cpf: vendaData.clienteManualCpf || null,
+            }
+          : pacientes.find((p) => p.id === vendaData.pacienteId);
+
+        const receitaComprovante = vendaData.vendaManual
+          ? {
+              od_esferico: parseNumeroNullable(vendaData.receitaManual.od_esferico),
+              od_cilindrico: parseNumeroNullable(vendaData.receitaManual.od_cilindrico),
+              od_eixo: parseNumeroNullable(vendaData.receitaManual.od_eixo),
+              oe_esferico: parseNumeroNullable(vendaData.receitaManual.oe_esferico),
+              oe_cilindrico: parseNumeroNullable(vendaData.receitaManual.oe_cilindrico),
+              oe_eixo: parseNumeroNullable(vendaData.receitaManual.oe_eixo),
+              adicao: parseNumeroNullable(vendaData.receitaManual.adicao),
+              dp_dnp: vendaData.receitaManual.dp_dnp || null,
+            }
+          : {
+              od_esferico: receitaSelecionada?.od_esferico ?? null,
+              od_cilindrico: receitaSelecionada?.od_cilindrico ?? null,
+              od_eixo: receitaSelecionada?.od_eixo ?? null,
+              oe_esferico: receitaSelecionada?.oe_esferico ?? null,
+              oe_cilindrico: receitaSelecionada?.oe_cilindrico ?? null,
+              oe_eixo: receitaSelecionada?.oe_eixo ?? null,
+              adicao: receitaSelecionada?.adicao ?? null,
+              dp_dnp: receitaSelecionada?.dp_dnp ?? null,
+            };
+
+        const receitaPdf: ComprovanteReceita = {
+          ...receitaComprovante,
+        };
+
+        setComprovante({
+          venda: {
+            valor_total: valorTotal,
+            metodo_pagamento: tipoFechamento === "pendente" ? "Pendente / Negociar" : vendaData.financeiro.metodo,
+          },
+          paciente: {
+            nome_completo: pacienteSelecionado?.nome_completo ?? "Paciente",
+            cidade_atendimento: pacienteSelecionado?.cidade_atendimento ?? null,
+            cpf: pacienteSelecionado?.cpf ?? null,
+          },
+          os: {
+            numero_os: numeroFinal,
+            laboratorio_nome: vendaData.laboratorioNome || null,
+            armacao_modelo: armacaoModelo,
+            armacao_tipo: armacaoTipo,
+            material_lente: lenteSelecionada?.nome ?? null,
+            previsao_entrega: vendaData.previsaoEntrega || null,
+            receita: receitaPdf,
+          },
+          parcelas: criarParcelasCrediario(valorTotal),
+        });
+
+        toast.success("Venda e OS registradas com sucesso.");
+        setStep(4);
+      } else {
+        // offline path: respond to UI with local comprovante and skip server-side operations
+        const pacienteSelecionado = vendaData.vendaManual
+          ? {
+              nome_completo: vendaData.clienteManualNome,
+              cidade_atendimento: vendaData.clienteManualCidade || null,
+              cpf: vendaData.clienteManualCpf || null,
+            }
+          : pacientes.find((p) => p.id === vendaData.pacienteId);
+
+        setComprovante({
+          venda: {
+            valor_total: valorTotal,
+            metodo_pagamento: tipoFechamento === "pendente" ? "Pendente / Negociar" : vendaData.financeiro.metodo,
+          },
+          paciente: {
+            nome_completo: pacienteSelecionado?.nome_completo ?? "Paciente",
+            cidade_atendimento: pacienteSelecionado?.cidade_atendimento ?? null,
+            cpf: pacienteSelecionado?.cpf ?? null,
+          },
+          os: {
+            numero_os: numeroFinal,
+            laboratorio_nome: vendaData.laboratorioNome || null,
+            armacao_modelo: armacaoModelo,
+            armacao_tipo: armacaoTipo,
+            material_lente: lenteSelecionada?.nome ?? null,
+            previsao_entrega: vendaData.previsaoEntrega || null,
+            receita: {
+              ...((vendaData.vendaManual && {
+                od_esferico: parseNumeroNullable(vendaData.receitaManual.od_esferico),
+                od_cilindrico: parseNumeroNullable(vendaData.receitaManual.od_cilindrico),
+                od_eixo: parseNumeroNullable(vendaData.receitaManual.od_eixo),
+                oe_esferico: parseNumeroNullable(vendaData.receitaManual.oe_esferico),
+                oe_cilindrico: parseNumeroNullable(vendaData.receitaManual.oe_cilindrico),
+                oe_eixo: parseNumeroNullable(vendaData.receitaManual.oe_eixo),
+                adicao: parseNumeroNullable(vendaData.receitaManual.adicao),
+                dp_dnp: vendaData.receitaManual.dp_dnp || null,
+              }) || {}),
+            },
+          },
+          parcelas: criarParcelasCrediario(valorTotal),
+        });
+
+        toast.success("Venda salva localmente e será sincronizada quando houver conexão.");
+        setStep(4);
+      }
 
       // Registra entrada imediata no fluxo de caixa quando houver sinal.
       if (valorEntrada > 0) {
@@ -761,6 +978,10 @@ function NovaVendaStepperContent() {
             lentes={lentes}
             tiposArmacao={tiposArmacao}
             armacoesEstoque={armacoesEstoque}
+            onQuickAdd={(tipo) => {
+              setQuickAddTipo(tipo);
+              setQuickAddOpen(true);
+            }}
           />
         )}
 
@@ -807,6 +1028,30 @@ function NovaVendaStepperContent() {
             )}
           </div>
         </section>
+      )}
+
+      {quickAddOpen && (
+        <QuickAddProduto
+          tipo={quickAddTipo}
+          aoFechar={() => setQuickAddOpen(false)}
+          aoFinalizar={(registro: any) => {
+            setQuickAddOpen(false);
+            if (quickAddTipo === "lente") {
+              // normalize fields
+              const novo = {
+                id: registro.id,
+                nome: registro.nome ?? `${registro.fabricante ?? ""} ${registro.modelo ?? ""}`.trim(),
+                preco_base: registro.preco_base ?? registro.preco ?? registro.preco_base ?? 0,
+              } as LenteCatalogo;
+              setLentes((prev) => [novo, ...prev]);
+              setVendaData((prev) => ({ ...prev, lenteId: novo.id }));
+            } else {
+              // adicionar tratamento ao pedido
+              const nomeTrat = registro.nome ?? registro.modelo ?? "Tratamento";
+              setVendaData((prev) => ({ ...prev, tratamentos: [...prev.tratamentos, nomeTrat] }));
+            }
+          }}
+        />
       )}
 
       <footer className="fixed bottom-0 left-0 right-0 p-6 bg-white/80 backdrop-blur-xl border-t border-slate-100 flex justify-between items-center z-50">

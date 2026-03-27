@@ -34,7 +34,9 @@ type Props = {
   onChange: (next: RefracaoValue) => void;
 };
 
-export default function ExameRefracao({ value, onChange }: Props) {
+type ExameProps = Props & { showExtras?: boolean };
+
+export default function ExameRefracao({ value, onChange, showExtras = true }: ExameProps) {
   const [editingAdicao, setEditingAdicao] = useState(false);
 
   function normalizeNumericInput(raw: string) {
@@ -169,126 +171,127 @@ export default function ExameRefracao({ value, onChange }: Props) {
         </div>
       </div>
 
-      {/* CAMPOS ADICIONAIS: flags clinicas / tipo de lente / tratamentos - padrão de botões semelhante a FichaAnamnese */}
-      <div className="mt-6 bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm">
-        <label className="text-sm font-black uppercase text-slate-400 tracking-widest mb-3 block">Dados adicionais</label>
+      {showExtras && (
+        <div className="mt-6 bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm">
+          <label className="text-sm font-black uppercase text-slate-400 tracking-widest mb-3 block">Dados adicionais</label>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <div className="text-xs font-black uppercase text-slate-400 mb-2">Condições</div>
-            <div className="flex flex-wrap gap-3 p-1">
-              {OPCOES_CONDICOES.map((c) => {
-                const chave = c;
-                const ativo = (chave === "Miopia" && !!value.miopia) || (chave === "Astigmatismo" && !!value.astigmatismo) || (chave === "Hipermetropia" && !!value.hipermetropia) || (chave === "Presbiopia" && !!value.presbiopia);
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => {
-                      if (c === "Miopia") onChange({ ...value, miopia: !value.miopia });
-                      if (c === "Astigmatismo") onChange({ ...value, astigmatismo: !value.astigmatismo });
-                      if (c === "Hipermetropia") onChange({ ...value, hipermetropia: !value.hipermetropia });
-                      if (c === "Presbiopia") onChange({ ...value, presbiopia: !value.presbiopia });
-                    }}
-                    className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
-                      ativo
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                        : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
-                    }`}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-black uppercase text-slate-400 mb-2">Tipo de lente</div>
-            <div className="flex flex-wrap gap-3 p-1">
-              {OPCOES_TIPOS_LENTE.map((t) => {
-                const ativo = value.tipoLente === t;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => onChange({ ...value, tipoLente: ativo ? null : t })}
-                    className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
-                      ativo
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                        : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-black uppercase text-slate-400 mb-2">Tratamentos</div>
-            <div className="flex flex-wrap gap-3 p-1">
-              {OPCOES_TRATAMENTOS.map((tr) => {
-                const ativo = (tr === "Anti Reflexo" && !!value.tratamentoAntiReflexo) || (tr === "Fotossensível" && !!value.tratamentoFotossivel);
-                return (
-                  <button
-                    key={tr}
-                    type="button"
-                    onClick={() => {
-                      if (tr === "Anti Reflexo") onChange({ ...value, tratamentoAntiReflexo: !value.tratamentoAntiReflexo });
-                      if (tr === "Fotossensível") onChange({ ...value, tratamentoFotossivel: !value.tratamentoFotossivel });
-                    }}
-                    className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
-                      ativo
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                        : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
-                    }`}
-                  >
-                    {tr}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-black uppercase text-slate-400 mb-2">Retorno</div>
-            <div className="flex flex-wrap gap-3 p-1">
-              {OPCOES_RETORNO.map((r) => {
-                const ativo = r === "Outro" ? !!value.retorno && value.retorno !== "6 meses" && value.retorno !== "1 ano" : value.retorno === r;
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => {
-                      if (r === "Outro") {
-                        onChange({ ...value, retorno: ativo ? "" : "" });
-                        return;
-                      }
-                      onChange({ ...value, retorno: value.retorno === r ? "" : r });
-                    }}
-                    className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
-                      ativo
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                        : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                );
-              })}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <div className="text-xs font-black uppercase text-slate-400 mb-2">Condições</div>
+              <div className="flex flex-wrap gap-3 p-1">
+                {OPCOES_CONDICOES.map((c) => {
+                  const chave = c;
+                  const ativo = (chave === "Miopia" && !!value.miopia) || (chave === "Astigmatismo" && !!value.astigmatismo) || (chave === "Hipermetropia" && !!value.hipermetropia) || (chave === "Presbiopia" && !!value.presbiopia);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        if (c === "Miopia") onChange({ ...value, miopia: !value.miopia });
+                        if (c === "Astigmatismo") onChange({ ...value, astigmatismo: !value.astigmatismo });
+                        if (c === "Hipermetropia") onChange({ ...value, hipermetropia: !value.hipermetropia });
+                        if (c === "Presbiopia") onChange({ ...value, presbiopia: !value.presbiopia });
+                      }}
+                      className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
+                        ativo
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
+                          : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <input
-              value={value.retorno && value.retorno !== "6 meses" && value.retorno !== "1 ano" ? value.retorno : ""}
-              onChange={(e) => onChange({ ...value, retorno: e.target.value })}
-              className="mt-3 w-full rounded-2xl border-none bg-slate-50 p-3 text-sm font-bold text-slate-700 shadow-inner focus:ring-2 focus:ring-blue-500"
-              placeholder="Ex: 9 meses / Retorno em 30 dias"
-            />
+            <div>
+              <div className="text-xs font-black uppercase text-slate-400 mb-2">Tipo de lente</div>
+              <div className="flex flex-wrap gap-3 p-1">
+                {OPCOES_TIPOS_LENTE.map((t) => {
+                  const ativo = value.tipoLente === t;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => onChange({ ...value, tipoLente: ativo ? null : t })}
+                      className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
+                        ativo
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
+                          : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-black uppercase text-slate-400 mb-2">Tratamentos</div>
+              <div className="flex flex-wrap gap-3 p-1">
+                {OPCOES_TRATAMENTOS.map((tr) => {
+                  const ativo = (tr === "Anti Reflexo" && !!value.tratamentoAntiReflexo) || (tr === "Fotossível" && !!value.tratamentoFotossivel);
+                  return (
+                    <button
+                      key={tr}
+                      type="button"
+                      onClick={() => {
+                        if (tr === "Anti Reflexo") onChange({ ...value, tratamentoAntiReflexo: !value.tratamentoAntiReflexo });
+                        if (tr === "Fotossível") onChange({ ...value, tratamentoFotossivel: !value.tratamentoFotossivel });
+                      }}
+                      className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
+                        ativo
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
+                          : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
+                      }`}
+                    >
+                      {tr}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-xs font-black uppercase text-slate-400 mb-2">Retorno</div>
+              <div className="flex flex-wrap gap-3 p-1">
+                {OPCOES_RETORNO.map((r) => {
+                  const ativo = r === "Outro" ? !!value.retorno && value.retorno !== "6 meses" && value.retorno !== "1 ano" : value.retorno === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        if (r === "Outro") {
+                          onChange({ ...value, retorno: ativo ? "" : "" });
+                          return;
+                        }
+                        onChange({ ...value, retorno: value.retorno === r ? "" : r });
+                      }}
+                      className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
+                        ativo
+                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
+                          : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <input
+                value={value.retorno && value.retorno !== "6 meses" && value.retorno !== "1 ano" ? value.retorno : ""}
+                onChange={(e) => onChange({ ...value, retorno: e.target.value })}
+                className="mt-3 w-full rounded-2xl border-none bg-slate-50 p-3 text-sm font-bold text-slate-700 shadow-inner focus:ring-2 focus:ring-blue-500"
+                placeholder="Ex: 9 meses / Retorno em 30 dias"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

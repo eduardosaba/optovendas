@@ -15,7 +15,7 @@ export const FocusContext = createContext<FocusContextType>({
 });
 
 export function FocusProvider({ children, focusRef }: { children: React.ReactNode; focusRef?: React.RefObject<HTMLElement | null> }) {
-  const [isFocusMode, setIsFocusMode] = useState(true);
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   const forceLightUi = useCallback(() => {
     try {

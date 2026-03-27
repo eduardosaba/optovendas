@@ -6,6 +6,8 @@ import FichaAnamnese from "@/components/consultorio/FichaAnamnese";
 import ExameRefracao, { type RefracaoValue } from "@/components/consultorio/ExameRefracao";
 import HistoricoEvolucao from "@/components/consultorio/HistoricoEvolucao";
 import ReceitaPdf from "@/components/consultorio/ReceitaPdf";
+import ReceitaPreview from "@/components/consultorio/ReceitaPreview";
+import Modal from '@/components/ui/Modal';
 import { fmtNumber, fmtEixo, v } from "@/lib/refracaoFormat";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { supabase } from "@/lib/supabase";
@@ -13,6 +15,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { useConfig } from "@/context/ConfigContext";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import SelectLocalidade from "@/components/otica/SelectLocalidade";
 
 type PacienteOption = {
   id: string;
@@ -523,10 +526,64 @@ export default function NovoAtendimentoPage() {
         {etapa === 1 && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
             <div className="p-8 bg-slate-50 rounded-[32px] border border-slate-100 space-y-4">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-blue-600 text-2xl">👤</span>
-                <label className="text-sm font-black text-slate-800 uppercase tracking-widest">Selecionar Paciente</label>
-              </div>
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-blue-600 text-2xl">👤</span>
+                  <label className="text-sm font-black text-slate-800 uppercase tracking-widest">Selecionar Paciente</label>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 mb-3 md:grid-cols-3">
+                  <div className="md:col-span-1">
+                    <div className="text-[10px] font-black uppercase text-slate-400 mb-2">Tipo de Atendimento</div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTipoAtendimento("interno")}
+                        className={`flex-1 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-wider ${
+                          tipoAtendimento === "interno" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        Interno
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTipoAtendimento("externo")}
+                        className={`flex-1 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-wider ${
+                          tipoAtendimento === "externo" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+                        }`}
+                      >
+                        Externo
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-1">
+                    <SelectLocalidade valor={localidadeAtendimento} aoMudar={(v) => setLocalidadeAtendimento(v)} />
+                  </div>
+
+                  <div className="md:col-span-1">
+                    <div className="text-[10px] font-black uppercase text-slate-400 mb-2">Cobrança</div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setModeloCobranca("gratuito")}
+                        className={`flex-1 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-wider ${
+                          modeloCobranca === "gratuito" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"
+                        }`}
+                      >
+                        Gratuito
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModeloCobranca("pago")}
+                        className={`flex-1 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-wider ${
+                          modeloCobranca === "pago" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"
+                        }`}
+                      >
+                        Pago
+                      </button>
+                    </div>
+                  </div>
+                </div>
               <div className="relative">
                 <input
                   type="text"
@@ -589,93 +646,7 @@ export default function NovoAtendimentoPage() {
 
             <FichaAnamnese value={anamnese} onChange={setAnamnese} />
 
-            <section className="bg-white p-6 rounded-[28px] border border-slate-100 space-y-4">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Modelo de Atendimento</h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setTipoAtendimento("interno")}
-                  className={`rounded-2xl px-4 py-3 text-left text-xs font-black uppercase tracking-wider ${
-                    tipoAtendimento === "interno" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  Atendimento Interno
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTipoAtendimento("externo")}
-                  className={`rounded-2xl px-4 py-3 text-left text-xs font-black uppercase tracking-wider ${
-                    tipoAtendimento === "externo" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  Atendimento Externo
-                </button>
-              </div>
-
-              {tipoAtendimento === "externo" && (
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Localidade (cidade)</label>
-                  <input
-                    value={localidadeAtendimento}
-                    onChange={(e) => setLocalidadeAtendimento(e.target.value)}
-                    placeholder="Ex: Serrinha"
-                    className="w-full rounded-2xl border-none bg-slate-50 p-4 font-bold text-slate-700"
-                  />
-                </div>
-              )}
-
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 space-y-3">
-                <p className="text-xs font-black uppercase tracking-wider text-emerald-700">Cobranca da Consulta</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setModeloCobranca("gratuito")}
-                    className={`rounded-2xl px-4 py-3 text-left text-xs font-black uppercase tracking-wider ${
-                      modeloCobranca === "gratuito" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"
-                    }`}
-                  >
-                    Gratuito (social)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModeloCobranca("pago")}
-                    className={`rounded-2xl px-4 py-3 text-left text-xs font-black uppercase tracking-wider ${
-                      modeloCobranca === "pago" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"
-                    }`}
-                  >
-                    Pago (particular)
-                  </button>
-                </div>
-
-                {modeloCobranca === "pago" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Valor da consulta</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={valorConsulta}
-                        onChange={(e) => setValorConsulta(e.target.value)}
-                        className="mt-1 w-full rounded-xl border-none bg-white p-3 font-bold text-slate-700"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Forma de pagamento</label>
-                      <select
-                        value={formaPagamento}
-                        onChange={(e) => setFormaPagamento(e.target.value)}
-                        className="mt-1 w-full rounded-xl border-none bg-white p-3 font-bold text-slate-700"
-                      >
-                        <option value="pix">PIX</option>
-                        <option value="dinheiro">Dinheiro</option>
-                        <option value="cartao">Cartao</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
+            {/* Modelo de Atendimento e seleção de cidade foram movidos para acima do cliente para forçar escolha antes do paciente */}
           </div>
         )}
 
@@ -756,10 +727,10 @@ export default function NovoAtendimentoPage() {
 
               <button
                 type="button"
-                onClick={() => setShowPreviewReceita((v) => !v)}
+                onClick={() => setShowPreviewReceita(true)}
                 className="w-full bg-slate-50 border border-slate-200 text-slate-800 py-4 rounded-[24px] font-black text-lg hover:bg-slate-100 transition-all"
               >
-                {showPreviewReceita ? "Fechar Visualização" : "Visualizar Receita"}
+                Visualizar Receita
               </button>
 
               {pacienteCriadoId && (
@@ -797,92 +768,24 @@ export default function NovoAtendimentoPage() {
                 </div>
               </div>
             </div>
-            {showPreviewReceita && (
-              <div className="mt-8 max-w-3xl mx-auto bg-white p-6 rounded-[16px] border border-slate-100 shadow-sm">
-                <div className="text-center mb-4">
-                  <div className="text-sm font-black text-slate-600">{clinicaNome}</div>
-                  <div className="text-xs text-slate-500">{/* telefone/cnpj podem ser adicionados */}</div>
-                </div>
-
-                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
-                  <div>
-                    <span className="font-black text-slate-800">Nome Completo: </span>
-                    {v(pacienteNomeExibicao)}
-                  </div>
-                  <div>
-                    <span className="font-black text-slate-800">Idade: </span>
-                    {v(idadePaciente)}
-                  </div>
-                  <div>
-                    <span className="font-black text-slate-800">Data da consulta: </span>
-                    {new Date().toLocaleDateString("pt-BR")}
-                  </div>
-                </div>
-
-                <h3 className="text-center text-lg font-black uppercase mb-4">Prescrição de Óculos</h3>
-
-                <div className="max-w-xl mx-auto">
-                  <table className="w-full text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100">
-                        <th className="p-2 text-left">Olho</th>
-                        <th className="p-2 text-center">Esférico</th>
-                        <th className="p-2 text-center">Cilíndrico</th>
-                        <th className="p-2 text-center">Eixo</th>
-                        <th className="p-2 text-center">AV</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-t">
-                        <td className="p-2 font-bold">Direito (OD)</td>
-                        <td className="p-2 text-center">{fmtNumber(refracao.odEsferico)}</td>
-                        <td className="p-2 text-center">{fmtNumber(refracao.odCilindrico)}</td>
-                        <td className="p-2 text-center">{fmtEixo(refracao.odEixo)}</td>
-                        <td className="p-2 text-center">{v(refracao.odAv)}</td>
-                      </tr>
-                      <tr className="border-t">
-                        <td className="p-2 font-bold">Esquerdo (OE)</td>
-                        <td className="p-2 text-center">{fmtNumber(refracao.oeEsferico)}</td>
-                        <td className="p-2 text-center">{fmtNumber(refracao.oeCilindrico)}</td>
-                        <td className="p-2 text-center">{fmtEixo(refracao.oeEixo)}</td>
-                        <td className="p-2 text-center">{v(refracao.oeAv)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-
-                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="bg-slate-50 p-3 rounded-md">Adição<br/><span className="font-black">{fmtNumber(refracao.adicao)}</span></div>
-                    <div className="bg-slate-50 p-3 rounded-md">Condições visuais<br/><span className="font-black">{v([refracao.miopia ? "Miopia" : null, refracao.astigmatismo ? "Astigmatismo" : null, refracao.hipermetropia ? "Hipermetropia" : null, refracao.presbiopia ? "Presbiopia" : null].filter(Boolean).join(" • "))}</span></div>
-                    <div className="bg-slate-50 p-3 rounded-md">Retorno<br/><span className="font-black">{v((refracao as any).retorno)}</span></div>
-                    <div className="bg-slate-50 p-3 rounded-md">Tipo de lente<br/><span className="font-black">{v(refracao.tipoLente)}</span></div>
-                    <div className="bg-slate-50 p-3 rounded-md">Tratamento<br/>
-                      <span className="font-black">
-                        {[refracao.tratamentoAntiReflexo ? "Anti Reflexo" : null, refracao.tratamentoFotossivel ? "Fotossensível" : null].filter(Boolean).join(" • ") || "-"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 text-center text-sm text-slate-600 italic">{notaRodapeReceita}</div>
-
-                  <div className="mt-6 flex flex-col items-center">
-                    {!configUnidade?.carimbo_nome ? (
-                      <>
-                        <div className="w-48 border-t mt-8" />
-                        <div className="text-sm font-black uppercase mt-2">Assinatura do Profissional</div>
-                        <div className="text-[10px] text-slate-400 italic font-bold uppercase tracking-widest">{profissionalNome || "Profissional"}</div>
-                      </>
-                    ) : (
-                      <div className="text-center mt-4">
-                        <div className="inline-block rounded-full border-2 border-rose-600 px-6 py-4 text-rose-700 font-black text-sm transform -rotate-3 shadow-sm bg-rose-50">
-                          <div className="uppercase">{configUnidade.carimbo_nome}</div>
-                          <div className="text-xs mt-1">{configUnidade.carimbo_titulo} • {configUnidade.carimbo_registro}</div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
+            <Modal open={showPreviewReceita} onClose={() => setShowPreviewReceita(false)} title="Visualizar Receita">
+              <ReceitaPreview
+                dados={{
+                  ...refracao,
+                  paciente_nome: pacienteNomeExibicao || null,
+                  idade_paciente: idadePaciente || null,
+                  data_exame: new Date().toISOString().slice(0, 10),
+                  nota_rodape: notaRodapeReceita,
+                }}
+                clinica={{
+                  nome_fantasia: clinicaNome,
+                  logomarca_url: logomarcaUrl,
+                  cor_primaria: corPrimaria,
+                  endereco_completo: configUnidade?.endereco_completo || null,
+                  config_unidade: configUnidade,
+                }}
+              />
+            </Modal>
           </div>
         )}
       </div>

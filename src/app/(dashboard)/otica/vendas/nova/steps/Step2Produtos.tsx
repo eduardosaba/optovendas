@@ -1,11 +1,14 @@
 "use client";
 
+import React, { useEffect, useState } from "react";
 import type {
   ArmacaoEstoque,
   LenteCatalogo,
   TipoArmacaoCatalogo,
   VendaData,
 } from "./types";
+import { supabase } from "@/lib/supabase";
+import { useToast } from '@/components/ui/ToastProvider';
 
 type Props = {
   data: VendaData;
@@ -13,11 +16,44 @@ type Props = {
   tiposArmacao: TipoArmacaoCatalogo[];
   armacoesEstoque: ArmacaoEstoque[];
   onChange: (next: VendaData) => void;
+  onQuickAdd?: (tipo: "lente" | "tratamento") => void;
 };
 
-const TRATAMENTOS_FIXOS = ["Antirreflexo", "Blue Light", "Transitions", "Fotossensivel"];
+type Tratamento = {
+  id: string;
+  nome: string;
+  preco?: number | null;
+  ativo?: boolean;
+};
 
-export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEstoque, onChange }: Props) {
+export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEstoque, onChange, onQuickAdd }: Props) {
+  const [tratamentos, setTratamentos] = useState<Tratamento[]>([]);
+  const toast = useToast();
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const user = (await supabase.auth.getUser()).data.user;
+        if (!user) {
+          setTratamentos([]);
+          return;
+        }
+        const prof = await supabase.from('profiles').select('clinica_id').eq('id', user.id).maybeSingle();
+        const clinicaId = prof?.data?.clinica_id ?? null;
+        const q = clinicaId
+          ? await supabase.from('clinica_tratamentos').select('*').eq('clinica_id', clinicaId).order('nome', { ascending: true })
+          : await supabase.from('clinica_tratamentos').select('*').eq('ativo', true).order('nome', { ascending: true });
+        if (mounted) setTratamentos(q.data ?? []);
+      } catch (e) {
+        console.error('failed load tratamentos', e);
+        toast?.error?.('Falha ao carregar tratamentos');
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, []);
+
   const toggleTratamento = (nome: string) => {
     const existe = data.tratamentos.includes(nome);
     onChange({
@@ -38,13 +74,21 @@ export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEsto
           <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Tipo de Lente</label>
           <select
             value={data.lenteId}
-            onChange={(e) => onChange({ ...data, lenteId: e.target.value })}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === "novo") {
+                onQuickAdd?.("lente");
+                return;
+              }
+              onChange({ ...data, lenteId: val });
+            }}
             className="w-full bg-slate-50 rounded-2xl border-none p-4 font-bold"
           >
             <option value="">Selecione no catálogo...</option>
             {lentes.map((l) => (
               <option key={l.id} value={l.id}>{l.nome} - R$ {Number(l.preco_base).toFixed(2)}</option>
             ))}
+            <option value="novo" className="text-cyan-600 font-bold">+ Cadastrar Nova Lente...</option>
           </select>
         </div>
 
@@ -133,21 +177,25 @@ export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEsto
       <div className="space-y-2">
         <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Tratamentos adicionais</label>
         <div className="flex flex-wrap gap-2">
-          {TRATAMENTOS_FIXOS.map((t) => {
-            const ativo = data.tratamentos.includes(t);
-            return (
-              <button
-                key={t}
-                type="button"
-                onClick={() => toggleTratamento(t)}
-                className={`px-4 py-2 rounded-2xl text-xs font-black transition-all ${
-                  ativo ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {t}
-              </button>
-            );
-          })}
+          {tratamentos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum tratamento cadastrado.</p>
+          ) : (
+            tratamentos.map((t) => {
+              const ativo = data.tratamentos.includes(t.nome);
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => toggleTratamento(t.nome)}
+                  className={`px-4 py-2 rounded-2xl text-xs font-black transition-all ${
+                    ativo ? "bg-cyan-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {t.nome}
+                </button>
+              );
+            })
+          )}
         </div>
       </div>
     </section>

@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle, Eye, FileText, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { AlertTriangle, Eye, FileText } from "lucide-react";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import ReceitaPdf from "@/components/consultorio/ReceitaPdf";
+import Modal from '@/components/ui/Modal';
+import ReceitaPreview from '@/components/consultorio/ReceitaPreview';
+import ExameRefracao from '@/components/consultorio/ExameRefracao';
+import { resolveClinicaContext } from '@/lib/clinica';
+import { supabase } from '@/lib/supabase';
 import type { PacienteOption, ReceitaOptometrica, VendaData } from "./types";
 
 type Props = {
@@ -26,13 +31,35 @@ function toRefracaoValue(r: ReceitaOptometrica | null | undefined) {
     odEixo: r.od_eixo ?? null,
     oeEixo: r.oe_eixo ?? null,
     adicao: r.adicao ?? null,
-    dp_dnp: r.dp_dnp ?? null,
+      dp_dnp: r.dp_dnp ?? null,
   } as any;
 }
 
 export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, onChange }: Props) {
   const receitaSelecionada = receitas.find((r) => r.id === data.receitaId) ?? null;
   const [previewReceita, setPreviewReceita] = useState<ReceitaOptometrica | null>(null);
+  const [clinicaHeader, setClinicaHeader] = useState<any | null>(null);
+
+  // load otica/clinica branding when preview opens
+  useEffect(() => {
+    let mounted = true;
+    async function loadBranding() {
+      if (!previewReceita) return;
+      try {
+        const ctx = await resolveClinicaContext();
+        const [cliRes, cfgRes] = await Promise.all([
+          supabase.from('clinicas').select('nome_fantasia, logomarca_url').eq('id', ctx.clinicaId).maybeSingle(),
+          supabase.from('config_unidade').select('endereco_completo, modelo_timbrado, carimbo_nome, carimbo_titulo, carimbo_registro').eq('clinica_id', ctx.clinicaId).maybeSingle(),
+        ]);
+        if (!mounted) return;
+        setClinicaHeader({ ...(cliRes.data || {}), config_unidade: cfgRes.data || {} });
+      } catch (e) {
+        console.warn('failed loading clinica branding', e);
+      }
+    }
+    void loadBranding();
+    return () => { mounted = false; };
+  }, [previewReceita]);
 
   function atualizarReceitaManual(campo: keyof VendaData["receitaManual"], valor: string) {
     onChange({
@@ -40,6 +67,39 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
       receitaManual: {
         ...data.receitaManual,
         [campo]: valor,
+      },
+    });
+  }
+
+  function receitaManualToRefracao() {
+    const r = data.receitaManual || ({} as any);
+    return {
+      odEsferico: r.od_esferico ?? "",
+      odCilindrico: r.od_cilindrico ?? "",
+      odEixo: r.od_eixo ?? "",
+      odAv: (r as any).od_av ?? "",
+      oeEsferico: r.oe_esferico ?? "",
+      oeCilindrico: r.oe_cilindrico ?? "",
+      oeEixo: r.oe_eixo ?? "",
+      oeAv: (r as any).oe_av ?? "",
+      adicao: r.adicao ?? "",
+      dpDnp: r.dp_dnp ?? "",
+    } as any;
+  }
+
+  function atualizarReceitaFromRefracao(next: any) {
+    onChange({
+      ...data,
+      receitaManual: {
+        ...data.receitaManual,
+        od_esferico: next.odEsferico ?? "",
+        od_cilindrico: next.odCilindrico ?? "",
+        od_eixo: next.odEixo ?? "",
+        oe_esferico: next.oeEsferico ?? "",
+        oe_cilindrico: next.oeCilindrico ?? "",
+        oe_eixo: next.oeEixo ?? "",
+        adicao: next.adicao ?? "",
+        dp_dnp: next.dpDnp ?? "",
       },
     });
   }
@@ -193,24 +253,48 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
             </div>
 
             <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Receita Manual</p>
-              <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3">
-                <CampoReceita
-                  label="Data"
-                  value={data.receitaManual.data_exame}
-                  onChange={(v) => atualizarReceitaManual("data_exame", v)}
-                  type="date"
-                />
-                <CampoReceita label="OD Esf" value={data.receitaManual.od_esferico} onChange={(v) => atualizarReceitaManual("od_esferico", v)} />
-                <CampoReceita label="OD Cil" value={data.receitaManual.od_cilindrico} onChange={(v) => atualizarReceitaManual("od_cilindrico", v)} />
-                <CampoReceita label="OD Eixo" value={data.receitaManual.od_eixo} onChange={(v) => atualizarReceitaManual("od_eixo", v)} />
-                <CampoReceita label="OE Esf" value={data.receitaManual.oe_esferico} onChange={(v) => atualizarReceitaManual("oe_esferico", v)} />
-                <CampoReceita label="OE Cil" value={data.receitaManual.oe_cilindrico} onChange={(v) => atualizarReceitaManual("oe_cilindrico", v)} />
-                <CampoReceita label="OE Eixo" value={data.receitaManual.oe_eixo} onChange={(v) => atualizarReceitaManual("oe_eixo", v)} />
-                <CampoReceita label="Adicao" value={data.receitaManual.adicao} onChange={(v) => atualizarReceitaManual("adicao", v)} />
-                <div className="md:col-span-2">
-                  <CampoReceita label="DP/DNP" value={data.receitaManual.dp_dnp} onChange={(v) => atualizarReceitaManual("dp_dnp", v)} />
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Receita Manual</p>
+                  <p className="text-sm text-slate-500">Preencha os valores abaixo (formato semelhante ao consultório)</p>
                 </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                      onClick={() => {
+                      const manual = data.receitaManual || ({} as any);
+                      setPreviewReceita({
+                        id: 'manual',
+                        data_exame: manual.data_exame || null,
+                        od_esferico: manual.od_esferico ? Number(manual.od_esferico) : null,
+                        oe_esferico: manual.oe_esferico ? Number(manual.oe_esferico) : null,
+                        od_cilindrico: manual.od_cilindrico ? Number(manual.od_cilindrico) : null,
+                        oe_cilindrico: manual.oe_cilindrico ? Number(manual.oe_cilindrico) : null,
+                        od_eixo: manual.od_eixo ? Number(manual.od_eixo) : null,
+                        oe_eixo: manual.oe_eixo ? Number(manual.oe_eixo) : null,
+                        adicao: manual.adicao ? Number(manual.adicao) : null,
+                        dp_dnp: manual.dp_dnp || null,
+                      });
+                    }}
+                    className="px-3 py-2 rounded-xl border border-slate-200 text-slate-600 text-[11px] font-black uppercase tracking-wider hover:bg-slate-50 inline-flex items-center gap-1"
+                  >
+                    <Eye size={14} /> Visualizar
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-3">
+                  <label className="text-[9px] font-black uppercase text-slate-400">Data do Exame</label>
+                  <input
+                    type="date"
+                    value={data.receitaManual.data_exame}
+                    onChange={(e) => atualizarReceitaManual('data_exame', e.target.value)}
+                    className="mt-1 w-40 rounded-xl border-none bg-white p-3 text-sm font-bold text-slate-700"
+                  />
+                </div>
+
+                <ExameRefracao value={receitaManualToRefracao()} onChange={atualizarReceitaFromRefracao} showExtras={false} />
               </div>
             </div>
           </div>
@@ -234,32 +318,20 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
       </section>
 
       {previewReceita && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-3xl border border-slate-100 bg-white p-6 shadow-xl">
-            <div className="mb-5 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-600">Pré-visualização</p>
-                <h3 className="text-xl font-black text-slate-900">Receita Optométrica</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewReceita(null)}
-                className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
-              >
-                <X size={16} />
-              </button>
+        <Modal open={!!previewReceita} onClose={() => setPreviewReceita(null)} title="Receita Optométrica">
+          <div>
+            <div className="mb-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-600">Pré-visualização</p>
+              <h3 className="text-xl font-black text-slate-900">Receita Optométrica</h3>
             </div>
-
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <InfoReceita label="Data" value={previewReceita.data_exame ? new Date(previewReceita.data_exame).toLocaleDateString() : "--"} />
-              <InfoReceita label="OD Esf" value={String(previewReceita.od_esferico ?? "--")} />
-              <InfoReceita label="OD Cil" value={String(previewReceita.od_cilindrico ?? "--")} />
-              <InfoReceita label="OD Eixo" value={String(previewReceita.od_eixo ?? "--")} />
-              <InfoReceita label="OE Esf" value={String(previewReceita.oe_esferico ?? "--")} />
-              <InfoReceita label="OE Cil" value={String(previewReceita.oe_cilindrico ?? "--")} />
-              <InfoReceita label="OE Eixo" value={String(previewReceita.oe_eixo ?? "--")} />
-              <InfoReceita label="Adição" value={String(previewReceita.adicao ?? "--")} />
-            </div>
+            <ReceitaPreview
+              dados={{
+                ...previewReceita,
+                paciente_nome: data.pacienteId ? pacienteNome : data.clienteManualNome || null,
+                data_exame: previewReceita.data_exame || null,
+              }}
+              clinica={clinicaHeader || { nome_fantasia: 'Ótica' }}
+            />
 
             <div className="mt-6 flex justify-end gap-2">
               <button
@@ -272,6 +344,10 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
               <button
                 type="button"
                 onClick={() => {
+                  if (previewReceita.id === 'manual') {
+                    setPreviewReceita(null);
+                    return;
+                  }
                   onChange({ ...data, receitaId: previewReceita.id });
                   setPreviewReceita(null);
                 }}
@@ -281,7 +357,7 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </>
   );

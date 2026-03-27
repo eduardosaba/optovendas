@@ -69,6 +69,7 @@ export type FinanceiroData = {
   formaEntrada?: string;
   saldoRestante?: number;
   statusFinanceiro?: "pago" | "pago_parcial" | "pendente";
+  formaSaldo?: string;
 };
 
 export type ReceitaManualData = {

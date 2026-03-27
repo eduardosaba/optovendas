@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "powershell -ExecutionPolicy Bypass -Command \"next dev\"",
+    "build": "powershell -ExecutionPolicy Bypass -Command \"next build\"",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
+    "typecheck": "powershell -ExecutionPolicy Bypass -Command \"tsc -p tsconfig.typecheck.json --noEmit\"",
+    "install": "powershell -ExecutionPolicy Bypass -Command \"pnpm install\"",
     "bootstrap:master": "node scripts/bootstrap-master.mjs"
   },
   "dependencies": {
@@ -23,6 +24,8 @@
     "react-number-format": "^5.4.4",
     "react-signature-canvas": "1.1.0-alpha.2",
     "xlsx": "^0.18.5"
+    ,
+    "dexie": "^3.2.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
