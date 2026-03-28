@@ -161,6 +161,21 @@ function PacienteCard({ paciente }: { paciente: any }) {
           Ver Ficha <ArrowRight size={14} />
         </Link>
       </div>
+      {/* Mobile actions: tornar Ver/Editar acessíveis sem hover */}
+      <div className="mt-4 flex gap-2 md:hidden">
+        <Link
+          href={`/consultorio/pacientes/${toPacienteSlug(paciente.nome_completo || "paciente")}`}
+          className="flex-1 text-center bg-slate-50 text-slate-700 py-3 rounded-2xl font-bold"
+        >
+          Ver Ficha
+        </Link>
+        <Link
+          href={`/consultorio/pacientes/novo?pacienteId=${paciente.id}`}
+          className="flex-1 text-center bg-blue-600 text-white py-3 rounded-2xl font-black"
+        >
+          Editar
+        </Link>
+      </div>
     </div>
   );
 }

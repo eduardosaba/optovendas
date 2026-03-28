@@ -12,7 +12,7 @@ export default function ReceitaPreview({ dados, clinica }: { dados: Dados; clini
   const idade = dados.idade_paciente || null;
   const data = dados.data_exame || new Date().toISOString().slice(0,10);
 
-  const tratamentos = [dados.tratamento_lente, dados.tratamento_antirreflexo ? 'Anti Reflexo' : null, dados.tratamento_fotossivel ? 'Fotossensível' : null].filter(Boolean).join(' • ');
+  const tratamentos = [dados.tratamento_lente, dados.tratamento_antirreflexo ? 'Anti Reflexo' : null, dados.tratamento_fotossensivel ? 'Fotossensível' : null].filter(Boolean).join(' • ');
 
   return (
     <div className="mx-auto max-w-3xl bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">

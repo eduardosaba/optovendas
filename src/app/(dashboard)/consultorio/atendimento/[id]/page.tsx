@@ -190,7 +190,7 @@ export default function PaginaAtendimento() {
             presbiopia: lastReceita.presbiopia ?? false,
             tipoLente: lastReceita.tipo_lente ?? null,
             tratamentoAntiReflexo: lastReceita.tratamento_antirreflexo ?? false,
-            tratamentoFotossivel: lastReceita.tratamento_fotossivel ?? false,
+            tratamentoFotossivel: lastReceita.tratamento_fotossensivel ?? false,
             retorno: lastReceita.retorno ?? "",
           });
         }
@@ -270,7 +270,7 @@ export default function PaginaAtendimento() {
         presbiopia: refracao.presbiopia ?? false,
         tipo_lente: refracao.tipoLente || null,
         tratamento_antirreflexo: refracao.tratamentoAntiReflexo ?? false,
-        tratamento_fotossivel: refracao.tratamentoFotossivel ?? false,
+        tratamento_fotossensivel: refracao.tratamentoFotossivel ?? false,
         retorno: (refracao as any).retorno || null,
         nota_rodape: notaRodapeReceita,
       };
@@ -279,7 +279,7 @@ export default function PaginaAtendimento() {
         .from("receitas_optometricas")
         .insert(payload)
         .select(
-          "od_esferico, od_cilindrico, od_eixo, od_av, oe_esferico, oe_cilindrico, oe_eixo, oe_av, adicao, dp_dnp, miopia, astigmatismo, hipermetropia, presbiopia, tipo_lente, tratamento_antirreflexo, tratamento_fotossivel, nota_rodape, retorno"
+          "od_esferico, od_cilindrico, od_eixo, od_av, oe_esferico, oe_cilindrico, oe_eixo, oe_av, adicao, dp_dnp, miopia, astigmatismo, hipermetropia, presbiopia, tipo_lente, tratamento_antirreflexo, tratamento_fotossensivel, nota_rodape, retorno"
         )
         .single();
 

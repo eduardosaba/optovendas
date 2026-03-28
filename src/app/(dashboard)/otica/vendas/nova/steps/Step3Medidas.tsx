@@ -455,6 +455,219 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     data,
   ]);
 
+  // Upload annotated image (with markers) when measurements or image change.
+  const lastAnnotatedKeyRef = useRef<string | null>(null);
+
+  async function generateAnnotatedBlob(): Promise<Blob | null> {
+    if (!image || !imageNatural.width || !sceneRect.width) return null;
+
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = image;
+      i.crossOrigin = 'anonymous';
+    });
+
+    const cw = img.naturalWidth || imageNatural.width;
+    const ch = img.naturalHeight || imageNatural.height;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Draw original image as background
+    ctx.drawImage(img, 0, 0, cw, ch);
+
+    const scaleX = cw / Math.max(1, sceneRect.width);
+    const scaleY = ch / Math.max(1, sceneRect.height);
+    const avgScale = (scaleX + scaleY) / 2;
+
+    const toNatural = (p: MarkerPoint | null) => (p ? { x: p.x * scaleX, y: p.y * scaleY } : null);
+
+    try {
+      ctx.lineWidth = Math.max(2, Math.round(2 * avgScale));
+      ctx.textBaseline = 'top';
+
+      const drawMarkerWithText = (p: MarkerPoint | null, label: string, color: string, value: string | number | undefined | null) => {
+        if (!p) return;
+        const nx = p.x * scaleX;
+        const ny = p.y * scaleY;
+
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+
+        // cross
+        ctx.beginPath();
+        ctx.moveTo(nx - 15 * avgScale, ny);
+        ctx.lineTo(nx + 15 * avgScale, ny);
+        ctx.moveTo(nx, ny - 15 * avgScale);
+        ctx.lineTo(nx, ny + 15 * avgScale);
+        ctx.stroke();
+
+        // text background
+        const text = `${label}: ${value ?? ''}mm`;
+        const fontSize = Math.max(12, Math.round(14 * avgScale));
+        ctx.font = `bold ${fontSize}px sans-serif`;
+        const metrics = ctx.measureText(text);
+        const padding = 8 * (avgScale / 2);
+        const rectW = metrics.width + padding * 2;
+        const rectH = fontSize + padding;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(nx + 10 * avgScale, ny - rectH - 6 * avgScale, rectW, rectH);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(text, nx + 10 * avgScale + padding, ny - rectH - 6 * avgScale + padding / 2);
+      };
+
+      // Draw axis rulers crossing at each pupil center (high contrast)
+      const drawAxis = (p: MarkerPoint | null) => {
+        if (!p) return;
+        const cx = p.x * scaleX;
+        const cy = p.y * scaleY;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+        ctx.lineWidth = Math.max(1, Math.round(1 * avgScale));
+        ctx.setLineDash([6 * avgScale, 4 * avgScale]);
+        // horizontal full width
+        ctx.beginPath();
+        ctx.moveTo(0, cy);
+        ctx.lineTo(cw, cy);
+        ctx.stroke();
+        // vertical full height
+        ctx.beginPath();
+        ctx.moveTo(cx, 0);
+        ctx.lineTo(cx, ch);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      };
+
+      // Draw pupilas (DNP)
+      drawMarkerWithText(pupilaDir, 'DNP OD', '#06b6d4', data.medidas.od_dnp);
+      drawMarkerWithText(pupilaEsq, 'DNP OE', '#06b6d4', data.medidas.oe_dnp);
+
+      // Draw axis rulers for readability
+      drawAxis(pupilaDir);
+      drawAxis(pupilaEsq);
+
+      // CO / Altura (bordas)
+      drawMarkerWithText(bordaOD, 'CO OD', '#10b981', coOdMm);
+      drawMarkerWithText(bordaOE, 'CO OE', '#10b981', coOeMm);
+
+      // Alturas Verticais (AV)
+      if (avDA) drawMarkerWithText(avDA, 'AV OD', '#f472b6', alturaVerticalOdMm);
+      if (avEA) drawMarkerWithText(avEA, 'AV OE', '#a78bfa', alturaVerticalOeMm);
+
+      // Draw fucsia vertical lines (AV) spanning from top of lens to bottom (use av* as top, borda* as bottom)
+      const drawVerticalAV = (pTop: MarkerPoint | null, pBottom: MarkerPoint | null, color: string) => {
+        const top = pTop ? pTop.y * scaleY : null;
+        const bottom = pBottom ? pBottom.y * scaleY : null;
+        const x = pTop ? pTop.x * scaleX : pBottom ? pBottom.x * scaleX : null;
+        if (top == null || bottom == null || x == null) return;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(2, Math.round(2 * avgScale));
+        ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+        ctx.stroke();
+        ctx.restore();
+      };
+
+      drawVerticalAV(avDA, bordaOD, '#f472b6');
+      drawVerticalAV(avEA, bordaOE, '#f472b6');
+
+      // Ponte (scale reference) - dashed yellow
+      ctx.strokeStyle = '#f59e0b';
+      ctx.setLineDash([6 * avgScale, 4 * avgScale]);
+      ctx.lineWidth = Math.max(2, Math.round(2 * avgScale));
+      const ponteY = ((pupilaDir.y + pupilaEsq.y) / 2) * scaleY;
+      ctx.beginPath();
+      ctx.moveTo(ponteEsqX * scaleX, ponteY);
+      ctx.lineTo(ponteDirX * scaleX, ponteY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw small labels for PT (yellow solid block)
+      try {
+        const ptText = `PT REF: ${ponteMedidaMm} mm`;
+        const fontSizePt = Math.max(12, Math.round(12 * avgScale));
+        ctx.font = `bold ${fontSizePt}px sans-serif`;
+        const metricsPt = ctx.measureText(ptText);
+        const px = ((ponteEsqX + ponteDirX) / 2) * scaleX + 10 * avgScale;
+        const py = ponteY - fontSizePt - 8 * avgScale;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(px, py, metricsPt.width + 12 * avgScale, fontSizePt + 8 * avgScale);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(ptText, px + 6 * avgScale, py + 4 * avgScale);
+      } catch (e) {
+        // ignore
+      }
+
+      // DP Binocular text near midpoint
+      ctx.fillStyle = '#001f3f';
+      const dpText = `${dpBinocularMm} mm`;
+      ctx.font = `bold ${Math.max(12, Math.round(14 * avgScale))}px sans-serif`;
+      const midX = ((pupilaDir.x + pupilaEsq.x) / 2) * scaleX;
+      const midY = ((pupilaDir.y + pupilaEsq.y) / 2) * scaleY;
+      ctx.fillText(dpText, midX + 10 * avgScale, midY);
+    } catch (err) {
+      // fail gracefully but continue
+      // eslint-disable-next-line no-console
+      console.error('error drawing annotations', err);
+    }
+
+    return await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9);
+    });
+  }
+
+  async function uploadAnnotatedFile(blob: Blob | null) {
+    if (!blob || !clinicaId) return null;
+    const file = new File([blob], `pupilometro-medida-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    try {
+      const path = `clinicas/${clinicaId}/medidas/${file.name}`;
+      const up = await supabase.storage.from('branding-assets').upload(path, file, {
+        upsert: true,
+        contentType: file.type,
+      });
+      if (up.error) return null;
+      const pub = supabase.storage.from('branding-assets').getPublicUrl(path).data.publicUrl;
+      return pub || null;
+    } catch (e) {
+      console.error('uploadAnnotatedFile error', e);
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    if (!image || !imageReady || !clinicaId) return;
+    const key = image + '|' + JSON.stringify(data.medidas || {});
+    if (lastAnnotatedKeyRef.current === key) return;
+    let mounted = true;
+
+    (async () => {
+      lastAnnotatedKeyRef.current = key;
+      const blob = await generateAnnotatedBlob();
+      if (!mounted) return;
+      const url = await uploadAnnotatedFile(blob);
+      if (!mounted) return;
+      if (url) {
+        const anexos = Array.isArray(data.anexos_urls) ? [...data.anexos_urls] : [];
+        if (!anexos.includes(url)) anexos.unshift(url);
+        onChange({ ...data, pupilometroFotoMedidaStorageUrl: url, anexos_urls: anexos });
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [image, imageReady, JSON.stringify(data.medidas), sceneRect.x, sceneRect.y, sceneRect.width, sceneRect.height, clinicaId]);
+
   function resetMarkers(width: number, height: number) {
     const midY = Math.round(height * 0.55);
 
@@ -1037,7 +1250,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       }`}
     >
       <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
-        <div className="flex flex-col gap-4 border-b border-slate-50 pb-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 border-b border-slate-50 pb-4 md:flex-row md:items-center md:justify-between md:flex-wrap">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-cyan-50 text-cyan-600 rounded-lg">
               <Ruler size={20} />
@@ -1093,14 +1306,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => setFocoTelaCheia((prev) => !prev)}
-              className="flex items-center gap-2 rounded-2xl bg-slate-900 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-slate-700"
-              title={focoTelaCheia ? "Sair da tela cheia" : "Entrar em tela cheia"}
-            >
-              {focoTelaCheia ? "Sair tela cheia" : "Tela cheia"}
-            </button>
+            {/* Removido botão duplicado de tela cheia — já existe no header da página */}
 
             {image && (
               <button
@@ -1133,7 +1339,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
             <button
               type="button"
               onClick={clearImage}
-              className="flex items-center gap-2 text-xs font-bold text-rose-500 uppercase hover:bg-rose-50 px-4 py-2 rounded-xl transition-all"
+              className="flex items-center gap-2 text-xs font-bold text-rose-500 uppercase hover:bg-rose-50 px-4 py-2 rounded-xl transition-all shrink-0 mt-2 md:mt-0"
             >
               <RefreshCw size={14} /> Limpar Foto
             </button>
@@ -1146,6 +1352,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              capture="environment"
               onChange={(e) => void handleFile(e)}
               className="hidden"
             />

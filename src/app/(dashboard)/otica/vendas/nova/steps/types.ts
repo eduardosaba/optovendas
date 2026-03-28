@@ -64,7 +64,7 @@ export type FinanceiroData = {
   metodo: string;
   qtdParcelas: string;
   primeiroVencimento: string;
-  tipoFechamento?: "total" | "entrada_entrega" | "entrada_crediario" | "pendente";
+  tipoFechamento?: "total" | "entrada_entrega" | "entrada_crediario" | "entrada_crediario_proprio" | "pendente";
   valorEntrada?: number;
   formaEntrada?: string;
   saldoRestante?: number;
@@ -105,11 +105,14 @@ export type VendaData = {
   usaNumManual: boolean;
   numeroOsManual: string;
   termoQuebraAceito: boolean;
-  assinatura: string;
+  assinatura?: string | null;
   medidas: MedidasPupilares;
   financeiro: FinanceiroData;
   pupilometroFoto: string;
   pupilometroFotoStorageUrl?: string;
+  pupilometroFotoMedidaStorageUrl?: string;
+  assinatura_arma_responsabilidade?: string | null;
+  termo_confirmacao_id?: string | null;
   vendedorId?: string | null;
   anexos_urls?: string[];
   medida_obrigatoria?: boolean;

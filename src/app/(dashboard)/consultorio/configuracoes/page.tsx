@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { uploadLogoClinica } from "@/lib/branding-storage";
 import { Instagram, LayoutTemplate, Mail, Stamp } from "lucide-react";
+import ConfiguracoesModulos from '@/components/otica/ConfiguracoesModulos';
 
 function onlyDigits(value?: string | null) {
   if (!value) return null;
@@ -71,6 +72,7 @@ export default function ConfigUnidadePage() {
   const [salvando, setSalvando] = useState(false);
   const [enviandoLogo, setEnviandoLogo] = useState(false);
   const [inicializando, setInicializando] = useState(false);
+  const [unificarModulos, setUnificarModulos] = useState<boolean>(false);
 
   useEffect(() => {
     async function carregar() {
@@ -81,7 +83,7 @@ export default function ConfigUnidadePage() {
         const [cliRes, cfgRes] = await Promise.all([
           supabase
             .from("clinicas")
-            .select("nome_fantasia, telefone, cnpj_cpf, logomarca_url")
+            .select("nome_fantasia, telefone, cnpj_cpf, logomarca_url, unificar_modulos")
             .eq("id", ctx.clinicaId)
             .single(),
           supabase
@@ -100,6 +102,7 @@ export default function ConfigUnidadePage() {
             cnpj_cpf: clinica.cnpj_cpf || "",
             logomarca_url: clinica.logomarca_url || "",
           }));
+          setUnificarModulos(!!(clinica as any).unificar_modulos);
         }
 
         if (cfgRes.error) throw new Error(cfgRes.error.message);
@@ -183,6 +186,18 @@ export default function ConfigUnidadePage() {
       toast.error(`Falha ao salvar configuracoes da unidade: ${e.message}`);
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function handleToggleUnificar(payload: { unificar_modulos: boolean }) {
+    if (!clinicaId) return;
+    try {
+      const { error } = await supabase.from('clinicas').update({ unificar_modulos: payload.unificar_modulos }).eq('id', clinicaId);
+      if (error) throw error;
+      setUnificarModulos(!!payload.unificar_modulos);
+      toast.success(`Integração ${payload.unificar_modulos ? 'ativada' : 'desativada'} com sucesso.`);
+    } catch (err: any) {
+      toast.error(`Falha ao atualizar integração: ${err.message}`);
     }
   }
 
@@ -377,6 +392,20 @@ export default function ConfigUnidadePage() {
               className="w-full rounded-[20px] border-none bg-slate-50 p-4 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
             />
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-[32px] border border-slate-100 bg-white p-6 md:p-8 shadow-sm">
+        <div className="mb-6 flex items-center gap-3">
+          <LayoutTemplate className="text-blue-600" size={22} />
+          <div>
+            <h2 className="text-xl font-black tracking-tight text-slate-800">Módulos e Integrações</h2>
+            <p className="text-sm text-slate-500">Ative ou desative integrações entre os módulos da unidade.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          <ConfiguracoesModulos config={{ unificar_modulos: unificarModulos }} onUpdate={(p: any) => void handleToggleUnificar(p)} />
         </div>
       </section>
 

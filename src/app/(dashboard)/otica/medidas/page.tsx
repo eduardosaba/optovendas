@@ -53,6 +53,7 @@ const BASE_MEDIDAS: VendaData = {
   },
   pupilometroFoto: "",
   pupilometroFotoStorageUrl: "",
+  pupilometroFotoMedidaStorageUrl: "",
 };
 
 export default function MedidasPage() {

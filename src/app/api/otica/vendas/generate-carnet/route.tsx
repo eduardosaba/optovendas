@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { pdf } from '@react-pdf/renderer';
-import PDFCarneServer from '@/components/otica/PDFCarneServer';
+import PDFCarne from '@/components/otica/DocumentoCarne';
 import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     // Render PDF to buffer (pass clinic info if available)
     const doc = pdf(
-      <PDFCarneServer venda={venda} parcelas={parcelas} cliente={cliente} financeiro={financeiro} mostrarPix={mostrarPix} pixText={pixText} qrBase64={qrBase64} clinica={clinica} />
+      <PDFCarne venda={venda} parcelas={parcelas} cliente={cliente} financeiro={financeiro} mostrarPix={mostrarPix} pixText={pixText} qrBase64={qrBase64} clinica={clinica} />
     );
     const buffer = await doc.toBuffer();
 

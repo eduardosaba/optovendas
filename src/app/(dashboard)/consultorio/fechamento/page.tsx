@@ -46,7 +46,7 @@ export default function FechamentoConsultorioPage() {
         .select("id, paciente_id, valor_final, forma_pagamento, status_pagamento, data_atendimento, localidade, modelo_cobranca, tipo_atendimento, pacientes(nome_completo)")
         .eq("clinica_id", ctx.clinicaId)
         .eq("data_atendimento", dataRef)
-        .order("criado_em", { ascending: false });
+        .order("data_atendimento", { ascending: false });
 
       if (cidade.trim()) {
         query = query.ilike("localidade", `%${cidade.trim()}%`);

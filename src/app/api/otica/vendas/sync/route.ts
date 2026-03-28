@@ -215,11 +215,59 @@ export async function POST(req: NextRequest) {
     }
 
     // termo armacao propria
+    // If client created terms locally before sync, link them now
+    try {
+      if (vendaData.termo_confirmacao_id) {
+        await supabaseAdmin.from('termos_aceite').update({ venda_id: vendaId }).eq('id', vendaData.termo_confirmacao_id);
+      }
+      if (vendaData.termo_responsabilidade_id) {
+        await supabaseAdmin.from('termos_aceite').update({ venda_id: vendaId }).eq('id', vendaData.termo_responsabilidade_id);
+      }
+
+      // Support older clients that only sent assinatura_base64 for responsibility: try to find matching term without venda_id
+      if (vendaData.assinatura && vendaData.armacaoPropria) {
+        const found = await supabaseAdmin.from('termos_aceite').select('id').eq('clinica_id', clinicaId).eq('paciente_id', pacienteIdFinal).eq('assinatura_base64', vendaData.assinatura).is('venda_id', null).maybeSingle();
+        if (!found.error && found.data?.id) {
+          await supabaseAdmin.from('termos_aceite').update({ venda_id: vendaId }).eq('id', found.data.id);
+        }
+      }
+
+      // If client sent pending_terms array (offline local terms), insert them and link
+      if (Array.isArray(vendaData.pending_terms) && vendaData.pending_terms.length) {
+        for (const t of vendaData.pending_terms) {
+          try {
+            const insertObj: any = {
+              clinica_id: clinicaId,
+              paciente_id: pacienteIdFinal,
+              venda_id: vendaId,
+              criado_por: criadoPor || null,
+              tipo_termo: t.tipo_termo || t.tipo || 'Confirmacao_Compra',
+              termo_texto: t.termo_texto || t.texto || null,
+              assinatura_base64: t.assinatura_base64 || t.assinatura || null,
+              ip_origem: job.ipOrigem || null,
+            };
+            await supabaseAdmin.from('termos_aceite').insert(insertObj);
+          } catch (e) {
+            console.warn('failed to insert pending_term', e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('linking pre-created terms failed', e);
+    }
+
+    // termo armacao propria (if still missing, create it now)
     if (vendaData.armacaoPropria && vendaData.assinatura) {
-      const termoRes = await supabaseAdmin.from('termos_aceite').insert({ clinica_id: clinicaId, paciente_id: pacienteIdFinal, venda_id: vendaId, criado_por: criadoPor || null, tipo_termo: 'Responsabilidade_Armacao', termo_texto: vendaData.termoTexto || null, assinatura_base64: vendaData.assinatura, ip_origem: job.ipOrigem || null }).select('id').maybeSingle();
-      if (termoRes.error) throw termoRes.error;
-      const linkTermoRes = await supabaseAdmin.from('vendas').update({ termo_responsabilidade_id: termoRes.data?.id }).eq('id', vendaId);
-      if (linkTermoRes.error) console.warn('link termo failed', linkTermoRes.error);
+      // ensure there's a termo for this venda (if not created by client)
+      const existing = await supabaseAdmin.from('termos_aceite').select('id').eq('venda_id', vendaId).eq('tipo_termo', 'Responsabilidade_Armacao').maybeSingle();
+      if (!existing.error && !existing.data) {
+        const termoRes = await supabaseAdmin.from('termos_aceite').insert({ clinica_id: clinicaId, paciente_id: pacienteIdFinal, venda_id: vendaId, criado_por: criadoPor || null, tipo_termo: 'Responsabilidade_Armacao', termo_texto: vendaData.termoTexto || null, assinatura_base64: vendaData.assinatura, ip_origem: job.ipOrigem || null }).select('id').maybeSingle();
+        if (termoRes.error) console.warn('failed to create termo armacao in sync', termoRes.error);
+        else {
+          const linkTermoRes = await supabaseAdmin.from('vendas').update({ termo_responsabilidade_id: termoRes.data?.id }).eq('id', vendaId);
+          if (linkTermoRes.error) console.warn('link termo failed', linkTermoRes.error);
+        }
+      }
     }
 
     await logSync(jobId, 'finalize_venda', 'success', `venda ${vendaId} synchronized` , { vendaId });

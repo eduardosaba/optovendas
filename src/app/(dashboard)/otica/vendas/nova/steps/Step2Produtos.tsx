@@ -30,6 +30,17 @@ export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEsto
   const [tratamentos, setTratamentos] = useState<Tratamento[]>([]);
   const toast = useToast();
 
+  const suggestedPrevisao = (() => {
+    if (!data?.dataEncomenda) return "";
+    try {
+      const d = new Date(data.dataEncomenda);
+      d.setDate(d.getDate() + 15);
+      return d.toISOString().slice(0, 10);
+    } catch (e) {
+      return "";
+    }
+  })();
+
   useEffect(() => {
     let mounted = true;
     async function load() {
@@ -93,13 +104,7 @@ export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEsto
         </div>
 
         <div className="space-y-2">
-          <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Laboratório</label>
-          <input
-            value={data.laboratorioNome}
-            onChange={(e) => onChange({ ...data, laboratorioNome: e.target.value })}
-            className="w-full bg-slate-50 rounded-2xl border-none p-4 font-bold"
-            placeholder="Ex: Essilor"
-          />
+          <p className="text-xs text-slate-500">Destino do serviço (laboratório/fornecedor) será definido na torre de controle de OS.</p>
         </div>
 
         <div className="space-y-2 md:col-span-2">
@@ -146,7 +151,7 @@ export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEsto
               >
                 <option value="">Selecionar categoria</option>
                 {tiposArmacao.map((t) => (
-                  <option key={t.id} value={t.id}>{t.nome} - R$ {Number(t.preco_venda).toFixed(2)}</option>
+                  <option key={t.id} value={t.id}>{t.nome}</option>
                 ))}
               </select>
             </div>
@@ -170,7 +175,11 @@ export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEsto
             value={data.previsaoEntrega}
             onChange={(e) => onChange({ ...data, previsaoEntrega: e.target.value })}
             className="w-full bg-slate-50 rounded-2xl border-none p-4 font-bold"
+            placeholder={suggestedPrevisao}
           />
+          {!data.previsaoEntrega && suggestedPrevisao && (
+            <p className="text-sm text-slate-400">Previsão sugerida: {new Date(suggestedPrevisao).toLocaleDateString('pt-BR')}</p>
+          )}
         </div>
       </div>
 

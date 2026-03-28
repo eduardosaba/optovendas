@@ -45,6 +45,7 @@ export default function GestaoEquipePage() {
   const [busca, setBusca] = useState("");
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [lastCreated, setLastCreated] = useState<{ nome?: string; email?: string; password?: string } | null>(null);
 
   // Carregar dados da clínica e membros
   async function carregarEquipe() {
@@ -103,11 +104,16 @@ export default function GestaoEquipePage() {
 
       if (!res.ok) throw new Error(data.error || "Erro ao criar usuário");
 
-      toast.success("Membro ativado com sucesso em optovendas.repvendas.com.br!");
-      
+      toast.success("Membro ativado com sucesso!");
+
+      const finalPassword = senha || "Mudar@123";
+
+      // Mostrar cartão com senha temporária
+      setLastCreated({ nome: nome.trim(), email: email.trim().toLowerCase(), password: finalPassword });
+
       // Limpar campos
       setNome(""); setEmail(""); setSenha(""); setPerfil("vendas");
-      
+
       // Recarregar lista
       carregarEquipe();
     } catch (err: any) {
@@ -243,6 +249,20 @@ export default function GestaoEquipePage() {
 
         {/* COLUNA DIREITA: LISTAGEM */}
         <main className="lg:col-span-8 space-y-6">
+          {lastCreated && (
+            <div className="bg-emerald-50 border border-emerald-100 text-emerald-700 p-4 rounded-2xl font-black">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm">✅ Sucesso! <span className="font-extrabold">{lastCreated.nome}</span> já pode acessar.</div>
+                  <div className="text-xs text-emerald-800 mt-1">Senha provisória: <span className="font-mono">{lastCreated.password}</span></div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={async () => { await navigator.clipboard.writeText(lastCreated.password || ''); toast.success('Senha copiada'); }} className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold">Copiar</button>
+                  <button onClick={() => setLastCreated(null)} className="px-3 py-2 bg-white border rounded-lg text-sm font-bold">Fechar</button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="bg-white p-4 rounded-[32px] shadow-sm border border-slate-50 flex items-center gap-4">
             <Search className="ml-4 text-slate-300" size={20} />
             <input 

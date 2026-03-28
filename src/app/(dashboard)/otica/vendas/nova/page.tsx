@@ -21,7 +21,7 @@ import { addPendingVenda } from "@/lib/syncQueue";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import BotaoImpressaoTermica from "@/components/otica/BotaoImpressaoTermica";
-import PDFCarneCrediario from "@/components/otica/PDFCarneCrediario";
+import PDFCarne from "@/components/otica/DocumentoCarne";
 import PDFComprovanteVenda, {
   type ComprovanteOS,
   type ComprovantePaciente,
@@ -345,7 +345,7 @@ function NovaVendaStepperContent() {
       return [{ numero: 1, vencimento: venc, valor: saldo }];
     }
 
-    const isCrediario = tipo === "entrada_crediario" || (tipo === "pendente" && vendaData.financeiro.metodo.toLowerCase().includes("crediario"));
+    const isCrediario = tipo === "entrada_crediario" || tipo === "entrada_crediario_proprio" || (tipo === "pendente" && vendaData.financeiro.metodo.toLowerCase().includes("crediario"));
     if (!isCrediario) return [];
 
     const baseParcelamento = tipo === "pendente" ? total : saldo;
@@ -507,10 +507,15 @@ function NovaVendaStepperContent() {
         }
       }
 
-      // Persist anexos_urls and medida flags into the venda record if present
+      // Persist anexos_urls, medida flags and annotated pupilometro image into the venda record if present
       try {
         const payload: any = {};
-        if (Array.isArray(vendaData.anexos_urls) && vendaData.anexos_urls.length > 0) payload.anexos_urls = vendaData.anexos_urls;
+        const anexosArr: string[] = Array.isArray(vendaData.anexos_urls) ? [...vendaData.anexos_urls] : [];
+        // ensure annotated measures image is included among anexos so it appears in venda/prontuario
+        if ((vendaData as any).pupilometroFotoMedidaStorageUrl && !anexosArr.includes((vendaData as any).pupilometroFotoMedidaStorageUrl)) {
+          anexosArr.push((vendaData as any).pupilometroFotoMedidaStorageUrl);
+        }
+        if (anexosArr.length > 0) payload.anexos_urls = anexosArr;
         if (typeof vendaData.medida_obrigatoria !== 'undefined') payload.medida_obrigatoria = vendaData.medida_obrigatoria;
         if (typeof vendaData.status_medida !== 'undefined') payload.status_medida = vendaData.status_medida;
         if (Object.keys(payload).length > 0) {
@@ -535,6 +540,8 @@ function NovaVendaStepperContent() {
       const armacaoTipo = armacaoSelecionada?.cor ?? tipoArmacaoSelecionado?.nome ?? null;
 
       if (vendaRes.data?.id) {
+        const statusOsFinal = (valorEntrada > 0 || statusFinanceiro === 'pago') ? 'Aguardando' : (vendaData.statusOS || 'Laboratorio');
+
         const osRes = await supabase.from("ordens_servico").insert({
           venda_id: vendaRes.data.id,
           clinica_id: clinicaId,
@@ -547,7 +554,7 @@ function NovaVendaStepperContent() {
           material_lente: lenteSelecionada?.nome ?? null,
           data_encomenda: vendaData.dataEncomenda || null,
           previsao_entrega: vendaData.previsaoEntrega || null,
-          status_os: vendaData.statusOS,
+          status_os: statusOsFinal,
           od_dnp: parseNumeroNullable(vendaData.medidas.od_dnp),
           oe_dnp: parseNumeroNullable(vendaData.medidas.oe_dnp),
           co_od: parseNumeroNullable(vendaData.medidas.co_od),
@@ -710,6 +717,20 @@ function NovaVendaStepperContent() {
 
         toast.success("Venda e OS registradas com sucesso.");
         setStep(4);
+        try {
+          window.dispatchEvent(new CustomEvent('opv:openFinalizeModal'));
+        } catch (e) {
+          // ignore
+        }
+        // If there was a pre-created confirmation term (signature) saved earlier, link it to this venda
+        try {
+          if ((vendaData as any).termo_confirmacao_id) {
+            const upd = await supabase.from('termos_aceite').update({ venda_id: vendaRes.data.id }).eq('id', (vendaData as any).termo_confirmacao_id);
+            if (upd.error) console.warn('Falha ao vincular termo de confirmacao à venda:', upd.error);
+          }
+        } catch (e) {
+          console.warn('Erro ao linkar termo de confirmacao:', e);
+        }
       } else {
         // offline path: respond to UI with local comprovante and skip server-side operations
         const pacienteSelecionado = vendaData.vendaManual
@@ -755,6 +776,11 @@ function NovaVendaStepperContent() {
 
         toast.success("Venda salva localmente e será sincronizada quando houver conexão.");
         setStep(4);
+        try {
+          window.dispatchEvent(new CustomEvent('opv:openFinalizeModal'));
+        } catch (e) {
+          // ignore
+        }
       }
 
       // Registra entrada imediata no fluxo de caixa quando houver sinal.
@@ -913,6 +939,23 @@ function NovaVendaStepperContent() {
     }
   }
 
+  // Expose finalize function for child components that dispatch 'opv:forceFinalize'
+  // Step4 already dispatches that event; ensure it calls this handler when invoked.
+  useEffect(() => {
+    try {
+      (window as any).__opv_finalize = finalizarVenda;
+    } catch (e) {
+      // ignore in non-browser or restricted environments
+    }
+    return () => {
+      try {
+        if ((window as any).__opv_finalize === finalizarVenda) delete (window as any).__opv_finalize;
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [finalizarVenda]);
+
   if (habilitaOtica === false) {
     return (
       <section className="mx-auto max-w-5xl rounded-xl border border-amber-200 bg-amber-50 p-6">
@@ -1014,11 +1057,12 @@ function NovaVendaStepperContent() {
             {comprovante.parcelas.length > 0 && (
               <PDFDownloadLink
                 document={
-                  <PDFCarneCrediario
-                    pacienteNome={comprovante.paciente.nome_completo}
-                    numeroOs={comprovante.os.numero_os}
+                  <PDFCarne
+                    cliente={{ nome: comprovante.paciente.nome_completo }}
                     parcelas={comprovante.parcelas}
-                    valorTotal={comprovante.parcelas.reduce((acc, p) => acc + Number(p.valor || 0), 0)}
+                    venda={comprovante.venda}
+                    financeiro={{ total: comprovante.parcelas.reduce((acc: number, p: any) => acc + Number(p.valor || 0), 0) }}
+                    paciente={{ nome: comprovante.paciente.nome_completo }}
                   />
                 }
                 className="w-full p-4 bg-indigo-600 text-white rounded-2xl font-black text-xs text-center uppercase tracking-widest hover:bg-indigo-700 transition-all sm:col-span-2"
@@ -1085,7 +1129,8 @@ function NovaVendaStepperContent() {
           </button>
         ) : (
           <button
-            onClick={finalizarVenda}
+            aria-label="finalizar-venda-trigger"
+            onClick={() => window.dispatchEvent(new CustomEvent('opv:openFinalizeModal'))}
             disabled={salvando}
             className="flex items-center gap-2 px-10 py-4 bg-cyan-500 text-white rounded-2xl font-black shadow-xl shadow-cyan-100 hover:bg-cyan-600 transition-all disabled:bg-slate-300"
           >

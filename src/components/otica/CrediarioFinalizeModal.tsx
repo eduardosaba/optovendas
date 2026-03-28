@@ -1,6 +1,10 @@
 "use client";
 import React from 'react';
-import { CheckCircle2, Printer, MessageCircle, PlusCircle, X, Share2, FileText } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { CheckCircle2, Printer, PlusCircle, X, FileText } from 'lucide-react';
+import { PDFDownloadLink } from '@react-pdf/renderer';
+import PDFComprovanteVenda from './PDFComprovanteVenda';
+import BotaoWhatsAppVenda from './BotaoWhatsAppVenda';
 
 type Props = {
   open: boolean;
@@ -8,6 +12,7 @@ type Props = {
   onPrint?: () => void;
   onWhats?: () => void;
   onNew?: () => void;
+  onSubmit?: () => Promise<void> | void;
   extra?: React.ReactNode;
   resumoFinanceiro?: {
     total?: number;
@@ -15,10 +20,14 @@ type Props = {
     formaEntrada?: string;
     formaSaldo?: string;
   };
+  tipoFechamento?: string;
+  venda?: any;
+  clinica?: any;
 };
 
-export default function CrediarioFinalizeModal({ open, onClose, onPrint, onWhats, onNew, extra, resumoFinanceiro }: Props) {
+export default function CrediarioFinalizeModal({ open, onClose, onPrint, onWhats, onNew, extra, resumoFinanceiro, tipoFechamento, venda, clinica, onSubmit }: Props) {
   if (!open) return null;
+  const router = useRouter();
 
   return (
     <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-300">
@@ -50,21 +59,26 @@ export default function CrediarioFinalizeModal({ open, onClose, onPrint, onWhats
 
           {/* Ações Principais - Botões Grandes */}
           <div className="grid grid-cols-1 gap-4 mb-8">
-            <button 
-              onClick={onWhats} 
-              className="flex items-center justify-center gap-3 w-full bg-emerald-500 hover:bg-emerald-600 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-lg shadow-emerald-200 dark:shadow-none transition-all active:scale-95"
-            >
-              <MessageCircle size={20} />
-              Enviar pelo WhatsApp
-            </button>
+            <BotaoWhatsAppVenda venda={venda} cliente={venda?.cliente} parcelas={venda?.parcelas || []} clinica={clinica} />
 
-            <button 
-              onClick={onPrint} 
-              className="flex items-center justify-center gap-3 w-full bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest transition-all active:scale-95"
-            >
-              <Printer size={20} />
-              Imprimir Carnê
-            </button>
+            {tipoFechamento === 'entrada_crediario_proprio' ? (
+              <button
+                onClick={onPrint}
+                className="flex items-center justify-center gap-3 w-full bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest transition-all active:scale-95"
+              >
+                <Printer size={20} />
+                📥 Baixar Carnê
+              </button>
+            ) : (
+              <PDFDownloadLink
+                document={<PDFComprovanteVenda data={venda} clinica={clinica} />}
+                fileName={`comprovante-${(venda?.cliente?.nome || 'cliente').toString().replace(/\s+/g, '_')}.pdf`}
+                className="flex items-center justify-center gap-3 w-full bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest transition-all active:scale-95"
+              >
+                <FileText size={18} />
+                📄 Baixar Comprovante de Venda
+              </PDFDownloadLink>
+            )}
           </div>
 
           {/* Área de Extras (Download do PDF / Outros) */}
@@ -86,6 +100,18 @@ export default function CrediarioFinalizeModal({ open, onClose, onPrint, onWhats
 
           {/* Ações de Rodapé */}
           <div className="flex flex-col gap-4 border-t border-slate-100 dark:border-slate-800 pt-8">
+            <button
+              onClick={async () => {
+                try {
+                  if (onSubmit) await onSubmit();
+                } finally {
+                  onClose();
+                }
+              }}
+              className="w-full py-4 bg-cyan-600 text-white font-black uppercase tracking-widest rounded-2xl"
+            >
+              Confirmar Finalizar
+            </button>
             <button 
                 onClick={onNew} 
                 className="flex items-center justify-center gap-2 w-full py-2 text-blue-600 font-black uppercase text-[10px] tracking-widest hover:bg-blue-50 rounded-xl transition-all"
@@ -95,7 +121,7 @@ export default function CrediarioFinalizeModal({ open, onClose, onPrint, onWhats
             </button>
 
             <button 
-                onClick={onClose} 
+                onClick={() => router.push('/otica/os')} 
                 className="w-full py-4 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-rose-500"
             >
               Fechar resumo

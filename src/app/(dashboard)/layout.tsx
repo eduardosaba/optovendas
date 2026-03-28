@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useConfig } from "@/context/ConfigContext";
 import DashboardHeader from "@/components/dashboard/Header";
+import { TrendingUp, ShieldCheck, AlertCircle, Terminal } from "lucide-react";
 import FocusProvider, { FocusContext } from "@/context/FocusContext";
 import { useRef } from "react";
 import ThemeProvider from "@/context/ThemeContext";
@@ -15,6 +16,38 @@ import ThemeProvider from "@/context/ThemeContext";
 const WelcomeTour = dynamic(() => import("@/components/onboarding/WelcomeTour"), {
   ssr: false,
 });
+
+function KeyboardShortcuts() {
+  const focus = useContext(FocusContext);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName ?? "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || (target as HTMLElement)?.isContentEditable) return;
+
+      const key = e.key.toLowerCase();
+      if (key === "f") {
+        e.preventDefault();
+        focus?.toggleFocusMode();
+      }
+      if (key === "d") {
+        // Atalho de tema temporariamente desativado.
+        return;
+      }
+      if (key === "s") {
+        e.preventDefault();
+        // dispatch a custom save event for pages to listen
+        window.dispatchEvent(new CustomEvent("opv:save"));
+      }
+    }
+
+    window.addEventListener("keydown", onKey as any);
+    return () => window.removeEventListener("keydown", onKey as any);
+  }, [focus]);
+
+  return null;
+}
 
 function NavIcon({ path }: { path: string }) {
   return (
@@ -40,7 +73,10 @@ export default function DashboardLayout({
   const [mounted, setMounted] = useState(false);
   const [layoutHydrated, setLayoutHydrated] = useState(false);
   const [shortcutsMinimized, setShortcutsMinimized] = useState(false);
+  const [shortcutsPos, setShortcutsPos] = useState<{ x: number; y: number } | null>(null);
+  const draggingRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const mainRef = useRef<HTMLDivElement | null>(null);
+  const shortcutsPosRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     async function initLayout() {
@@ -75,6 +111,72 @@ export default function DashboardLayout({
 
     void initLayout();
   }, [router]);
+
+  // Keep a ref of the current position so listeners can access latest value
+  useEffect(() => {
+    shortcutsPosRef.current = shortcutsPos;
+  }, [shortcutsPos]);
+
+  // Load saved shortcuts position and global drag handlers (register once)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem('opv.shortcuts.pos');
+      if (raw) {
+        const parsed = JSON.parse(raw) as { x: number; y: number };
+        if (parsed && typeof parsed.x === 'number' && typeof parsed.y === 'number') setShortcutsPos(parsed);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    function onMove(e: MouseEvent | TouchEvent) {
+      if (!draggingRef.current) return;
+      let clientX = 0;
+      let clientY = 0;
+      if ((e as TouchEvent).touches && (e as TouchEvent).touches.length) {
+        clientX = (e as TouchEvent).touches[0].clientX;
+        clientY = (e as TouchEvent).touches[0].clientY;
+      } else {
+        clientX = (e as MouseEvent).clientX;
+        clientY = (e as MouseEvent).clientY;
+      }
+      const d = draggingRef.current;
+      if (!d) return;
+      const dx = clientX - d.startX;
+      const dy = clientY - d.startY;
+      const newX = Math.max(8, Math.min(window.innerWidth - 120, Math.round(d.origX + dx)));
+      const newY = Math.max(8, Math.min(window.innerHeight - 80, Math.round(d.origY + dy)));
+      setShortcutsPos({ x: newX, y: newY });
+      // prevent page scroll while dragging on touch
+      if ((e as TouchEvent).touches) e.preventDefault();
+    }
+
+    function onUp() {
+      if (!draggingRef.current) return;
+      try {
+        const cur = shortcutsPosRef.current;
+        if (cur) localStorage.setItem('opv.shortcuts.pos', JSON.stringify(cur));
+      } catch (e) {}
+      draggingRef.current = null;
+      // restore cursor on container if exists
+      const el = document.querySelector('[aria-label="Atalhos flutuantes"]') as HTMLElement | null;
+      if (el) el.style.cursor = 'grab';
+    }
+
+    window.addEventListener('mousemove', onMove as any);
+    window.addEventListener('mouseup', onUp as any);
+    window.addEventListener('touchmove', onMove as any, { passive: false } as any);
+    window.addEventListener('touchend', onUp as any);
+
+    return () => {
+      window.removeEventListener('mousemove', onMove as any);
+      window.removeEventListener('mouseup', onUp as any);
+      window.removeEventListener('touchmove', onMove as any);
+      window.removeEventListener('touchend', onUp as any);
+    };
+    // run only once on mount
+  }, []);
 
   // Não renderiza até o cliente estar montado para evitar hydration mismatch
   if (!mounted) return null;
@@ -140,37 +242,6 @@ export default function DashboardLayout({
 
   const isActivePath = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-  function KeyboardShortcuts() {
-    const focus = useContext(FocusContext);
-
-    useEffect(() => {
-      function onKey(e: KeyboardEvent) {
-        const target = e.target as HTMLElement | null;
-        const tag = target?.tagName ?? "";
-        if (tag === "INPUT" || tag === "TEXTAREA" || (target as HTMLElement)?.isContentEditable) return;
-
-        const key = e.key.toLowerCase();
-        if (key === "f") {
-          e.preventDefault();
-          focus?.toggleFocusMode();
-        }
-        if (key === "d") {
-          // Atalho de tema temporariamente desativado.
-          return;
-        }
-        if (key === "s") {
-          e.preventDefault();
-          // dispatch a custom save event for pages to listen
-          window.dispatchEvent(new CustomEvent("opv:save"));
-        }
-      }
-
-      window.addEventListener("keydown", onKey as any);
-      return () => window.removeEventListener("keydown", onKey as any);
-    }, [focus]);
-
-    return null;
-  }
 
   return (
     <ThemeProvider>
@@ -221,21 +292,48 @@ export default function DashboardLayout({
                   {/* BLOCO DE SEGURANÇA PARA MASTER */}
                   {(isMaster || role === "master") && (
                     <div className="mt-4 pt-4 border-t border-slate-100">
-                      <Link
-                        href="/admin"
-                        className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
-                          isActivePath("/admin") ? "bg-rose-50 text-rose-600" : "text-rose-400 hover:text-rose-600"
-                        }`}
-                      >
-                        <span
-                          className={`grid h-11 w-11 place-items-center rounded-2xl ${
-                            isActivePath("/admin") ? "bg-rose-500 text-white" : "bg-rose-50 text-rose-500"
+                        <Link
+                          href="/admin"
+                          className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
+                            isActivePath("/admin") ? "bg-rose-50 text-rose-600" : "text-rose-400 hover:text-rose-600"
                           }`}
                         >
-                          <NavIcon path="M12 3l7 4v5c0 5-3.5 7.7-7 9-3.5-1.3-7-4-7-9V7l7-4Z" />
-                        </span>
-                        <span className="text-sm font-black italic">Torre de Controle</span>
-                      </Link>
+                          <span
+                            className={`grid h-11 w-11 place-items-center rounded-2xl ${
+                              isActivePath("/admin") ? "bg-rose-500 text-white" : "bg-rose-50 text-rose-500"
+                            }`}
+                          >
+                            <NavIcon path="M12 3l7 4v5c0 5-3.5 7.7-7 9-3.5-1.3-7-4-7-9V7l7-4Z" />
+                          </span>
+                          <span className="text-sm font-black italic">Torre de Controle</span>
+                        </Link>
+
+                        <div className="mt-6 space-y-1">
+                          <Link href="/otica/gestao" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-cyan-400 transition-all rounded-2xl">
+                            <TrendingUp size={18} />
+                            <span className="text-sm font-bold">Dashboard BI</span>
+                          </Link>
+
+                          <Link href="/otica/gestao/aprovacoes" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-amber-400 transition-all rounded-2xl">
+                            <ShieldCheck size={18} />
+                            <span className="text-sm font-bold">Aprovações O.S.</span>
+                          </Link>
+
+                          <Link href="/otica/gestao/inadimplencia" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-rose-400 transition-all rounded-2xl">
+                            <AlertCircle size={18} />
+                            <span className="text-sm font-bold">Cobrança Carnês</span>
+                          </Link>
+
+                          <Link href="/otica/gestao/logs" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-indigo-400 transition-all rounded-2xl">
+                            <Terminal size={18} />
+                            <span className="text-sm font-bold">Logs de Erro</span>
+                          </Link>
+
+                          <Link href="/otica/gestao/auditoria" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-slate-700 transition-all rounded-2xl">
+                            <ShieldCheck size={18} />
+                            <span className="text-sm font-bold">Auditoria</span>
+                          </Link>
+                        </div>
                     </div>
                   )}
                 </nav>
@@ -304,8 +402,32 @@ export default function DashboardLayout({
           {layoutHydrated ? <WelcomeTour /> : null}
         </main>
 
-        {/* Shortcuts help bar */}
-        <div className="fixed right-4 bottom-4 z-50 hidden flex-col gap-2 rounded-xl bg-white/80 p-3 shadow-lg backdrop-blur sm:flex">
+        {/* Shortcuts help bar (draggable) */}
+        <div
+          className="z-50 hidden flex-col gap-2 rounded-xl bg-white/80 p-3 shadow-lg backdrop-blur sm:flex cursor-grab touch-none"
+          role="dialog"
+          aria-label="Atalhos flutuantes"
+          style={(() => {
+            if (shortcutsPos) return { position: 'fixed' as const, left: shortcutsPos.x, top: shortcutsPos.y };
+            // default bottom-right offset
+            return { position: 'fixed' as const, right: 16, bottom: 16 };
+          })()}
+          onMouseDown={(e) => {
+            // start dragging only when clicking on the header area
+            const target = e.target as HTMLElement;
+            // allow drag from anywhere inside the container
+            draggingRef.current = { startX: e.clientX, startY: e.clientY, origX: (shortcutsPos?.x ?? (window.innerWidth - 200)), origY: (shortcutsPos?.y ?? (window.innerHeight - 120)) };
+            (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
+            e.preventDefault();
+          }}
+          onTouchStart={(e) => {
+            const t = e.touches[0];
+            draggingRef.current = { startX: t.clientX, startY: t.clientY, origX: (shortcutsPos?.x ?? (window.innerWidth - 200)), origY: (shortcutsPos?.y ?? (window.innerHeight - 120)) };
+          }}
+        >
+          <div className="flex justify-center">
+            <div className="w-10 h-1.5 bg-slate-200 rounded-full mb-2" aria-hidden />
+          </div>
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs font-bold text-slate-700">Atalhos</div>
             <button
@@ -347,6 +469,8 @@ export default function DashboardLayout({
                   title="Sair do modo foco"
                 >
                   ✕
+
+          {/* global drag listeners handled via useEffect above */}
                 </button>
               </div>
             ) : null

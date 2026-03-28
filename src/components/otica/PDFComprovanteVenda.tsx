@@ -1,5 +1,7 @@
 "use client";
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+
+import React from "react";
+import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { fmtNumber, fmtEixo, v } from "@/lib/refracaoFormat";
 
 type TipoPapel = "A4" | "termica";
@@ -69,17 +71,26 @@ const criarEstilos = (isTermica: boolean) =>
       color: "#111827",
     },
     header: {
-      textAlign: "center",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
       marginBottom: 10,
       borderBottomWidth: 1,
       borderBottomColor: "#cbd5e1",
       paddingBottom: 6,
+      paddingRight: 4,
     },
     tituloDocumento: {
       fontSize: isTermica ? 11 : 15,
       fontWeight: "bold",
       color: "#1e3a8a",
       marginBottom: 3,
+    },
+    logo: {
+      width: isTermica ? 68 : 96,
+      height: isTermica ? 28 : 44,
+      objectFit: "contain",
+      marginRight: 8,
     },
     section: {
       marginBottom: 9,
@@ -146,175 +157,70 @@ const criarEstilos = (isTermica: boolean) =>
     },
   });
 
-export default function PDFComprovanteVenda({
-  venda,
-  paciente,
-  os,
-  parcelas = [],
-  tipoPapel = "A4",
-  via = "cliente",
-}: PDFComprovanteVendaProps) {
+export default function PDFComprovanteVenda({ data, clinica, tipoPapel = "A4" }: any) {
   const isTermica = tipoPapel === "termica";
   const styles = criarEstilos(isTermica);
-  const receita = os.receita || {} as any;
-  const pageSize: "A4" | [number, number] = isTermica ? [226.77, 841.89] : "A4";
-  const hoje = new Date().toLocaleDateString("pt-BR");
-  const metodo = venda.metodo_pagamento || "Nao informado";
-  const isCrediario = metodo.toLowerCase().includes("crediario");
+  const financeiro = data?.financeiro || {};
+  const parcelas = data?.parcelas || [];
+  const pageSize = isTermica ? [226.77, 841.89] : "A4";
 
   return (
-    <Document>
-      {via === "cliente" && (
-        <Page size={pageSize} style={styles.page}>
-          <View style={styles.header}>
-            <Text style={styles.tituloDocumento}>OptoVendas - Comprovante de Pedido</Text>
-            <Text>Atendimento Externo - {paciente.cidade_atendimento || "Cidade nao informada"}</Text>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.row}>
-              <Text style={styles.label}>Cliente: {paciente.nome_completo}</Text>
-              <Text style={styles.label}>OS: {os.numero_os || "--"}</Text>
+    <Document title={`Pedido_${data?.id_curto}`}>
+      <Page size={pageSize as any} style={styles.page}>
+        <View style={styles.header}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            {clinica?.logomarca_url || clinica?.logo_url || clinica?.logo ? (
+              <Image src={clinica?.logomarca_url || clinica?.logo_url || clinica?.logo} style={styles.logo} />
+            ) : null}
+            <View>
+              <Text style={styles.tituloDocumento}>{clinica?.nome_fantasia || "Optovendas - Comprovante"}</Text>
+              {clinica?.cnpj && <Text style={{ fontSize: 9, color: "#374151" }}>CNPJ: {clinica.cnpj}</Text>}
             </View>
-            <Text>CPF: {paciente.cpf || "---"}</Text>
-            <Text>Data do Pedido: {hoje}</Text>
           </View>
 
-          <View style={styles.tableHeader}>
-            <Text style={{ flex: 2 }}>Descricao do Item</Text>
-            <Text style={{ flex: 1, textAlign: "right" }}>Valor</Text>
-          </View>
-          <View style={styles.tableRow}>
-            <Text style={{ flex: 2 }}>
-              Armacao: {os.armacao_modelo || "-"} ({os.armacao_tipo || "-"})
-            </Text>
-            <Text style={{ flex: 1, textAlign: "right" }}>---</Text>
-          </View>
-          <View style={styles.tableRow}>
-            <Text style={{ flex: 2 }}>Lentes: {os.material_lente || "-"}</Text>
-            <Text style={{ flex: 1, textAlign: "right" }}>---</Text>
-          </View>
+          <Text style={{ fontSize: 10, marginTop: 4, fontWeight: "bold" }}>{data?.id_curto ? `Pedido #${data.id_curto}` : "Pedido"}</Text>
+        </View>
 
-          <View style={styles.total}>
-            <Text>VALOR TOTAL: {fmtMoeda(venda.valor_total)}</Text>
-          </View>
+        <View style={styles.section}>
+          <Text style={styles.label}>Cliente</Text>
+          <Text style={{ marginTop: 4, fontWeight: "bold" }}>{(data?.cliente?.nome || "CONSUMIDOR").toString().toUpperCase()}</Text>
+        </View>
 
+        <View style={styles.section}>
+          <Text style={styles.label}>Resumo</Text>
+          <Text style={{ marginTop: 4 }}>Armação: {data?.armacao_modelo || "Própria"}</Text>
+          <Text>Lentes: {data?.material_lente || "---"}</Text>
+        </View>
+
+        <View style={styles.total}>
+          <Text>TOTAL: R$ {Number(financeiro?.total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</Text>
+        </View>
+
+        {parcelas.length > 0 && (
           <View style={styles.boxCrediario}>
-            <Text style={{ fontWeight: "bold", marginBottom: 5 }}>
-              CONDICAO DE PAGAMENTO: {metodo}
-            </Text>
-
-            {isCrediario && parcelas.length > 0 && (
-              <View>
-                <Text style={{ fontSize: 9, marginBottom: 5 }}>Plano de Pagamento:</Text>
-                {parcelas.map((p) => (
-                  <View key={p.numero} style={styles.row}>
-                    <Text>
-                      Parcela {p.numero}/{parcelas.length}
-                    </Text>
-                    <Text>Vencimento: {fmtData(p.vencimento)}</Text>
-                    <Text>Valor: {fmtMoeda(p.valor)}</Text>
-                  </View>
-                ))}
+            <Text style={{ fontWeight: "bold", marginBottom: 6 }}>Plano de Pagamento</Text>
+            {parcelas.map((p: any) => (
+              <View key={p.numero} style={styles.row}>
+                <Text>Parcela {p.numero}/{parcelas.length}</Text>
+                <Text>Vencimento: {p.vencimento_extenso || p.vencimento}</Text>
+                <Text>Valor: R$ {Number(p.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</Text>
               </View>
-            )}
+            ))}
           </View>
+        )}
 
-          {/* Prescription preview when available */}
-          {os.receita && (
-            <View style={[styles.section, { marginTop: 8 }]}>
-              <Text style={styles.label}>PRESCRIÇÃO</Text>
-              <View style={{ marginTop: 6, borderWidth: 1, borderColor: "#e6eef6", borderRadius: 8, overflow: "hidden" }}>
-                <View style={{ flexDirection: "row", backgroundColor: "#0f172a", padding: 6 }}>
-                  <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Olho</Text>
-                  <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Esférico</Text>
-                  <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Cilíndrico</Text>
-                  <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Eixo</Text>
-                </View>
-                <View style={{ flexDirection: "row", padding: 8, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}>
-                  <Text style={{ width: "25%", fontWeight: "bold", color: "#475569" }}>Direito (OD)</Text>
-                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(os.receita.od_esferico)}</Text>
-                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(os.receita.od_cilindrico)}</Text>
-                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtEixo(os.receita.od_eixo)}</Text>
-                </View>
-                <View style={{ flexDirection: "row", padding: 8 }}>
-                  <Text style={{ width: "25%", fontWeight: "bold", color: "#475569" }}>Esquerdo (OE)</Text>
-                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(os.receita.oe_esferico)}</Text>
-                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(os.receita.oe_cilindrico)}</Text>
-                  <Text style={{ width: "25%", textAlign: "center" }}>{fmtEixo(os.receita.oe_eixo)}</Text>
-                </View>
-              </View>
-              <View style={{ marginTop: 6 }}>
-                <Text>Adição: {os.receita.adicao ?? "-"} | DP: {os.receita.dp_dnp ?? "-"}</Text>
-              </View>
-            </View>
-          )}
-
-          <View style={styles.footer}>
-            <Text>Previsao de Entrega: {fmtData(os.previsao_entrega)}</Text>
-            <Text style={{ marginTop: 8 }}>
-              Declaro estar de acordo com as especificacoes deste pedido.
-            </Text>
-            <View style={styles.assinatura}>
-              <Text>Assinatura do Cliente</Text>
-            </View>
+        {data?.assinatura && (
+          <View style={styles.assinatura}>
+            <Image src={data.assinatura} style={{ width: isTermica ? 120 : 180, height: isTermica ? 40 : 60 }} />
+            <Text style={{ marginTop: 6 }}>Assinatura do Cliente</Text>
           </View>
-        </Page>
-      )}
+        )}
 
-      {via === "laboratorio" && (
-        <Page size={pageSize} style={styles.page}>
-          <View style={styles.header}>
-            <Text style={styles.tituloDocumento}>ORDEM DE SERVICO: {os.numero_os || "--"}</Text>
-            <Text>LABORATORIO: {os.laboratorio_nome || "A definir"}</Text>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.label}>DADOS TECNICOS DA RECEITA</Text>
-            <Text>
-              OD: {os.receita?.od_esferico ?? "-"} (Esf) / {os.receita?.od_cilindrico ?? "-"} (Cil) x {os.receita?.od_eixo ?? "-"}o
-            </Text>
-            <Text>
-              OE: {os.receita?.oe_esferico ?? "-"} (Esf) / {os.receita?.oe_cilindrico ?? "-"} (Cil) x {os.receita?.oe_eixo ?? "-"}o
-            </Text>
-            <Text>
-              Adicao: {os.receita?.adicao ?? "-"} | DP: {os.receita?.dp_dnp ?? "-"}
-            </Text>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.label}>PRESCRIÇÃO (Receita)</Text>
-            <View style={{ marginTop: 8, borderWidth: 1, borderColor: "#e6eef6", borderRadius: 8, overflow: "hidden" }}>
-              <View style={{ flexDirection: "row", backgroundColor: "#0f172a", padding: 6 }}>
-                <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Olho</Text>
-                <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Esférico</Text>
-                <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Cilíndrico</Text>
-                <Text style={{ width: "25%", color: "#fff", fontWeight: "bold", textAlign: "center" }}>Eixo</Text>
-              </View>
-              <View style={{ flexDirection: "row", padding: 8, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}>
-                <Text style={{ width: "25%", fontWeight: "bold", color: "#475569" }}>Direito (OD)</Text>
-                <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(receita.od_esferico)}</Text>
-                <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(receita.od_cilindrico)}</Text>
-                <Text style={{ width: "25%", textAlign: "center" }}>{fmtEixo(receita.od_eixo)}</Text>
-              </View>
-              <View style={{ flexDirection: "row", padding: 8 }}>
-                <Text style={{ width: "25%", fontWeight: "bold", color: "#475569" }}>Esquerdo (OE)</Text>
-                <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(receita.oe_esferico)}</Text>
-                <Text style={{ width: "25%", textAlign: "center" }}>{fmtNumber(receita.oe_cilindrico)}</Text>
-                <Text style={{ width: "25%", textAlign: "center" }}>{fmtEixo(receita.oe_eixo)}</Text>
-              </View>
-            </View>
-
-            <View style={{ marginTop: 8 }}>
-              <Text>Adição: {receita.adicao ?? "-"} | DP: {receita.dp_dnp ?? "-"}</Text>
-            </View>
-          </View>
-
-          <View style={styles.footer}>
-            <Text>Gerado por OptoVendas - {new Date().toLocaleString("pt-BR")}</Text>
-          </View>
-        </Page>
-      )}
+        <View style={styles.footer}>
+          <Text>Previsão de Entrega: {data?.previsaoEntrega ? new Date(data.previsaoEntrega).toLocaleDateString('pt-BR') : '---'}</Text>
+          <Text style={{ marginTop: 6 }}>Gerado em {new Date().toLocaleString('pt-BR')}</Text>
+        </View>
+      </Page>
     </Document>
   );
 }

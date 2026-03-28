@@ -29,5 +29,27 @@ export async function processQueue() {
 }
 
 export async function addPendingVenda(venda: any) {
-  return db.vendasPendentes.add({ venda, createdAt: new Date().toISOString(), syncPending: true });
+  try {
+    const job = { ...venda };
+    // if venda contains vendaData with local-only signatures, include them as pending_terms
+    const vd = job.vendaData || job.venda || null;
+    if (vd) {
+      const pending: any[] = [];
+      if (vd.assinatura_confirmacao && !vd.termo_confirmacao_id) {
+        pending.push({ tipo_termo: 'Confirmacao_Compra', termo_texto: vd.termoTexto || null, assinatura_base64: vd.assinatura_confirmacao });
+      }
+      if (vd.assinatura_arma_responsabilidade && !vd.termo_responsabilidade_id) {
+        pending.push({ tipo_termo: 'Responsabilidade_Armacao', termo_texto: vd.termoTexto || null, assinatura_base64: vd.assinatura_arma_responsabilidade });
+      }
+      if (pending.length) {
+        // attach pending_terms on vendaData so server can insert them during sync
+        if (job.vendaData) job.vendaData.pending_terms = pending;
+        else if (job.venda) job.venda.pending_terms = pending;
+      }
+    }
+    return await db.vendasPendentes.add({ ...job, createdAt: new Date().toISOString(), syncPending: true });
+  } catch (e) {
+    console.error('addPendingVenda failed', e);
+    return db.vendasPendentes.add({ venda, createdAt: new Date().toISOString(), syncPending: true });
+  }
 }

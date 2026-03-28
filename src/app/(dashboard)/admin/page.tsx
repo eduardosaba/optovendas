@@ -10,6 +10,7 @@ type Clinica = {
   nome_fantasia: string;
   cidade_sede?: string | null;
   possui_otica?: boolean | null;
+  unificar_modulos?: boolean | null;
   plano_tipo?: string | null;
 };
 
@@ -43,7 +44,7 @@ export default function TorreDeControle() {
         const [clinicasRes, pacientesCountRes, vendasRes] = await Promise.all([
           supabase
             .from("clinicas")
-            .select("id, nome_fantasia, cidade_sede, possui_otica, plano_tipo"),
+            .select("id, nome_fantasia, cidade_sede, possui_otica, unificar_modulos, plano_tipo"),
           supabase.from("pacientes").select("id", { count: "exact", head: true }),
           supabase.from("vendas").select("valor_total"),
         ]);
@@ -92,6 +93,32 @@ export default function TorreDeControle() {
 
     setClinicas((c) => c.map((cl) => (cl.id === id ? { ...cl, possui_otica: novo } : cl)));
     toast.success(`Modulo Otica ${novo ? "ativado" : "desativado"} com sucesso.`);
+  }
+
+  async function alternarUnificar(id: string, statusAtual: boolean | undefined) {
+    if (demoMode) {
+      toast.info("Modo demo ativo: alteracoes reais ficam bloqueadas.");
+      return;
+    }
+
+    const novo = !statusAtual;
+    try {
+      const res = await fetch(`/api/clinicas/${id}/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chave: 'unificar_modulos', valor_novo: novo }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || 'Erro ao atualizar integração');
+      }
+
+      setClinicas((c) => c.map((cl) => (cl.id === id ? { ...cl, unificar_modulos: novo } : cl)));
+      toast.success(`Integracao ${novo ? 'ativada' : 'desativada'} com sucesso.`);
+    } catch (err: any) {
+      toast.error('Erro ao atualizar: ' + (err?.message || err));
+    }
   }
 
   return (
@@ -206,7 +233,8 @@ export default function TorreDeControle() {
               <tr>
                 <th className="p-4">Clínica / Cliente</th>
                 <th className="p-4">Cidade Sede</th>
-                <th className="p-4 text-center">Módulo Ótica</th>
+                  <th className="p-4 text-center">Módulo Ótica</th>
+                  <th className="p-4 text-center">Integração</th>
                 <th className="p-4">Ações</th>
               </tr>
             </thead>
@@ -224,6 +252,11 @@ export default function TorreDeControle() {
                       {clinica.possui_otica ? "Ativo" : "Inativo"}
                     </span>
                   </td>
+                    <td className="p-4 text-center">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${clinica.unificar_modulos ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                        {clinica.unificar_modulos ? 'Unificado' : 'Separado'}
+                      </span>
+                    </td>
                   <td className="p-4">
                     <button
                       onClick={() => alternarModuloOtica(clinica.id, !!clinica.possui_otica)}
@@ -232,6 +265,13 @@ export default function TorreDeControle() {
                     >
                       {clinica.possui_otica ? "Desativar Vendas" : "Ativar Vendas"}
                     </button>
+                      <button
+                        onClick={() => alternarUnificar(clinica.id, !!clinica.unificar_modulos)}
+                        disabled={demoMode}
+                        className="ml-2 inline-flex min-h-11 items-center justify-center rounded border border-slate-200 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        {clinica.unificar_modulos ? 'Desativar Integração' : 'Ativar Integração'}
+                      </button>
                   </td>
                 </tr>
               ))}
