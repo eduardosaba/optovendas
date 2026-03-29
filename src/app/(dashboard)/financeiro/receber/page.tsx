@@ -5,6 +5,8 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
+import { PDFDownloadLink } from "@react-pdf/renderer";
+import ReciboPagamentoPdf from "@/components/financeiro/ReciboPagamentoPdf";
 import {
   ArrowLeft,
   Calendar,
@@ -14,45 +16,22 @@ import {
   MapPin,
   MessageCircle,
   Search,
+  Printer,
 } from "lucide-react";
-
-type ContaCorrente = {
-  id: string;
-  descricao: string;
-  saldo_atual?: number | null;
-};
-
-type PacienteInfo = {
-  nome_completo?: string | null;
-  cidade_atendimento?: string | null;
-  celular?: string | null;
-};
 
 type ParcelaRow = {
   id: string;
-  payment_id: string;
+  payment_id?: string;
   numero_parcela: number;
   valor_parcela: number;
   vencimento: string;
   status: string;
-  payments?:
-    | {
-        pacientes?: PacienteInfo | PacienteInfo[] | null;
-      }
-    | Array<{
-        pacientes?: PacienteInfo | PacienteInfo[] | null;
-      }>
-    | null;
+  localidade?: string;
+  payments?: any;
 };
 
 function brl(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function getPaciente(parcela: ParcelaRow): PacienteInfo | undefined {
-  const pay = Array.isArray(parcela.payments) ? parcela.payments[0] : parcela.payments;
-  const p = pay?.pacientes;
-  return Array.isArray(p) ? p[0] : p ?? undefined;
 }
 
 function limparTelefone(valor?: string | null) {
@@ -62,32 +41,26 @@ function limparTelefone(valor?: string | null) {
 function montarLinkWhatsapp(numero: string, mensagem: string) {
   const onlyDigits = limparTelefone(numero);
   if (!onlyDigits) return "";
-
-  // Se vier sem DDI, assume Brasil (+55)
   const withDdi = onlyDigits.startsWith("55") ? onlyDigits : `55${onlyDigits}`;
   return `https://wa.me/${withDdi}?text=${encodeURIComponent(mensagem)}`;
-}
-
-function diasEmAtraso(vencimento: Date) {
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const base = new Date(vencimento);
-  base.setHours(0, 0, 0, 0);
-  const diff = hoje.getTime() - base.getTime();
-  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
 }
 
 export default function ReceberPage() {
   const toast = useToast();
 
   const [clinicaId, setClinicaId] = useState("");
+  const [clinicaData, setClinicaData] = useState<any>(null);
   const [busca, setBusca] = useState("");
+  const [cidadeFiltro, setCidadeFiltro] = useState("todas");
   const [rows, setRows] = useState<ParcelaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [baixandoId, setBaixandoId] = useState<string | null>(null);
-
-  const [contas, setContas] = useState<ContaCorrente[]>([]);
+  const [contas, setContas] = useState<any[]>([]);
   const [contaSelecionada, setContaSelecionada] = useState("");
+
+  // Recibo modal
+  const [showModalRecibo, setShowModalRecibo] = useState(false);
+  const [dadosRecibo, setDadosRecibo] = useState<any>(null);
 
   useEffect(() => {
     async function carregarBase() {
@@ -96,168 +69,125 @@ export default function ReceberPage() {
         const ctx = await resolveClinicaContext();
         setClinicaId(ctx.clinicaId);
 
-        const contasRes = await supabase
-          .from("conta_corrente")
-          .select("id, descricao, saldo_atual")
-          .eq("clinica_id", ctx.clinicaId)
-          .order("descricao");
+        const contasRes = await supabase.from("conta_corrente").select("*").eq("clinica_id", ctx.clinicaId);
+        setContas(contasRes.data || []);
+        if (contasRes.data?.[0]) setContaSelecionada(contasRes.data[0].id);
 
-        let contasData = (contasRes.data as ContaCorrente[]) ?? [];
+        const cli = await supabase.from("clinicas").select("*").eq("id", ctx.clinicaId).maybeSingle();
+        if (!cli.error) setClinicaData(cli.data ?? null);
 
-        if (contasData.length === 0) {
-          const insertRes = await supabase
-            .from("conta_corrente")
-            .insert({ clinica_id: ctx.clinicaId, descricao: "Caixa Geral", saldo_atual: 0 })
-            .select("id, descricao, saldo_atual")
-            .single();
-
-          if (insertRes.error) throw new Error(insertRes.error.message);
-          contasData = [insertRes.data as ContaCorrente];
-        }
-
-        setContas(contasData);
-        setContaSelecionada(contasData[0]?.id ?? "");
-
-        await carregarParcelas(ctx.clinicaId, "");
+        await buscarDados(ctx.clinicaId);
       } catch (err) {
-        const e = err as Error;
-        toast.error(`Erro ao carregar dados financeiros: ${e.message}`);
+        toast.error("Erro ao carregar dados.");
       } finally {
         setLoading(false);
       }
     }
-
     void carregarBase();
-  }, [toast]);
+  }, []);
 
-  async function carregarParcelas(clinica: string, termoBusca: string) {
-    const parcelasRes = await supabase
+  async function buscarDados(cid: string) {
+    const { data, error } = await supabase
       .from("installments")
-      .select(
-        "id, payment_id, numero_parcela, valor_parcela, vencimento, status, payments(pacientes(nome_completo, cidade_atendimento, celular))"
-      )
-      .eq("clinica_id", clinica)
+      .select(`
+        *,
+        payments (
+          vendas (localidade_venda),
+          pacientes (nome_completo, cidade_atendimento, celular)
+        )
+      `)
+      .eq("clinica_id", cid)
       .in("status", ["pendente", "atrasado"])
       .order("vencimento", { ascending: true });
 
-    if (parcelasRes.error) throw new Error(parcelasRes.error.message);
-
-    const base = (parcelasRes.data as ParcelaRow[]) ?? [];
-    const t = termoBusca.trim().toLowerCase();
-    const filtradas =
-      t.length === 0
-        ? base
-        : base.filter((r) => (getPaciente(r)?.nome_completo ?? "").toLowerCase().includes(t));
-
-    setRows(filtradas);
+    if (error) throw error;
+    setRows(data || []);
   }
 
-  async function buscarParcelas() {
-    if (!clinicaId) return;
-    setLoading(true);
-    try {
-      await carregarParcelas(clinicaId, busca);
-    } catch (err) {
-      const e = err as Error;
-      toast.error(`Erro ao buscar parcelas: ${e.message}`);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const filtradas = useMemo(() => {
+    return rows.filter((r) => {
+      const paciente = Array.isArray(r.payments?.pacientes) ? r.payments.pacientes[0] : r.payments?.pacientes;
+      const vendasRel = Array.isArray(r.payments?.vendas) ? r.payments.vendas[0] : r.payments?.vendas;
+      const nomeMatch = (paciente?.nome_completo || "").toLowerCase().includes(busca.toLowerCase());
+      const cidadeObtida = vendasRel?.localidade_venda || paciente?.cidade_atendimento || "Não informada";
+      const cidadeMatch = cidadeFiltro === "todas" || cidadeObtida === cidadeFiltro;
+      return nomeMatch && cidadeMatch;
+    });
+  }, [rows, busca, cidadeFiltro]);
+
+  const listaCidades = useMemo(() => {
+    const cidades = rows.map((r) => {
+      const vendasRel = Array.isArray(r.payments?.vendas) ? r.payments.vendas[0] : r.payments?.vendas;
+      const paciente = Array.isArray(r.payments?.pacientes) ? r.payments.pacientes[0] : r.payments?.pacientes;
+      return vendasRel?.localidade_venda || paciente?.cidade_atendimento;
+    }).filter(Boolean);
+    return Array.from(new Set(cidades));
+  }, [rows]);
 
   async function confirmarPagamento(row: ParcelaRow) {
-    if (!contaSelecionada) {
-      toast.info("Selecione uma conta corrente para receber o valor.");
-      return;
-    }
-
+    if (!contaSelecionada) return toast.info("Selecione uma conta.");
     setBaixandoId(row.id);
+
     try {
-      const valor = Number(row.valor_parcela || 0);
       const hoje = new Date().toISOString().slice(0, 10);
+      const paciente = Array.isArray(row.payments?.pacientes) ? row.payments.pacientes[0] : row.payments?.pacientes;
+      const vendasRel = Array.isArray(row.payments?.vendas) ? row.payments.vendas[0] : row.payments?.vendas;
+      const localidade = vendasRel?.localidade_venda || paciente?.cidade_atendimento;
 
-      const upParcela = await supabase
-        .from("installments")
-        .update({ status: "pago", pago_em: hoje, valor_pago: valor })
-        .eq("id", row.id);
+      // 1. Atualiza a parcela
+      await supabase.from("installments").update({ status: "pago", pago_em: hoje, valor_pago: row.valor_parcela }).eq("id", row.id);
 
-      if (upParcela.error) throw new Error(upParcela.error.message);
-
-      const contaAtual = contas.find((c) => c.id === contaSelecionada);
-      const saldoAnterior = Number(contaAtual?.saldo_atual || 0);
-      const novoSaldo = saldoAnterior + valor;
-
-      const upConta = await supabase
-        .from("conta_corrente")
-        .update({ saldo_atual: novoSaldo })
-        .eq("id", contaSelecionada);
-
-      if (upConta.error) throw new Error(upConta.error.message);
-
-      const fluxoRes = await supabase.from("fluxo_caixa").insert({
+      // 2. Alimenta fluxo_caixa com localidade
+      await supabase.from("fluxo_caixa").insert({
         clinica_id: clinicaId,
         conta_id: contaSelecionada,
         tipo: "entrada",
-        valor,
-        descricao: `Recebimento parcela ${row.numero_parcela} - ${row.payment_id}`,
-        origem: "baixa_parcela",
-        referencia_id: row.id,
+        valor: row.valor_parcela,
+        descricao: `Receb. ${row.numero_parcela}ª Parcela - ${paciente?.nome_completo}`,
+        origem: "crediario",
+        localidade: localidade,
         data_movimento: hoje,
       });
 
-      if (fluxoRes.error) throw new Error(fluxoRes.error.message);
+      // 3. Atualiza saldo da conta
+      const conta = contas.find((c) => c.id === contaSelecionada);
+      const novoSaldo = (conta?.saldo_atual || 0) + row.valor_parcela;
+      await supabase.from("conta_corrente").update({ saldo_atual: novoSaldo }).eq("id", contaSelecionada);
 
-      setContas((prev) => prev.map((c) => (c.id === contaSelecionada ? { ...c, saldo_atual: novoSaldo } : c)));
+      // prepara recibo
+      setDadosRecibo({ parcela: row, cliente: paciente, clinica: clinicaData });
+      setShowModalRecibo(true);
+
       setRows((prev) => prev.filter((p) => p.id !== row.id));
-      toast.success("Baixa realizada e saldo da conta corrente atualizado.");
+      toast.success("Baixa realizada com sucesso!");
     } catch (err) {
-      const e = err as Error;
-      toast.error(`Erro ao confirmar pagamento: ${e.message}`);
+      toast.error("Erro ao processar pagamento.");
     } finally {
       setBaixandoId(null);
     }
   }
 
   function cobrarViaWhatsapp(row: ParcelaRow) {
-    const paciente = getPaciente(row);
+    const paciente = Array.isArray(row.payments?.pacientes) ? row.payments.pacientes[0] : row.payments?.pacientes;
     const nome = paciente?.nome_completo || "cliente";
     const numero = paciente?.celular;
-
-    if (!numero) {
-      toast.info("Paciente sem telefone cadastrado para WhatsApp.");
-      return;
-    }
-
-    const mensagem = `Olá ${nome}, tudo bem? Notamos uma parcela de ${brl(
-      Number(row.valor_parcela || 0)
-    )} pendente. Podemos te ajudar com o pagamento?`;
-
+    if (!numero) return toast.info("Paciente sem telefone cadastrado para WhatsApp.");
+    const mensagem = `Olá ${nome}, tudo bem? Segue o comprovante de pagamento de ${brl(Number(row.valor_parcela || 0))}. Obrigado!`;
     const link = montarLinkWhatsapp(numero, mensagem);
-    if (!link) {
-      toast.info("Telefone inválido para abrir WhatsApp.");
-      return;
-    }
-
+    if (!link) return toast.info("Telefone inválido para abrir WhatsApp.");
     window.open(link, "_blank", "noopener,noreferrer");
   }
 
-  const totalAberto = useMemo(() => rows.reduce((acc, r) => acc + Number(r.valor_parcela || 0), 0), [rows]);
-
   return (
-    <div className="mx-auto max-w-6xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
+    <div className="mx-auto max-w-6xl space-y-8 p-6 pb-20 duration-700 md:p-10 animate-in fade-in">
       <header className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
         <div className="flex items-center gap-4">
-          <Link
-            href="/financeiro"
-            className="rounded-2xl border border-slate-50 bg-white p-3 text-slate-400 shadow-sm transition-all hover:text-emerald-600"
-          >
+          <Link href="/financeiro" className="p-3 bg-white border rounded-2xl text-slate-400 hover:text-emerald-600 shadow-sm transition-all">
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Entradas</p>
-            <h1 className="text-4xl font-black tracking-tight text-slate-900">
-              Receber Parcelas<span className="text-emerald-600">.</span>
-            </h1>
+            <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Cobrança e Rotas</p>
+            <h1 className="text-4xl font-black tracking-tight text-slate-900">Baixa de Parcelas</h1>
           </div>
         </div>
 
@@ -266,123 +196,67 @@ export default function ReceberPage() {
             <DollarSign size={20} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase leading-none text-emerald-400">Total na Tela</p>
-            <p className="text-xl font-black text-emerald-700">{brl(totalAberto)}</p>
+            <p className="text-[10px] font-black uppercase text-emerald-400">Total Pendente na Rota</p>
+            <p className="text-xl font-black text-emerald-700">{filtradas.reduce((acc, r) => acc + r.valor_parcela, 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
           </div>
         </div>
       </header>
 
-      <section className="grid grid-cols-1 items-center gap-4 rounded-[40px] border border-slate-50 bg-white p-6 shadow-sm md:grid-cols-12">
-        <div className="relative md:col-span-6">
+      <section className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
+        <div className="relative md:col-span-5">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            onKeyUp={(e) => {
-              if (e.key === "Enter") void buscarParcelas();
-            }}
-            placeholder="Buscar por nome do paciente..."
-            className="w-full rounded-2xl border-none bg-slate-50 py-4 pl-12 pr-4 font-bold text-slate-700 shadow-inner focus:ring-2 focus:ring-emerald-500"
-          />
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Nome do cliente..." className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500" />
         </div>
 
         <div className="md:col-span-4">
-          <select
-            value={contaSelecionada}
-            onChange={(e) => setContaSelecionada(e.target.value)}
-            className="w-full rounded-2xl border-none bg-slate-50 p-4 font-black text-slate-600 focus:ring-2 focus:ring-emerald-500"
-          >
+          <div className="flex items-center gap-2 bg-slate-50 px-4 rounded-2xl border-none">
+            <MapPin size={18} className="text-slate-300" />
+            <select value={cidadeFiltro} onChange={(e) => setCidadeFiltro(e.target.value)} className="w-full bg-transparent border-none py-4 font-black text-slate-600 focus:ring-0">
+              <option value="todas">Todas as Cidades</option>
+              {listaCidades.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="md:col-span-3">
+          <select value={contaSelecionada} onChange={(e) => setContaSelecionada(e.target.value)} className="w-full bg-slate-900 text-white rounded-2xl border-none py-4 px-4 font-black text-xs uppercase tracking-widest">
             {contas.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.descricao} ({brl(Number(c.saldo_atual || 0))})
-              </option>
+              <option key={c.id} value={c.id}>{c.descricao}</option>
             ))}
           </select>
         </div>
-
-        <button
-          onClick={() => void buscarParcelas()}
-          className="rounded-2xl bg-slate-900 p-4 text-xs font-black uppercase tracking-widest text-white transition-all hover:bg-emerald-600 md:col-span-2"
-        >
-          Filtrar
-        </button>
       </section>
 
       <div className="space-y-4">
         {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-emerald-500" size={40} />
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="rounded-[40px] border border-dashed bg-white p-12 text-center">
-            <p className="font-bold italic text-slate-400">Nenhuma parcela pendente encontrada.</p>
-          </div>
+          <div className="flex justify-center py-20"><Loader2 className="animate-spin text-emerald-500" size={40} /></div>
+        ) : filtradas.length === 0 ? (
+          <div className="p-12 text-center bg-white rounded-[40px] border border-dashed border-slate-200"><p className="font-bold text-slate-400">Nenhuma parcela para esta rota/filtro.</p></div>
         ) : (
-          rows.map((p) => {
-            const paciente = getPaciente(p);
-            const hoje = new Date();
-            hoje.setHours(0, 0, 0, 0);
-            const venc = new Date(p.vencimento);
-            venc.setHours(0, 0, 0, 0);
-            const atrasada = venc < hoje;
-            const diasAtraso = diasEmAtraso(venc);
+          filtradas.map((p) => {
+            const paciente = Array.isArray(p.payments?.pacientes) ? p.payments.pacientes[0] : p.payments?.pacientes;
+            const atrasada = new Date(p.vencimento) < new Date();
 
             return (
-              <div
-                key={p.id}
-                className={`group flex flex-col items-center justify-between gap-6 rounded-[32px] border border-slate-50 bg-white p-6 shadow-sm transition-all hover:shadow-xl md:flex-row ${
-                  baixandoId === p.id ? "animate-pulse opacity-70" : ""
-                }`}
-              >
-                <div className="flex flex-1 items-center gap-5">
-                  <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-2xl font-black transition-colors ${
-                      atrasada ? "bg-rose-50 text-rose-500" : "bg-emerald-50 text-emerald-600"
-                    }`}
-                  >
-                    {p.numero_parcela}a
-                  </div>
+              <div key={p.id} className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-white rounded-[32px] border border-slate-50 shadow-sm hover:shadow-md transition-all">
+                <div className="flex items-center gap-5 flex-1">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black ${atrasada ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>{p.numero_parcela}ª</div>
                   <div>
-                    <h4 className="text-lg font-black leading-tight text-slate-800">{paciente?.nome_completo || "Cliente"}</h4>
-                    <div className="mt-1 flex flex-wrap gap-4">
-                      <div className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400">
-                        <Calendar size={12} /> Venc: {venc.toLocaleDateString("pt-BR")}
-                      </div>
-                      <div className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400">
-                        <MapPin size={12} /> {paciente?.cidade_atendimento || "Local nao informado"}
-                      </div>
-                      {atrasada ? (
-                        <div className="rounded-full bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase text-rose-600">
-                          Em atraso ha {diasAtraso} dia{diasAtraso > 1 ? "s" : ""}
-                        </div>
-                      ) : null}
+                    <h4 className="font-black text-slate-800">{paciente?.nome_completo}</h4>
+                    <div className="flex flex-wrap gap-3 mt-1">
+                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><Calendar size={12} /> {new Date(p.vencimento).toLocaleDateString('pt-BR')}</span>
+                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><MapPin size={12} /> {(Array.isArray(p.payments?.vendas) ? p.payments.vendas[0]?.localidade_venda : p.payments?.vendas?.localidade_venda) || paciente?.cidade_atendimento}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex w-full items-center gap-4 md:w-auto">
-                  <div className="mr-4 text-right">
-                    <p className={`text-xl font-black ${atrasada ? "text-rose-600" : "text-slate-900"}`}>
-                      {brl(Number(p.valor_parcela || 0))}
-                    </p>
-                    <p className="text-[9px] font-black uppercase text-slate-300">Valor da Parcela</p>
-                  </div>
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="text-right mr-4"><p className={`text-xl font-black ${atrasada ? 'text-rose-600' : 'text-slate-900'}`}>{p.valor_parcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
 
-                  <button
-                    onClick={() => cobrarViaWhatsapp(p)}
-                    className="rounded-2xl bg-slate-50 p-4 text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600"
-                    title="Cobrar via WhatsApp"
-                  >
-                    <MessageCircle size={20} />
-                  </button>
-
-                  <button
-                    onClick={() => void confirmarPagamento(p)}
-                    disabled={baixandoId === p.id}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-8 py-4 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-emerald-100 transition-all hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-60 md:flex-none"
-                  >
-                    {baixandoId === p.id ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />}
-                    Baixar
+                  <button onClick={() => confirmarPagamento(p)} disabled={!!baixandoId} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all disabled:opacity-50">
+                    {baixandoId === p.id ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Baixar
                   </button>
                 </div>
               </div>
@@ -390,6 +264,32 @@ export default function ReceberPage() {
           })
         )}
       </div>
+
+      {/* Modal de Recibo */}
+      {showModalRecibo && dadosRecibo && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[40px] bg-white p-8 shadow-2xl text-center">
+            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <CheckCircle2 size={40} />
+            </div>
+
+            <h3 className="text-2xl font-black text-slate-900">Pagamento Recebido!</h3>
+            <p className="mt-2 text-sm font-medium text-slate-500">A parcela de {brl(dadosRecibo.parcela.valor_parcela)} de <strong>{dadosRecibo.cliente?.nome_completo}</strong> foi baixada no sistema.</p>
+
+            <div className="mt-8 space-y-3">
+              <PDFDownloadLink document={<ReciboPagamentoPdf {...dadosRecibo} />} fileName={`Recibo_${dadosRecibo?.cliente?.nome_completo?.split(' ')[0] || 'cliente'}.pdf`} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-slate-900 py-4 font-black text-white hover:bg-emerald-600 transition-all">
+                {({ loading }) => (<><Printer size={18} />{loading ? 'Gerando PDF...' : 'Imprimir Recibo'}</>)}
+              </PDFDownloadLink>
+
+              <button onClick={() => cobrarViaWhatsapp(dadosRecibo.parcela)} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-50 py-4 font-black text-emerald-700 hover:bg-emerald-100 transition-all">
+                <MessageCircle size={18} /> Enviar Comprovante via Zap
+              </button>
+
+              <button onClick={() => setShowModalRecibo(false)} className="w-full pt-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600">Fechar e Continuar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

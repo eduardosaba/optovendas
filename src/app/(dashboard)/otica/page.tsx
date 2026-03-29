@@ -20,6 +20,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import SyncStatus from "@/components/otica/SyncStatus";
 import { ReactNode } from "react";
 
 type MetricsState = {
@@ -166,6 +167,8 @@ export default function OticaPage() {
           ) : null}
         </div>
       </header>
+
+      <SyncStatus />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         <Link

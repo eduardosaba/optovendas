@@ -13,12 +13,12 @@ export async function POST(req: NextRequest) {
 
     const supabaseAdmin = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
 
-    // Recupera o profile para obter user_id (se vinculado ao Auth)
-    const { data, error } = await supabaseAdmin.from('profiles').select('id, user_id').eq('id', profileId).maybeSingle();
+    // Recupera o perfis para obter user_id (se vinculado ao Auth)
+    const { data, error } = await supabaseAdmin.from('perfis').select('id, user_id').eq('id', profileId).maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Deleta o registro de profile
-    const del = await supabaseAdmin.from('profiles').delete().eq('id', profileId);
+    // Deleta o registro de perfis
+    const del = await supabaseAdmin.from('perfis').delete().eq('id', profileId);
     if (del.error) return NextResponse.json({ error: del.error.message }, { status: 500 });
 
     // Se havia um user_id, tente remover o usuário do Auth também (não bloqueia se falhar)

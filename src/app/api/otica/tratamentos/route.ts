@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const user = await getUserFromBearer(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const profile = await supabaseAdmin!.from('profiles').select('clinica_id').eq('id', user.id).maybeSingle();
+    const profile = await supabaseAdmin!.from('perfis').select('clinica_id').eq('id', user.id).maybeSingle();
     const clinicaId = profile?.data?.clinica_id ?? null;
     if (!clinicaId) return NextResponse.json({ error: 'Perfil sem clínica' }, { status: 403 });
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const user = await getUserFromBearer(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const profile = await supabaseAdmin!.from('profiles').select('clinica_id').eq('id', user.id).maybeSingle();
+    const profile = await supabaseAdmin!.from('perfis').select('clinica_id').eq('id', user.id).maybeSingle();
     const clinicaId = profile?.data?.clinica_id ?? null;
     if (!clinicaId) return NextResponse.json({ error: 'Perfil sem clínica' }, { status: 403 });
 
@@ -82,7 +82,7 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     if (!body?.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-    const profile = await supabaseAdmin!.from('profiles').select('clinica_id').eq('id', user.id).maybeSingle();
+    const profile = await supabaseAdmin!.from('perfis').select('clinica_id').eq('id', user.id).maybeSingle();
     const clinicaId = profile?.data?.clinica_id ?? null;
     if (!clinicaId) return NextResponse.json({ error: 'Perfil sem clínica' }, { status: 403 });
 
@@ -113,7 +113,7 @@ export async function DELETE(req: NextRequest) {
     const id = url.searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-    const profile = await supabaseAdmin!.from('profiles').select('clinica_id').eq('id', user.id).maybeSingle();
+    const profile = await supabaseAdmin!.from('perfis').select('clinica_id').eq('id', user.id).maybeSingle();
     const clinicaId = profile?.data?.clinica_id ?? null;
     if (!clinicaId) return NextResponse.json({ error: 'Perfil sem clínica' }, { status: 403 });
 

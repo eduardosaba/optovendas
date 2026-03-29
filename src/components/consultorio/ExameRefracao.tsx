@@ -3,9 +3,20 @@
 import { useState } from "react";
 import { Eye, Ruler, PlusCircle, ChevronUp, ChevronDown } from "lucide-react";
 
-const OPCOES_CONDICOES = ["Miopia", "Astigmatismo", "Hipermetropia", "Presbiopia"];
+const OPCOES_CONDICOES = [
+  { label: "Miopia", key: "miopia" },
+  { label: "Astigmatismo", key: "astigmatismo" },
+  { label: "Hipermetropia", key: "hipermetropia" },
+  { label: "Presbiopia", key: "presbiopia" },
+];
+
 const OPCOES_TIPOS_LENTE = ["Visão Simples", "Progressivas"];
-const OPCOES_TRATAMENTOS = ["Anti Reflexo", "Fotossensível"];
+
+const OPCOES_TRATAMENTOS = [
+  { label: "Anti Reflexo", key: "tratamentoAntiReflexo" },
+  { label: "Fotossensível", key: "tratamentoFotossivel" },
+];
+
 const OPCOES_RETORNO = ["6 meses", "1 ano", "Outro"];
 
 export type RefracaoValue = {
@@ -32,11 +43,10 @@ export type RefracaoValue = {
 type Props = {
   value: RefracaoValue;
   onChange: (next: RefracaoValue) => void;
+  showExtras?: boolean;
 };
 
-type ExameProps = Props & { showExtras?: boolean };
-
-export default function ExameRefracao({ value, onChange, showExtras = true }: ExameProps) {
+export default function ExameRefracao({ value, onChange, showExtras = true }: Props) {
   const [editingAdicao, setEditingAdicao] = useState(false);
 
   function normalizeNumericInput(raw: string) {
@@ -58,7 +68,7 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
     return n >= 0 ? `+${formatted}` : `-${formatted}`;
   }
 
-  function setField<K extends keyof RefracaoValue>(key: K, next: string) {
+  function setField<K extends keyof RefracaoValue>(key: K, next: any) {
     onChange({ ...value, [key]: next });
   }
 
@@ -112,9 +122,7 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
         </div>
       </div>
 
-      {/* DADOS DE SUPORTE */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-        {/* Widget Adição */}
         <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-6 group hover:border-orange-200 transition-all">
           <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-500 group-hover:bg-orange-500 group-hover:text-white transition-all shadow-inner">
             <PlusCircle size={28} />
@@ -122,13 +130,7 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
           <div className="flex-1">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Adição</label>
             <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => stepAdicao(-0.25)}
-                className="h-11 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 hover:border-orange-200 transition-colors flex items-center justify-center"
-              >
-                <ChevronDown size={20} />
-              </button>
+              <button type="button" onClick={() => stepAdicao(-0.25)} className="h-11 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 transition-colors flex items-center justify-center"><ChevronDown size={20} /></button>
               <input
                 type="text"
                 inputMode="decimal"
@@ -140,21 +142,14 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
                   const n = Number(normalizeNumericInput(value.adicao ?? ""));
                   if (Number.isFinite(n)) setField("adicao", n.toFixed(2));
                 }}
-                className="w-full min-w-0 h-11 text-xl sm:text-2xl font-black text-slate-800 bg-slate-50 border border-slate-100 rounded-xl px-2 focus:ring-2 focus:ring-orange-300 text-center"
+                className="w-full min-w-0 h-11 text-xl font-black text-slate-800 bg-slate-50 border border-slate-100 rounded-xl px-2 focus:ring-2 focus:ring-orange-300 text-center"
                 placeholder="+0,00"
               />
-              <button
-                type="button"
-                onClick={() => stepAdicao(0.25)}
-                className="h-11 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 hover:border-orange-200 transition-colors flex items-center justify-center"
-              >
-                <ChevronUp size={20} />
-              </button>
+              <button type="button" onClick={() => stepAdicao(0.25)} className="h-11 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 transition-colors flex items-center justify-center"><ChevronUp size={20} /></button>
             </div>
           </div>
         </div>
 
-        {/* Widget DP */}
         <div className="bg-white p-6 md:p-8 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-6 group hover:border-emerald-200 transition-all">
           <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-all shadow-inner">
             <Ruler size={28} />
@@ -178,27 +173,19 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <div className="text-xs font-black uppercase text-slate-400 mb-2">Condições</div>
-              <div className="flex flex-wrap gap-3 p-1">
-                {OPCOES_CONDICOES.map((c) => {
-                  const chave = c;
-                  const ativo = (chave === "Miopia" && !!value.miopia) || (chave === "Astigmatismo" && !!value.astigmatismo) || (chave === "Hipermetropia" && !!value.hipermetropia) || (chave === "Presbiopia" && !!value.presbiopia);
+              <div className="flex flex-wrap gap-2">
+                {OPCOES_CONDICOES.map((item) => {
+                  const ativo = !!(value as any)[item.key];
                   return (
                     <button
-                      key={c}
+                      key={item.key}
                       type="button"
-                      onClick={() => {
-                        if (c === "Miopia") onChange({ ...value, miopia: !value.miopia });
-                        if (c === "Astigmatismo") onChange({ ...value, astigmatismo: !value.astigmatismo });
-                        if (c === "Hipermetropia") onChange({ ...value, hipermetropia: !value.hipermetropia });
-                        if (c === "Presbiopia") onChange({ ...value, presbiopia: !value.presbiopia });
-                      }}
-                      className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
-                        ativo
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                          : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
+                      onClick={() => setField(item.key as any, !ativo)}
+                      className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        ativo ? "bg-blue-600 text-white shadow-md" : "bg-slate-50 text-slate-400 hover:bg-white border border-transparent hover:border-slate-100"
                       }`}
                     >
-                      {c}
+                      {item.label}
                     </button>
                   );
                 })}
@@ -207,47 +194,37 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
 
             <div>
               <div className="text-xs font-black uppercase text-slate-400 mb-2">Tipo de lente</div>
-              <div className="flex flex-wrap gap-3 p-1">
-                {OPCOES_TIPOS_LENTE.map((t) => {
-                  const ativo = value.tipoLente === t;
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => onChange({ ...value, tipoLente: ativo ? null : t })}
-                      className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
-                        ativo
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                          : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  );
-                })}
+              <div className="flex flex-wrap gap-2">
+                {OPCOES_TIPOS_LENTE.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setField("tipoLente", value.tipoLente === t ? null : t)}
+                    className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                      value.tipoLente === t ? "bg-blue-600 text-white shadow-md" : "bg-slate-50 text-slate-400 hover:bg-white border"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </div>
             </div>
 
             <div>
               <div className="text-xs font-black uppercase text-slate-400 mb-2">Tratamentos</div>
-              <div className="flex flex-wrap gap-3 p-1">
-                {OPCOES_TRATAMENTOS.map((tr) => {
-                  const ativo = (tr === "Anti Reflexo" && !!value.tratamentoAntiReflexo) || (tr === "Fotossível" && !!value.tratamentoFotossivel);
+              <div className="flex flex-wrap gap-2">
+                {OPCOES_TRATAMENTOS.map((item) => {
+                  const ativo = !!(value as any)[item.key];
                   return (
                     <button
-                      key={tr}
+                      key={item.key}
                       type="button"
-                      onClick={() => {
-                        if (tr === "Anti Reflexo") onChange({ ...value, tratamentoAntiReflexo: !value.tratamentoAntiReflexo });
-                        if (tr === "Fotossível") onChange({ ...value, tratamentoFotossivel: !value.tratamentoFotossivel });
-                      }}
-                      className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
-                        ativo
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                          : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
+                      onClick={() => setField(item.key as any, !ativo)}
+                      className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        ativo ? "bg-blue-600 text-white shadow-md" : "bg-slate-50 text-slate-400 hover:bg-white border"
                       }`}
                     >
-                      {tr}
+                      {item.label}
                     </button>
                   );
                 })}
@@ -256,24 +233,19 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
 
             <div>
               <div className="text-xs font-black uppercase text-slate-400 mb-2">Retorno</div>
-              <div className="flex flex-wrap gap-3 p-1">
+              <div className="flex flex-wrap gap-2">
                 {OPCOES_RETORNO.map((r) => {
-                  const ativo = r === "Outro" ? !!value.retorno && value.retorno !== "6 meses" && value.retorno !== "1 ano" : value.retorno === r;
+                  const isOutro = r === "Outro";
+                  const isRetornoPadrao = value.retorno === "6 meses" || value.retorno === "1 ano";
+                  const ativo = isOutro ? (!!value.retorno && !isRetornoPadrao) : value.retorno === r;
+                  
                   return (
                     <button
                       key={r}
                       type="button"
-                      onClick={() => {
-                        if (r === "Outro") {
-                          onChange({ ...value, retorno: ativo ? "" : "" });
-                          return;
-                        }
-                        onChange({ ...value, retorno: value.retorno === r ? "" : r });
-                      }}
-                      className={`rounded-2xl px-4 py-2 text-sm font-bold transition-all duration-200 transform active:scale-95 ${
-                        ativo
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-                          : "bg-slate-50 text-slate-400 hover:bg-white hover:shadow-md border border-transparent hover:border-slate-100"
+                      onClick={() => setField("retorno", ativo ? "" : (isOutro ? "" : r))}
+                      className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                        ativo ? "bg-blue-600 text-white shadow-md" : "bg-slate-50 text-slate-400 hover:bg-white border"
                       }`}
                     >
                       {r}
@@ -281,12 +253,11 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
                   );
                 })}
               </div>
-
               <input
                 value={value.retorno && value.retorno !== "6 meses" && value.retorno !== "1 ano" ? value.retorno : ""}
-                onChange={(e) => onChange({ ...value, retorno: e.target.value })}
-                className="mt-3 w-full rounded-2xl border-none bg-slate-50 p-3 text-sm font-bold text-slate-700 shadow-inner focus:ring-2 focus:ring-blue-500"
-                placeholder="Ex: 9 meses / Retorno em 30 dias"
+                onChange={(e) => setField("retorno", e.target.value)}
+                className="mt-3 w-full rounded-xl border-none bg-slate-50 p-2 text-xs font-bold text-slate-700 shadow-inner focus:ring-1 focus:ring-blue-500"
+                placeholder="Ex: 3 meses / Urgente"
               />
             </div>
           </div>
@@ -296,6 +267,7 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Ex
   );
 }
 
+// Subcomponentes mantidos e otimizados...
 function InputMedicao({ label, value, onChange, isEixo, isAv, step }: any) {
   function changeBy(delta: number) {
     const raw = String(value ?? "").replace(/,/g, ".").replace(/[^0-9+\-\.]/g, "");
@@ -307,28 +279,13 @@ function InputMedicao({ label, value, onChange, isEixo, isAv, step }: any) {
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-[10px] font-black uppercase text-slate-400 text-center block tracking-tighter">
-        {label}
-      </label>
+      <label className="text-[10px] font-black uppercase text-slate-400 text-center block tracking-tighter">{label}</label>
       <div className="relative group/input">
         <InputWithFormatting value={value} onChange={onChange} isAv={isAv} isEixo={isEixo} />
-        
         {step && (
           <div className="mt-2 flex items-center justify-center gap-1">
-            <button
-              type="button"
-              onClick={() => changeBy(-Math.abs(step))}
-              className="flex-1 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center justify-center"
-            >
-              <ChevronDown size={14} />
-            </button>
-            <button
-              type="button"
-              onClick={() => changeBy(Math.abs(step))}
-              className="flex-1 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all flex items-center justify-center"
-            >
-              <ChevronUp size={14} />
-            </button>
+            <button type="button" onClick={() => changeBy(-Math.abs(step))} className="flex-1 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-blue-600 transition-all flex items-center justify-center"><ChevronDown size={14} /></button>
+            <button type="button" onClick={() => changeBy(Math.abs(step))} className="flex-1 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-blue-600 transition-all flex items-center justify-center"><ChevronUp size={14} /></button>
           </div>
         )}
       </div>
@@ -342,20 +299,15 @@ function InputWithFormatting({ value, onChange, isAv, isEixo }: any) {
   function maskAv(raw: string) {
     const digits = String(raw || "").replace(/\D/g, "");
     if (digits.length <= 2) return digits;
-    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
     return `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
   }
 
   function formatDisplay(v: string | undefined | null) {
     if (!v || String(v).trim() === "") return "";
     if (isEixo) return `${String(v).replace(/[^0-9-]/g, "")}°`;
-    
     const n = Number(String(v).replace(/,/g, "."));
     if (!Number.isFinite(n)) return String(v);
-    const formatted = new Intl.NumberFormat("pt-BR", { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-    }).format(Math.abs(n));
+    const formatted = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(n));
     return n >= 0 ? `+${formatted}` : `-${formatted}`;
   }
 
@@ -366,29 +318,14 @@ function InputWithFormatting({ value, onChange, isAv, isEixo }: any) {
       value={editing ? value ?? "" : (isAv ? (value ?? "") : formatDisplay(value))}
       onChange={(e) => {
         const inputRaw = e.target.value;
-        if (isEixo) {
-          const raw = inputRaw.replace(/[^0-9-]/g, "");
-          onChange(raw);
-          return;
-        }
-
-        if (isAv) {
-          const masked = maskAv(inputRaw);
-          onChange(masked);
-          return;
-        }
-
+        if (isEixo) { onChange(inputRaw.replace(/[^0-9-]/g, "")); return; }
+        if (isAv) { onChange(maskAv(inputRaw)); return; }
         onChange(inputRaw);
       }}
       onFocus={() => setEditing(true)}
-      onBlur={() => {
-        setEditing(false);
-        if (isAv) {
-          onChange(maskAv(value ?? ""));
-        }
-      }}
+      onBlur={() => setEditing(false)}
       placeholder={isAv ? "20/20" : "0,00"}
-      className="w-full bg-white rounded-2xl border-none shadow-inner py-4 px-2 text-center font-black text-slate-800 text-base md:text-lg focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-200 shadow-slate-200/50"
+      className="w-full bg-white rounded-2xl border-none shadow-inner py-4 px-2 text-center font-black text-slate-800 text-base focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-200"
     />
   );
 }

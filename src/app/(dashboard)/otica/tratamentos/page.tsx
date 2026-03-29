@@ -30,7 +30,7 @@ export default function Page() {
           setItems([]);
           return;
         }
-        const prof = await supabase.from('profiles').select('clinica_id').eq('id', user.id).maybeSingle();
+        const prof = await supabase.from('perfis').select('clinica_id').eq('id', user.id).maybeSingle();
         const clinicaId = prof?.data?.clinica_id ?? null;
         const q = clinicaId ? await supabase.from('clinica_tratamentos').select('*').eq('clinica_id', clinicaId).order('nome', { ascending: true }) : await supabase.from('clinica_tratamentos').select('*').eq('ativo', true).order('nome', { ascending: true });
         if (mounted) setItems(q.data ?? []);

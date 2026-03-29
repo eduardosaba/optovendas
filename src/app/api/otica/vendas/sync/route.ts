@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
               allowed = true;
               if (job && job.clinicaId) {
                 try {
-                  const prof = await supabaseAdmin.from('profiles').select('clinica_id').eq('id', userId).maybeSingle();
+                  const prof = await supabaseAdmin.from('perfis').select('clinica_id').eq('id', userId).maybeSingle();
                   const perfilClinica = prof?.data?.clinica_id ?? null;
                   if (perfilClinica && perfilClinica !== job.clinicaId) {
                     // user not authorized for this clinic
@@ -152,6 +152,8 @@ export async function POST(req: NextRequest) {
       saldo_restante: Math.max(0, valorTotal - valorEntrada),
       tipo_fechamento: tipoFechamento,
       status_financeiro: statusFinanceiro,
+      // inclui status_pagamento para acionamento dos triggers que checam esse campo
+      status_pagamento: statusFinanceiro,
       anexos_urls: resolvedAnexos.length ? resolvedAnexos : null,
       pupilometro_foto_url: pupilometroUrl || null,
     };
@@ -192,6 +194,30 @@ export async function POST(req: NextRequest) {
     const osRes = await supabaseAdmin.from('ordens_servico').insert(osPayload);
     if (osRes.error) throw osRes.error;
 
+    // Registra entrada imediata no fluxo de caixa quando houver sinal (paridade offline)
+    try {
+      if (valorEntrada > 0) {
+        const formaEntradaLower = (vendaData.financeiro?.formaEntrada || '').toLowerCase();
+        const isCartao = formaEntradaLower.includes('cart') || formaEntradaLower.includes('credito') || formaEntradaLower.includes('debito') || formaEntradaLower.includes('débito');
+        const fluxoRes = await supabaseAdmin.from('fluxo_caixa').insert({
+          clinica_id: clinicaId,
+          tipo: 'entrada',
+          origem: 'entrada_venda_otica',
+          referencia_id: vendaId,
+          descricao: `Entrada da venda ${vendaId?.slice(0,8)} (${vendaData.financeiro?.formaEntrada || 'nao informada'})`,
+          valor: valorEntrada,
+          valor_bruto: valorEntrada,
+          taxa_cartao: 0,
+          status_conciliacao: isCartao ? 'pendente' : 'concluido',
+          localidade: vendaData.localidadeVenda || null,
+          data_movimento: new Date().toISOString().slice(0,10),
+        });
+        if (fluxoRes.error) console.warn('sync: failed to insert fluxo_caixa', fluxoRes.error);
+      }
+    } catch (e) {
+      console.warn('sync: error inserting fluxo_caixa', e);
+    }
+
     // payments / installments
     const parcelas = (vendaData.parcelas || []).map((p: any) => ({ ...p }));
     if (parcelas.length > 0) {
@@ -202,6 +228,25 @@ export async function POST(req: NextRequest) {
       const installmentsPayload = parcelas.map((par: any) => ({ payment_id: paymentId, clinica_id: clinicaId, numero_parcela: par.numero, valor_parcela: Number(par.valor), vencimento: par.vencimento, status: 'pendente' }));
       const inst = await supabaseAdmin.from('installments').insert(installmentsPayload);
       if (inst.error) throw inst.error;
+      // Registra também as parcelas em financeiro_parcelas para controle de contas a receber
+      try {
+        const parcelasPayloadForFinance = parcelas.map((par: any) => ({
+          clinica_id: clinicaId,
+          venda_id: vendaId,
+          paciente_id: pacienteIdFinal,
+          numero_parcela: par.numero,
+          valor_parcela: Number(par.valor || 0),
+          data_vencimento: par.vencimento,
+          status: 'pendente',
+          localidade: vendaData.localidadeVenda || null,
+        }));
+        if (parcelasPayloadForFinance.length) {
+          const parRes = await supabaseAdmin.from('financeiro_parcelas').insert(parcelasPayloadForFinance);
+          if (parRes.error) console.warn('sync: failed to insert financeiro_parcelas', parRes.error);
+        }
+      } catch (e) {
+        console.warn('sync: error inserting financeiro_parcelas', e);
+      }
     }
 
     // baixa estoque

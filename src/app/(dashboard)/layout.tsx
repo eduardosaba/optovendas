@@ -212,7 +212,7 @@ export default function DashboardLayout({
     },
     {
       href: "/financeiro",
-      label: "Financeiro Ótica",
+      label: "Financeiro",
       iconPath: "M3 7h18v10H3zM16 12h3",
       iconClass: "bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100",
       show: ["master", "admin", "financeiro"].includes(role),
@@ -327,6 +327,11 @@ export default function DashboardLayout({
                           <Link href="/otica/gestao/logs" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-indigo-400 transition-all rounded-2xl">
                             <Terminal size={18} />
                             <span className="text-sm font-bold">Logs de Erro</span>
+                          </Link>
+
+                          <Link href="/admin/diagnostico" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-indigo-400 transition-all rounded-2xl">
+                            <Terminal size={18} />
+                            <span className="text-sm font-bold">Diagnóstico</span>
                           </Link>
 
                           <Link href="/otica/gestao/auditoria" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-slate-700 transition-all rounded-2xl">
@@ -444,7 +449,7 @@ export default function DashboardLayout({
             <>
               <div className="flex gap-2">
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">F</div>
-                <div className="text-xs text-slate-600">Foco</div>
+                <div className="text-xs text-slate-600">Tela Cheia</div>
               </div>
               <div className="flex gap-2">
                 <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] font-mono">S</div>
@@ -466,7 +471,7 @@ export default function DashboardLayout({
                   type="button"
                   onClick={() => ctx.setIsFocusMode(false)}
                   className="rounded-full bg-black/60 p-2 text-white shadow-lg backdrop-blur hover:scale-105 transition-transform"
-                  title="Sair do modo foco"
+                  title="Sair do modo Tela Cheia"
                 >
                   ✕
 

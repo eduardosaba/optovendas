@@ -33,7 +33,7 @@ export default function QuickAddProduto({ tipo, aoFinalizar, aoFechar }: Props) 
           const sess = await supabase.auth.getUser();
           const uid = sess?.data?.user?.id ?? null;
           if (uid) {
-            const prof = await supabase.from('profiles').select('clinica_id').eq('id', uid).maybeSingle();
+            const prof = await supabase.from('perfis').select('clinica_id').eq('id', uid).maybeSingle();
             clinica_id = prof?.data?.clinica_id ?? clinica_id;
           }
         } catch (e) {

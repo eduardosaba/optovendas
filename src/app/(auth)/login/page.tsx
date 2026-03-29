@@ -175,16 +175,6 @@ export default function LoginPage() {
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : "Entrar no Sistema"}
             </button>
-
-            <button
-              type="button"
-              disabled={sendingAccessLink}
-              onClick={handleEsqueciSenha}
-              className="w-full py-4 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-all tracking-[0.2em] flex items-center justify-center gap-2"
-            >
-              {sendingAccessLink ? <Loader2 className="animate-spin" size={12} /> : <KeyRound size={12} />}
-              Primeiro Acesso / Ativar Conta
-            </button>
           </div>
         </form>
       </div>

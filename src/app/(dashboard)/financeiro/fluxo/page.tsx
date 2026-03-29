@@ -31,7 +31,7 @@ type FluxoRow = {
   valor?: number | null;
   descricao?: string | null;
   data_movimento?: string | null;
-  created_at?: string | null;
+  criado_em?: string | null;
   categorias_financeiras?: FluxoCategoria | FluxoCategoria[] | null;
   conta_corrente?: FluxoConta | FluxoConta[] | null;
 };
@@ -61,7 +61,7 @@ function getConta(mov: FluxoRow) {
 function exportarCsv(rows: FluxoRow[]) {
   const headers = ["data", "tipo", "descricao", "categoria", "conta", "valor"];
   const lines = rows.map((r) => {
-    const data = parseDate(r.data_movimento || r.created_at)?.toLocaleDateString("pt-BR") || "";
+    const data = parseDate(r.data_movimento || r.criado_em)?.toLocaleDateString("pt-BR") || "";
     const tipo = r.tipo || "";
     const descricao = r.descricao || "";
     const categoria = getCategoria(r)?.nome || "Geral";
@@ -98,9 +98,9 @@ export default function FluxoCaixaPage() {
       const ctx = await resolveClinicaContext();
       const { data, error } = await supabase
         .from("fluxo_caixa")
-        .select("id, tipo, valor, descricao, data_movimento, created_at, categorias_financeiras(nome), conta_corrente(descricao)")
+        .select("id, tipo, valor, descricao, data_movimento, criado_em, categorias_financeiras(nome), conta_corrente(descricao)")
         .eq("clinica_id", ctx.clinicaId)
-        .order("created_at", { ascending: false });
+        .order("criado_em", { ascending: false });
 
       if (error) throw error;
       setMovimentacoes((data as FluxoRow[]) || []);
@@ -120,7 +120,7 @@ export default function FluxoCaixaPage() {
     const termo = filtroBusca.trim().toLowerCase();
 
     return movimentacoes.filter((mov) => {
-      const dataMov = parseDate(mov.data_movimento || mov.created_at);
+      const dataMov = parseDate(mov.data_movimento || mov.criado_em);
       const dataBase = filtroData ? new Date(`${filtroData}T00:00:00`) : null;
       const passouData = !dataBase || (dataMov ? dataMov >= dataBase : false);
 
@@ -239,7 +239,7 @@ export default function FluxoCaixaPage() {
               <tbody className="divide-y divide-slate-50">
                 {movimentacoesFiltradas.map((mov) => {
                   const isEntrada = (mov.tipo || "").toLowerCase() === "entrada";
-                  const dataMov = parseDate(mov.data_movimento || mov.created_at);
+                  const dataMov = parseDate(mov.data_movimento || mov.criado_em);
                   const categoria = getCategoria(mov)?.nome || "Geral";
                   const conta = getConta(mov)?.descricao || "Sem conta";
 

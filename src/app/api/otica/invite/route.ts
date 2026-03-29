@@ -62,9 +62,9 @@ export async function POST(req: NextRequest) {
 
     const userId = createRes.user?.id ?? createRes?.data?.id ?? null;
 
-    // Inserir registro em `profiles` vinculando ao auth.user
+    // Inserir registro em `perfis` vinculando ao auth.user
     if (userId) {
-      const insertRes = await supabaseAdmin.from('profiles').insert({
+      const insertRes = await supabaseAdmin.from('perfis').insert({
         user_id: userId,
         clinica_id,
         nome_exibicao: display_name,

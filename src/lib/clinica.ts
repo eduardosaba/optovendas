@@ -53,6 +53,7 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
   const metadataOticaId = (user.user_metadata?.otica_id as string | undefined) ?? undefined;
 
   let profile: { clinica_id?: string; otica_id?: string } | null = null;
+  // Fallback: se `perfis` não possui clinica_id, tentar ler da tabela legada `profiles` (user_id)
   if (!perfil?.clinica_id && !metadataClinicaId) {
     const profilesRes = await supabase
       .from("profiles")

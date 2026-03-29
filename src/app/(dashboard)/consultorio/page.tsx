@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, DollarSign } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { supabase } from "@/lib/supabase";
@@ -234,6 +234,18 @@ export default function ConsultorioPage() {
                   <IconStroke path="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
                 </IconBox>
               }
+            />
+
+            <ActionTile
+              href="/financeiro/consultorio"
+              title="Financeiro Consultorio"
+              description="Ticket medio de consulta."
+              icon={
+                <IconBox tone="emerald">
+                  <DollarSign size={20} />
+                </IconBox>
+              }
+              accent="bg-emerald-500"
             />
           </div>
 

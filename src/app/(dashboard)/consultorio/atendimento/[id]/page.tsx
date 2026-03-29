@@ -59,6 +59,13 @@ const DEFAULT_REFRACAO: RefracaoValue = {
   adicao: "",
   dpDnp: "",
   retorno: "",
+  miopia: false,
+  astigmatismo: false,
+  hipermetropia: false,
+  presbiopia: false,
+  tipoLente: null,
+  tratamentoAntiReflexo: false,
+  tratamentoFotossivel: false,
 };
 
 export default function PaginaAtendimento() {

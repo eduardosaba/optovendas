@@ -47,9 +47,9 @@ export async function addPendingVenda(venda: any) {
         else if (job.venda) job.venda.pending_terms = pending;
       }
     }
-    return await db.vendasPendentes.add({ ...job, createdAt: new Date().toISOString(), syncPending: true });
+    return await db.vendasPendentes.add({ ...job, createdAt: new Date().toISOString(), syncPending: 1 });
   } catch (e) {
     console.error('addPendingVenda failed', e);
-    return db.vendasPendentes.add({ venda, createdAt: new Date().toISOString(), syncPending: true });
+    return db.vendasPendentes.add({ venda, createdAt: new Date().toISOString(), syncPending: 1 });
   }
 }

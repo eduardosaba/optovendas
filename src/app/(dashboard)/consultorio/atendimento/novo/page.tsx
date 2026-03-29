@@ -62,6 +62,13 @@ const DEFAULT_REFRACAO: RefracaoValue = {
   adicao: "",
   dpDnp: "",
   retorno: "",
+  miopia: false,
+  astigmatismo: false,
+  hipermetropia: false,
+  presbiopia: false,
+  tipoLente: null,
+  tratamentoAntiReflexo: false,
+  tratamentoFotossivel: false,
 };
 
 function StepButton({
@@ -121,6 +128,8 @@ export default function NovoAtendimentoPage() {
   const [profissionalNome, setProfissionalNome] = useState<string | null>(null);
   const [notaRodapeReceita, setNotaRodapeReceita] = useState("Valido por 6 meses.");
   const [configUnidade, setConfigUnidade] = useState<any | null>(null);
+  const [showSegundaVia, setShowSegundaVia] = useState(false);
+  const [dadosSegundaVia, setDadosSegundaVia] = useState<any>(null);
   const [agendaAtiva, setAgendaAtiva] = useState<AgendaAtiva | null>(null);
   const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimento>("interno");
   const [localidadeAtendimento, setLocalidadeAtendimento] = useState("");
@@ -388,13 +397,14 @@ export default function NovoAtendimentoPage() {
         {
           paciente_id: pacienteFinalId,
           clinica_id: ctx.clinicaId,
-          motivo_consulta: anamnese.motivoConsulta,
-          antecedentes_pessoais: anamnese.antecedentesPessoais.join(", "),
-          antecedentes_familiares: anamnese.antecedentesFamiliares,
-          motivos_consulta: anamnese.motivosConsulta?.join(", ") || null,
-          ultimo_exame: anamnese.ultimoExame || null,
-          usuario_oculos: anamnese.usuarioOculos?.join(", ") || null,
+          motivo_consulta: (anamnese.motivoConsulta || "").trim(),
+          antecedentes_pessoais: (anamnese.antecedentesPessoais || []).map((s) => String(s || "").trim()).filter(Boolean).join(", ") || null,
+          antecedentes_familiares: (anamnese.antecedentesFamiliares || "").trim() || null,
+          motivos_consulta: (anamnese.motivosConsulta || []).map((s) => String(s || "").trim()).filter(Boolean).join(", ") || null,
+          ultimo_exame: (anamnese.ultimoExame || "").trim() || null,
+          usuario_oculos: (anamnese.usuarioOculos || []).map((s) => String(s || "").trim()).filter(Boolean).join(", ") || null,
           usa_oculos: anamnese.usaOculos ?? false,
+          observacoes_internas: ((anamnese as any).observacoesInternas || "").trim() || null,
         },
       ]);
 
@@ -415,13 +425,13 @@ export default function NovoAtendimentoPage() {
           oe_av: refracao.oeAv || null,
           adicao: toNumberOrNull(refracao.adicao),
           dp_dnp: refracao.dpDnp || null,
-          miopia: refracao.miopia ?? false,
-          astigmatismo: refracao.astigmatismo ?? false,
-          hipermetropia: refracao.hipermetropia ?? false,
-          presbiopia: refracao.presbiopia ?? false,
+          miopia: (refracao as any).miopia ?? false,
+          astigmatismo: (refracao as any).astigmatismo ?? false,
+          hipermetropia: (refracao as any).hipermetropia ?? false,
+          presbiopia: (refracao as any).presbiopia ?? false,
           tipo_lente: refracao.tipoLente || null,
-          tratamento_antirreflexo: refracao.tratamentoAntiReflexo ?? false,
-          tratamento_fotossensivel: refracao.tratamentoFotossivel ?? false,
+          tratamento_antirreflexo: (refracao as any).tratamentoAntiReflexo ?? false,
+          tratamento_fotossensivel: (refracao as any).tratamentoFotossivel ?? false,
           retorno: (refracao as any).retorno || null,
           tipo_documento: "Receita",
           nota_rodape: notaRodapeReceita,
@@ -496,6 +506,73 @@ export default function NovoAtendimentoPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // --- FUNÇÕES DE APOIO AO HISTÓRICO ---
+
+  // 1. Função para carregar o grau antigo no formulário atual (com verificação de vencimento)
+  function copiarGrauHistorico(item: any) {
+    try {
+      const dataExame = new Date(item.data_atendimento || item.data_exame || null);
+      const hoje = new Date();
+      const diffDias = Number.isFinite(dataExame.getTime()) ? Math.floor((hoje.getTime() - dataExame.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+      const estaVencido = diffDias > 365;
+
+      if (estaVencido) {
+        const confirmou = confirm(
+          `⚠️ ATENÇÃO: Este exame tem ${diffDias} dias (mais de 1 ano).\n\n` +
+            `O grau pode estar desatualizado. Deseja realmente copiar estes dados como base para o novo exame?`
+        );
+        if (!confirmou) return;
+      } else {
+        if (!confirm("Deseja carregar os dados deste exame anterior no atendimento atual?")) return;
+      }
+
+      setRefracao({
+        odEsferico: String(item.od_esferico ?? ""),
+        odCilindrico: String(item.od_cilindrico ?? ""),
+        odEixo: String(item.od_eixo ?? ""),
+        odAv: String(item.od_av ?? ""),
+        oeEsferico: String(item.oe_esferico ?? ""),
+        oeCilindrico: String(item.oe_cilindrico ?? ""),
+        oeEixo: String(item.oe_eixo ?? ""),
+        oeAv: String(item.oe_av ?? ""),
+        adicao: String(item.adicao ?? ""),
+        dpDnp: String(item.dp_dnp ?? refracao.dpDnp),
+        miopia: !!item.miopia,
+        astigmatismo: !!item.astigmatismo,
+        hipermetropia: !!item.hipermetropia,
+        presbiopia: !!item.presbiopia,
+        tipoLente: item.tipo_lente || null,
+        tratamentoAntiReflexo: !!item.tratamento_antirreflexo,
+        tratamentoFotossivel: !!item.tratamento_fotossensivel,
+        retorno: item.retorno || "",
+      });
+
+      setEtapa(2);
+      toast.success(estaVencido ? "Grau antigo carregado. Revise com atenção!" : "Grau carregado!");
+    } catch (e) {
+      toast.error("Não foi possível carregar o grau do histórico.");
+    }
+  }
+
+  // 2. Função para disparar a reimpressão de um exame antigo (abre modal de segunda via)
+  function handleImprimirRapido(item: any) {
+    const dadosFormatados = {
+      ...item,
+      paciente_nome: pacienteNomeExibicao,
+      idade_paciente: idadePaciente,
+      miopia: !!item.miopia,
+      astigmatismo: !!item.astigmatismo,
+      hipermetropia: !!item.hipermetropia,
+      presbiopia: !!item.presbiopia,
+      tratamento_antirreflexo: !!item.tratamento_antirreflexo,
+      tratamento_fotossivel: !!item.tratamento_fotossensivel,
+    };
+
+    setDadosSegundaVia(dadosFormatados);
+    setShowSegundaVia(true);
+    toast.info(`Preparando impressão de ${item.data_atendimento || item.data_exame || 'exame' }...`);
   }
 
   return (
@@ -654,7 +731,7 @@ export default function NovoAtendimentoPage() {
           <div className="animate-in fade-in slide-in-from-right-4">
             <ExameRefracao value={refracao} onChange={setRefracao} />
             <div className="mt-12 pt-12 border-t border-slate-100">
-              <HistoricoEvolucao historico={historico} />
+              <HistoricoEvolucao historico={historico} onCopiar={copiarGrauHistorico} onImprimir={handleImprimirRapido} />
             </div>
           </div>
         )}
@@ -811,6 +888,47 @@ export default function NovoAtendimentoPage() {
           )}
         </div>
       </footer>
+      {/* MODAL DE SEGUNDA VIA - IMPRESSÃO RÁPIDA */}
+      <Modal open={showSegundaVia} onClose={() => setShowSegundaVia(false)} title="Reimprimir Receita Anterior">
+        <div className="space-y-6 p-4">
+          <div className="bg-blue-50 p-6 rounded-[32px] border border-blue-100">
+            <p className="text-[10px] font-black uppercase text-blue-600 mb-2">Resumo da Receita Selecionada</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Data do Exame</p>
+                <p className="font-black text-slate-700">{new Date(dadosSegundaVia?.data_atendimento || dadosSegundaVia?.data_exame || new Date()).toLocaleDateString('pt-BR')}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Paciente</p>
+                <p className="font-black text-slate-700 truncate">{pacienteNomeExibicao}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <PDFDownloadLink
+              document={
+                <ReceitaPdf
+                  dados={dadosSegundaVia}
+                  clinica={configUnidade ? { ...configUnidade, nome_fantasia: clinicaNome, logomarca_url: logomarcaUrl, cor_primaria: corPrimaria } : null}
+                />
+              }
+              fileName={`Segunda_Via_${(pacienteNomeExibicao || 'paciente').split(' ')[0]}.pdf`}
+              className="w-full bg-emerald-600 text-white py-5 rounded-[24px] font-black text-center hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-3"
+            >
+              <span className="text-xl">🖨️</span>
+              Baixar Segunda Via (PDF)
+            </PDFDownloadLink>
+
+            <button
+              onClick={() => setShowSegundaVia(false)}
+              className="w-full bg-slate-100 text-slate-500 py-4 rounded-[24px] font-black uppercase text-xs hover:bg-slate-200 transition-all"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

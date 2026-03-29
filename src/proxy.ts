@@ -88,11 +88,6 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (req.nextUrl.pathname === "/") {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/vendas";
-    return NextResponse.redirect(redirectUrl);
-  }
 
   const protectedRoute =
     req.nextUrl.pathname.startsWith("/perfil") ||

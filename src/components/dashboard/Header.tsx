@@ -320,7 +320,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
               <button
                 type="button"
                 onClick={() => ctx?.toggleFocusMode()}
-                title={ctx?.isFocusMode ? "Sair do modo foco" : "Entrar no modo foco"}
+                title={ctx?.isFocusMode ? "Sair do modo Tela Cheia" : "Entrar no modo Tela Cheia"}
                 className="p-2 text-slate-400 transition-colors hover:text-cyan-600"
               >
                 {ctx?.isFocusMode ? <Minimize2 size={20} /> : <Maximize2 size={20} />}

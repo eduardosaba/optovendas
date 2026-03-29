@@ -498,11 +498,15 @@ function NovaVendaStepperContent() {
             saldo_restante: saldoRestante,
             tipo_fechamento: tipoFechamento,
             status_financeiro: statusFinanceiro,
+            // Para que o trigger condicional assimile corretamente, também gravamos `status_pagamento`.
+            status_pagamento: statusFinanceiro,
           })
           .select("id")
           .single();
 
         if (vendaRes.error || !vendaRes.data?.id) {
+          // Log completo para debugar resposta 400 do PostgREST
+          console.error("vendaRes error:", vendaRes);
           throw new Error(vendaRes.error?.message ?? "Falha ao criar venda.");
         }
       }
@@ -569,8 +573,45 @@ function NovaVendaStepperContent() {
 
         if (osRes.error) throw new Error(osRes.error.message);
 
+        // --- LÓGICA DE ALIMENTAÇÃO DO CREDIÁRIO PRÓPRIO ---
+        try {
+          if ((vendaData.financeiro?.metodo || "") === "Crediário Próprio") {
+            const parcelasGeradasCredito = criarParcelasCrediario(valorTotal);
+            if (parcelasGeradasCredito.length > 0) {
+              // evita duplicar: verifica se já existem parcelas para essa venda
+              const existente = await supabase
+                .from('financeiro_parcelas')
+                .select('id')
+                .eq('venda_id', vendaRes.data.id)
+                .limit(1);
+
+              if (!existente.data || (Array.isArray(existente.data) && existente.data.length === 0)) {
+                const payloadParcelas = parcelasGeradasCredito.map((p) => ({
+                  clinica_id: clinicaId,
+                  venda_id: vendaRes.data.id,
+                  paciente_id: pacienteIdFinal,
+                  numero_parcela: p.numero,
+                  valor_parcela: Number(p.valor),
+                  data_vencimento: p.vencimento,
+                  status: 'pendente',
+                  localidade: localidadeVendaFinal,
+                }));
+
+                const { error: errorParcelas } = await supabase.from('financeiro_parcelas').insert(payloadParcelas);
+                if (errorParcelas) {
+                  console.warn('Erro ao gerar parcelas financeiras (crediario proprio):', errorParcelas.message || errorParcelas);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Erro ao alimentar crediário próprio (financeiro_parcelas):', e);
+        }
+
         // Registra entrada imediata no fluxo de caixa quando houver sinal.
         if (valorEntrada > 0) {
+          const formaEntradaLower = (vendaData.financeiro?.formaEntrada || "").toLowerCase();
+          const isCartao = formaEntradaLower.includes("cart") || formaEntradaLower.includes("credito") || formaEntradaLower.includes("debito") || formaEntradaLower.includes("débito");
           const fluxoEntrada = await supabase.from("fluxo_caixa").insert({
             clinica_id: clinicaId,
             tipo: "entrada",
@@ -578,6 +619,10 @@ function NovaVendaStepperContent() {
             referencia_id: vendaRes.data.id,
             descricao: `Entrada da venda ${vendaRes.data.id.slice(0, 8)} (${vendaData.financeiro.formaEntrada || "nao informada"})`,
             valor: valorEntrada,
+            valor_bruto: valorEntrada,
+            taxa_cartao: 0,
+            status_conciliacao: isCartao ? 'pendente' : 'concluido',
+            localidade: localidadeVendaFinal,
             data_movimento: new Date().toISOString().slice(0, 10),
           });
           if (fluxoEntrada.error) throw new Error(fluxoEntrada.error.message);
@@ -620,6 +665,29 @@ function NovaVendaStepperContent() {
 
           const instRes = await supabase.from("installments").insert(installmentsPayload);
           if (instRes.error) throw new Error(instRes.error.message);
+
+          // Também registramos as parcelas no financeiro para controle de contas a receber
+          try {
+            const parcelasPayloadForFinance = parcelasGeradas.map((parcela) => ({
+              clinica_id: clinicaId,
+              venda_id: vendaRes.data.id,
+              paciente_id: pacienteIdFinal,
+              numero_parcela: parcela.numero,
+              valor_parcela: Number(parcela.valor),
+              data_vencimento: parcela.vencimento,
+              status: 'pendente',
+              localidade: localidadeVendaFinal,
+            }));
+
+            if (parcelasPayloadForFinance.length > 0) {
+              const parcelasRes = await supabase.from('financeiro_parcelas').insert(parcelasPayloadForFinance);
+              if (parcelasRes.error) {
+                console.warn('Falha ao inserir financeiro_parcelas:', parcelasRes.error.message);
+              }
+            }
+          } catch (e) {
+            console.warn('Erro ao criar parcelas no financeiro:', e);
+          }
         }
 
         if (vendaData.armacaoId) {
@@ -785,6 +853,8 @@ function NovaVendaStepperContent() {
 
       // Registra entrada imediata no fluxo de caixa quando houver sinal.
       if (valorEntrada > 0) {
+        const formaEntradaLower = (vendaData.financeiro?.formaEntrada || "").toLowerCase();
+        const isCartao = formaEntradaLower.includes("cart") || formaEntradaLower.includes("credito") || formaEntradaLower.includes("debito") || formaEntradaLower.includes("débito");
         const fluxoEntrada = await supabase.from("fluxo_caixa").insert({
           clinica_id: clinicaId,
           tipo: "entrada",
@@ -792,6 +862,10 @@ function NovaVendaStepperContent() {
           referencia_id: vendaRes.data.id,
           descricao: `Entrada da venda ${vendaRes.data.id.slice(0, 8)} (${vendaData.financeiro.formaEntrada || "nao informada"})`,
           valor: valorEntrada,
+          valor_bruto: valorEntrada,
+          taxa_cartao: 0,
+          status_conciliacao: isCartao ? 'pendente' : 'concluido',
+          localidade: localidadeVendaFinal,
           data_movimento: new Date().toISOString().slice(0, 10),
         });
         if (fluxoEntrada.error) throw new Error(fluxoEntrada.error.message);

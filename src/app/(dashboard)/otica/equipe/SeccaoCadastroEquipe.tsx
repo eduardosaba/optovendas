@@ -20,32 +20,31 @@ export default function SeçãoCadastroEquipe({ aoAtualizar }: any) {
     try {
       const ctx = await resolveClinicaContext();
 
-      // 1. Criar o Perfil do Usuário
-      const { data: perfil, error: errPerfil } = await supabase
-        .from("profiles")
-        .insert({
-          display_name: form.nome,
+      // Use a API server-side para criar o usuário (gera Auth user + registro em `perfis`)
+      const internalApiKey = process.env.NEXT_PUBLIC_INTERNAL_API_KEY;
+      if (!internalApiKey) throw new Error('NEXT_PUBLIC_INTERNAL_API_KEY não configurada.');
+
+      const res = await fetch('/api/otica/invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-key': internalApiKey,
+        },
+        body: JSON.stringify({
           email: form.email.toLowerCase().trim(),
+          display_name: form.nome,
           clinica_id: ctx.clinicaId,
-          role: "vendedor_otica",
-        })
-        .select()
-        .single();
-
-      if (errPerfil) throw errPerfil;
-
-      // 2. CRIAR O VÍNCULO NA TABELA DE UNIDADE
-      const { error: errVinculo } = await supabase.from("usuarios_unidade").insert({
-        usuario_id: perfil.id,
-        clinica_id: ctx.clinicaId,
-        role: "vendedor_otica",
+          role: 'vendedor_otica',
+        }),
       });
 
-      if (errVinculo) throw errVinculo;
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || 'Erro ao criar usuário');
+      }
 
-      toast.success("Usuário criado e vinculado à unidade!");
-
-      setForm({ nome: "", email: "", senha: "" });
+      toast.success('Usuário criado e vinculado à unidade!');
+      setForm({ nome: '', email: '', senha: '' });
       if (aoAtualizar) aoAtualizar();
     } catch (err: any) {
       toast.error("Erro ao cadastrar: " + (err?.message ?? String(err)));
