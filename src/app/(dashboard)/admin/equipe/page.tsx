@@ -80,42 +80,16 @@ export default function GestaoEquipePage() {
 
     setSalvando(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) throw new Error('Sessão inválida. Faça login novamente.');
-
-      const res = await fetch('/api/admin/create-user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          clinica_id: clinicaId,
-          nome_completo: nome.trim(),
-          email: email.trim().toLowerCase(),
-          perfil,
-          ativo: true,
-          password: senha || "Mudar@123" // Senha padrão caso não digitada
-        }),
+      // Redireciona para a página server-side que cria usuário usando service role
+      const params = new URLSearchParams({
+        clinica_id: clinicaId,
+        nome_completo: nome.trim(),
+        email: email.trim().toLowerCase(),
+        perfil,
+        password: senha || "Mudar@123",
       });
-
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.error || "Erro ao criar usuário");
-
-      toast.success("Membro ativado com sucesso!");
-
-      const finalPassword = senha || "Mudar@123";
-
-      // Mostrar cartão com senha temporária
-      setLastCreated({ nome: nome.trim(), email: email.trim().toLowerCase(), password: finalPassword });
-
-      // Limpar campos
-      setNome(""); setEmail(""); setSenha(""); setPerfil("vendas");
-
-      // Recarregar lista
-      carregarEquipe();
+      // navegar para a página server-side; lá o form estará pré-preenchido e o submit será server-side
+      window.location.href = `/admin/equipe/create-server-user?${params.toString()}`;
     } catch (err: any) {
       toast.error(err.message);
     } finally {

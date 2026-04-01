@@ -7,8 +7,8 @@
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'perfil_usuario') THEN
-    CREATE TYPE perfil_usuario AS ENUM ('admin', 'consultorio', 'vendas', 'financeiro');
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'perfis') THEN
+    CREATE TYPE perfis AS ENUM ('admin', 'consultorio', 'vendas', 'financeiro');
   END IF;
 END$$;
 
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS usuarios_unidade (
   user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   email TEXT NOT NULL,
   nome_completo TEXT NOT NULL,
-  perfil perfil_usuario NOT NULL DEFAULT 'vendas',
+  perfil perfis NOT NULL DEFAULT 'vendas',
   ativo BOOLEAN NOT NULL DEFAULT TRUE,
   criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   UNIQUE (clinica_id, email)
@@ -48,7 +48,7 @@ END$$;
 ALTER TABLE perfis
   ADD COLUMN IF NOT EXISTS foto_url TEXT;
 
-CREATE OR REPLACE FUNCTION mapear_perfil_para_funcao(p_perfil perfil_usuario)
+CREATE OR REPLACE FUNCTION mapear_perfil_para_funcao(p_perfil perfis)
 RETURNS nivel_acesso
 LANGUAGE plpgsql
 IMMUTABLE

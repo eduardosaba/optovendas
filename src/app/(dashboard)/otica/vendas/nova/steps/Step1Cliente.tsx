@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AlertTriangle, Eye, FileText } from "lucide-react";
+import { AlertTriangle, Eye, FileText, Hash } from "lucide-react";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import ReceitaPdf from "@/components/consultorio/ReceitaPdf";
 import Modal from '@/components/ui/Modal';
@@ -115,6 +115,46 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
 
   return (
     <>
+      {/* --- NOVO BLOCO: IDENTIFICAÇÃO DA OS (TALÃO MANUAL) --- */}
+      <section className="bg-amber-50 p-6 rounded-[32px] border border-amber-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-500">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600 shadow-inner">
+            <Hash size={24} strokeWidth={2.5} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black uppercase text-amber-700 tracking-[0.15em]">Controle Físico</p>
+            <h2 className="text-lg font-black text-slate-900 leading-none">Número do Talão Manual</h2>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-amber-200 shadow-sm w-full md:w-auto">
+          <div className="flex items-center gap-2 px-3 border-r border-slate-100">
+            <span className="text-[9px] font-black text-slate-400 uppercase">Ativar?</span>
+            <input 
+              type="checkbox" 
+              checked={data.usaNumManual} 
+              onChange={(e) => onChange({ ...data, usaNumManual: e.target.checked })}
+              className="w-5 h-5 rounded-lg border-slate-200 text-amber-600 focus:ring-amber-500 transition-all cursor-pointer"
+            />
+          </div>
+          
+          {data.usaNumManual ? (
+            <input
+              type="text"
+              placeholder="Ex: 5001"
+              value={data.numeroOsManual || ""}
+              onChange={(e) => onChange({ ...data, numeroOsManual: e.target.value })}
+              className="w-full md:w-32 p-2 bg-transparent font-black text-xl text-slate-800 outline-none placeholder:text-slate-200"
+              autoFocus
+            />
+          ) : (
+            <div className="px-4 py-2">
+              <span className="text-[10px] font-bold text-slate-300 italic uppercase">Gera OS automático (se desativado)</span>
+            </div>
+          )}
+        </div>
+      </section>
+
       <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
         <div>
           <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Etapa 1</p>

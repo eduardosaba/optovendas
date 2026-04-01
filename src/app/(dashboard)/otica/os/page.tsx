@@ -360,6 +360,19 @@ export default function DashboardOS() {
           <Link href="/otica" className="self-center text-slate-600 underline underline-offset-4">
             Voltar
           </Link>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFiltros({ cidade: "", data: "" });
+              setApenasAtrasadas(false);
+              setStatusRapido("");
+              toast?.info?.("Filtros limpos: mostrando todas as OS");
+            }}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Mostrar Todas as OS
+          </button>
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CheckCircle2, CircleAlert, Clock3, Eye, ImageOff, Microscope, Ruler, UserRound } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleAlert, Clock3, Eye, ImageOff, Microscope, Ruler, UserRound, RefreshCcw, Maximize2, Filter } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -13,6 +13,7 @@ type PacienteRel = {
 
 type VendaRel = {
   vendedor_id?: string | null;
+  id?: string | null;
   pacientes?: PacienteRel | PacienteRel[] | null;
 };
 
@@ -75,6 +76,9 @@ export default function DashboardConferenciaMedidasPage() {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<OSConferencia[]>([]);
   const [vendedoresMap, setVendedoresMap] = useState<Record<string, string>>({});
+  const [fotoExpandida, setFotoExpandida] = useState<string | null>(null);
+  // ESTADO DO FILTRO
+  const [filtroStatus, setFiltroStatus] = useState<"todos" | "ok" | "revisar" | "incompleto">("todos");
 
   useEffect(() => {
     async function carregar() {
@@ -85,12 +89,12 @@ export default function DashboardConferenciaMedidasPage() {
         const { data, error } = await supabase
           .from("ordens_servico")
           .select(
-            "id, numero_os, status_os, criado_em, pupilometro_foto_url, od_dnp, oe_dnp, co_od, co_oe, altura_vertical_od, altura_vertical_oe, vendas(vendedor_id, pacientes(nome_completo))"
+            "id, numero_os, status_os, criado_em, pupilometro_foto_url, od_dnp, oe_dnp, co_od, co_oe, altura_vertical_od, altura_vertical_oe, vendas(id, vendedor_id, pacientes(nome_completo))"
           )
           .eq("clinica_id", ctx.clinicaId)
           .not("pupilometro_foto_url", "is", null)
           .order("criado_em", { ascending: false })
-          .limit(10);
+          .limit(20);
 
         if (error) throw error;
 
@@ -125,6 +129,15 @@ export default function DashboardConferenciaMedidasPage() {
     void carregar();
   }, [toast]);
 
+  // Fecha o modal com a tecla Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setFotoExpandida(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const resumo = useMemo(() => {
     const total = items.length;
     const ok = items.filter((os) => getConferenciaScore(os) >= 85).length;
@@ -135,6 +148,17 @@ export default function DashboardConferenciaMedidasPage() {
     const incompleto = items.filter((os) => getConferenciaScore(os) < 50).length;
     return { total, ok, revisar, incompleto };
   }, [items]);
+
+  // LÓGICA DE FILTRAGEM DINÂMICA
+  const itensFiltrados = useMemo(() => {
+    return items.filter((os) => {
+      const score = getConferenciaScore(os);
+      if (filtroStatus === "ok") return score >= 85;
+      if (filtroStatus === "revisar") return score >= 50 && score < 85;
+      if (filtroStatus === "incompleto") return score < 50;
+      return true;
+    });
+  }, [items, filtroStatus]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-8 p-6 pb-20 md:p-10">
@@ -176,8 +200,23 @@ export default function DashboardConferenciaMedidasPage() {
           <p className="text-sm font-black uppercase tracking-wider text-slate-500">Nenhuma foto de pupilometro encontrada.</p>
         </div>
       ) : (
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {items.map((os) => {
+        <>
+          {/* Barra de Filtros e Resumo */}
+          <section className="bg-white p-4 rounded-[32px] border border-slate-100 shadow-sm flex flex-col md:flex-row items-center gap-4">
+            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-2xl text-slate-400">
+              <Filter size={16} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Filtrar:</span>
+            </div>
+            <div className="flex flex-wrap gap-2 flex-1">
+              <BotaoFiltro ativo={filtroStatus === 'todos'} onClick={() => setFiltroStatus('todos')} label="Todos" count={resumo.total} color="slate" />
+              <BotaoFiltro ativo={filtroStatus === 'ok'} onClick={() => setFiltroStatus('ok')} label="OK" count={resumo.ok} color="emerald" />
+              <BotaoFiltro ativo={filtroStatus === 'revisar'} onClick={() => setFiltroStatus('revisar')} label="Revisar" count={resumo.revisar} color="amber" />
+              <BotaoFiltro ativo={filtroStatus === 'incompleto'} onClick={() => setFiltroStatus('incompleto')} label="Críticos" count={resumo.incompleto} color="rose" />
+            </div>
+          </section>
+
+          <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {itensFiltrados.map((os) => {
             const venda = pickFirst(os.vendas);
             const paciente = pickFirst(venda?.pacientes);
             const vendedorId = venda?.vendedor_id || "";
@@ -186,20 +225,30 @@ export default function DashboardConferenciaMedidasPage() {
             const status = getConferenciaLabel(score);
 
             return (
-              <article key={os.id} className="overflow-hidden rounded-[30px] border border-slate-100 bg-white shadow-sm">
-                <div className="relative">
+              <article key={os.id} className="group overflow-hidden rounded-[30px] border border-slate-100 bg-white shadow-sm hover:shadow-md transition-all">
+                <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
                   {os.pupilometro_foto_url ? (
-                    <img src={os.pupilometro_foto_url} alt="Foto de medicao" className="h-60 w-full object-cover" />
+                    <>
+                      <img src={os.pupilometro_foto_url} alt="Medição" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                         <button 
+                           onClick={() => setFotoExpandida(os.pupilometro_foto_url!)}
+                           className="p-3 bg-white rounded-full text-slate-900 hover:bg-cyan-600 hover:text-white transition-colors"
+                         >
+                           <Maximize2 size={20} />
+                         </button>
+                      </div>
+                    </>
                   ) : (
-                    <div className="flex h-60 w-full items-center justify-center bg-slate-100 text-slate-400">
-                      <ImageOff size={22} />
+                    <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-400">
+                      <ImageOff size={40} />
                     </div>
                   )}
 
-                  <div className="absolute left-3 top-3 rounded-full bg-black/65 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
-                    OS {os.numero_os || os.id.slice(0, 8)}
+                  <div className="absolute left-4 top-4 rounded-xl bg-white/90 backdrop-blur-sm px-3 py-1.5 text-[10px] font-black uppercase text-slate-900 shadow-sm">
+                    OS {os.numero_os}
                   </div>
-                  <div className={`absolute right-3 top-3 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${status.classes}`}>
+                  <div className={`absolute right-4 top-4 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase shadow-sm ${status.classes}`}>
                     {status.label}
                   </div>
                 </div>
@@ -230,19 +279,67 @@ export default function DashboardConferenciaMedidasPage() {
                   </div>
 
                   <div className="pt-1">
-                    <Link
-                      href={`/otica/vendas/${os.id}/tecnico`}
-                      className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-cyan-600"
-                    >
-                      Abrir ficha tecnica
-                    </Link>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/otica/vendas/nova?vendaId=${encodeURIComponent(String(venda?.id || ''))}&step=3&refazerMedida=true`}
+                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-amber-700 transition hover:bg-amber-100"
+                      >
+                        <RefreshCcw size={14} /> Refazer Medida
+                      </Link>
+
+                      <Link
+                        href={`/otica/vendas/${os.id}/tecnico`}
+                        className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white transition hover:bg-cyan-600"
+                      >
+                        <Microscope size={14} /> Ficha Técnica
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </article>
             );
-          })}
-        </section>
+            })}
+          </section>
+        </>
       )}
+      {/* Modal Simples de Visualização de Foto */}
+      {fotoExpandida && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm transition-all"
+          onClick={() => setFotoExpandida(null)}
+        >
+          <img src={fotoExpandida} className="max-h-full max-w-full rounded-2xl shadow-2xl border-4 border-white/10" alt="Zoom Medição" />
+          <p className="absolute bottom-6 text-white/50 font-black uppercase text-[10px] tracking-widest">Clique em qualquer lugar para fechar</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// COMPONENTE DE BOTÃO DE FILTRO
+function BotaoFiltro({ ativo, onClick, label, count, color }: { ativo: boolean, onClick: () => void, label: string, count: number, color: string }) {
+  const colors: any = {
+    slate: ativo ? 'bg-slate-900 text-white' : 'bg-white text-slate-400',
+    emerald: ativo ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-600',
+    amber: ativo ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-500',
+    rose: ativo ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600',
+  };
+
+  return (
+    <button 
+      onClick={onClick}
+      className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-sm ${colors[color]}`}
+    >
+      {label} <span className={`px-2 py-0.5 rounded-lg text-[9px] ${ativo ? 'bg-white/20' : 'bg-black/5'}`}>{count}</span>
+    </button>
+  );
+}
+
+function MedidaItem({ label, value }: { label: string; value: number | null | undefined }) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2 text-[12px] font-bold text-slate-600">
+      <div className="text-[9px] font-black uppercase text-slate-400">{label}</div>
+      <div className="text-sm font-black">{typeof value === 'number' ? value.toFixed(1) : '--'}</div>
     </div>
   );
 }

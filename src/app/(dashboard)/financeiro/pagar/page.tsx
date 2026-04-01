@@ -69,7 +69,7 @@ export default function PagarPage() {
 
         const [catRes, contaRes, pagarRes] = await Promise.all([
           supabase
-            .from("categorias_financeiras")
+            .from("financeiro_categorias")
             .select("id, nome, tipo")
             .eq("tipo", "despesa")
             .order("nome"),

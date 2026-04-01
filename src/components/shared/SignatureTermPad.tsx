@@ -43,10 +43,12 @@ export default function SignatureTermPad({
   return (
     <div className="space-y-3 rounded-2xl border-2 border-orange-200 bg-orange-50/40 p-4">
       <div>
-        <h3 className="text-sm font-black uppercase tracking-wide text-orange-700">{titulo}</h3>
-        <p className="mt-1 text-sm text-slate-700">{descricao}</p>
-        {destaque ? <p className="mt-2 text-xs font-semibold text-slate-700">{destaque}</p> : null}
-      </div>
+            <h3 className="text-sm font-black uppercase tracking-wide text-orange-700">{titulo}</h3>
+            <div className="mt-2 text-sm text-slate-700 max-h-40 overflow-auto pr-2">
+              <p className="whitespace-pre-line">{descricao}</p>
+            </div>
+            {destaque ? <p className="mt-2 text-xs font-semibold text-slate-700">{destaque}</p> : null}
+          </div>
 
       <div className="overflow-hidden rounded-lg border-2 border-dashed border-orange-300 bg-white">
         <SignatureCanvas

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
@@ -58,6 +59,8 @@ export default function AgendaExternaDetalhePage() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingHorario, setEditingHorario] = useState<string>("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
 
   async function recarregarLista() {
     if (!agendaId) return;
@@ -158,7 +161,15 @@ export default function AgendaExternaDetalhePage() {
   }
 
   async function excluirAgendamento(id: string) {
-    if (!confirm("Confirmar exclusão deste agendamento?")) return;
+    setConfirmTarget(id);
+    setConfirmOpen(true);
+  }
+
+  async function excluirAgendamentoConfirmado() {
+    const id = confirmTarget;
+    setConfirmOpen(false);
+    setConfirmTarget(null);
+    if (!id) return;
     try {
       const { error } = await supabase.from("agenda_pacientes").delete().eq("id", id);
       if (error) throw error;
@@ -322,6 +333,7 @@ export default function AgendaExternaDetalhePage() {
            />
         </aside>
       </div>
+      <ConfirmDialog open={confirmOpen} title="Excluir agendamento" message="Confirmar exclusão deste agendamento?" onConfirm={excluirAgendamentoConfirmado} onCancel={() => setConfirmOpen(false)} />
     </div>
   );
 }

@@ -1,0 +1,40 @@
+import { supabase } from './supabase';
+
+export async function postJson(path: string, body: any, opts: RequestInit = {}) {
+  const url = path.startsWith("/") ? path : `/${path}`;
+
+  // If running in the browser, try to attach the Supabase access token
+  const headers = new Headers(opts.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  try {
+    if (typeof window !== 'undefined' && supabase?.auth?.getSession) {
+      const sess = await supabase.auth.getSession();
+      const token = (sess as any)?.data?.session?.access_token;
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+    }
+  } catch (e) {
+    // ignore session read errors
+  }
+
+  const res = await fetch(url, {
+    ...opts,
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const contentType = res.headers.get("content-type") || "";
+
+  if (!res.ok || !contentType.includes("application/json")) {
+    const text = await res.text();
+    console.error("API did not return JSON", { status: res.status, body: text });
+    throw new Error(`API error ${res.status}: ${text.slice(0, 200)}`);
+  }
+
+  return res.json();
+}

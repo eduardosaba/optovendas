@@ -26,10 +26,10 @@ export function useOfflineCatalog() {
         await db.tabela_precos.bulkAdd(prec);
       }
 
-      // eslint-disable-next-line no-console
+       
       console.log("🔥 Cache do catálogo atualizado para uso offline.");
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error("useOfflineCatalog: falha ao atualizar cache", err);
     }
   }, []);

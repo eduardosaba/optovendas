@@ -44,20 +44,29 @@ export default function RankingCidadesPage() {
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
-      const [cRes, vRes] = await Promise.all([
-        supabase
-          .from("consultorio_receitas")
-          .select("localidade, modelo_cobranca")
-          .eq("clinica_id", ctx.clinicaId)
-          .gte("data_atendimento", inicio)
-          .lte("data_atendimento", fim),
-        supabase
+      const cRes = await supabase
+        .from("consultorio_receitas")
+        .select("localidade, modelo_cobranca")
+        .eq("clinica_id", ctx.clinicaId)
+        .gte("data_atendimento", inicio)
+        .lte("data_atendimento", fim);
+
+      // Buscar vendas tentando `criado_em` e caindo para `created_at` se necessário
+      let vRes = await supabase
+        .from("vendas")
+        .select("localidade_venda, valor_total")
+        .eq("clinica_id", ctx.clinicaId)
+        .gte("criado_em", `${inicio}T00:00:00`)
+        .lte("criado_em", `${fim}T23:59:59`);
+
+      if (vRes.error) {
+        vRes = await supabase
           .from("vendas")
           .select("localidade_venda, valor_total")
           .eq("clinica_id", ctx.clinicaId)
-          .gte("criado_em", `${inicio}T00:00:00`)
-          .lte("criado_em", `${fim}T23:59:59`),
-      ]);
+          .gte("created_at", `${inicio}T00:00:00`)
+          .lte("created_at", `${fim}T23:59:59`);
+      }
 
       if (cRes.error) throw cRes.error;
       if (vRes.error) throw vRes.error;

@@ -44,7 +44,7 @@ type ReceitaPayload = {
   hipermetropia?: boolean | null;
   presbiopia?: boolean | null;
   tratamento_antirreflexo?: boolean | null;
-  tratamento_fotossivel?: boolean | null;
+  tratamento_fotossensivel?: boolean | null;
 };
 
 const DEFAULT_REFRACAO: RefracaoValue = {
@@ -65,7 +65,7 @@ const DEFAULT_REFRACAO: RefracaoValue = {
   presbiopia: false,
   tipoLente: null,
   tratamentoAntiReflexo: false,
-  tratamentoFotossivel: false,
+  tratamentoFotossensivel: false,
 };
 
 export default function PaginaAtendimento() {
@@ -197,7 +197,7 @@ export default function PaginaAtendimento() {
             presbiopia: lastReceita.presbiopia ?? false,
             tipoLente: lastReceita.tipo_lente ?? null,
             tratamentoAntiReflexo: lastReceita.tratamento_antirreflexo ?? false,
-            tratamentoFotossivel: lastReceita.tratamento_fotossensivel ?? false,
+            tratamentoFotossensivel: lastReceita.tratamento_fotossensivel ?? false,
             retorno: lastReceita.retorno ?? "",
           });
         }
@@ -277,7 +277,7 @@ export default function PaginaAtendimento() {
         presbiopia: refracao.presbiopia ?? false,
         tipo_lente: refracao.tipoLente || null,
         tratamento_antirreflexo: refracao.tratamentoAntiReflexo ?? false,
-        tratamento_fotossensivel: refracao.tratamentoFotossivel ?? false,
+            tratamento_fotossensivel: refracao.tratamentoFotossensivel ?? false,
         retorno: (refracao as any).retorno || null,
         nota_rodape: notaRodapeReceita,
       };

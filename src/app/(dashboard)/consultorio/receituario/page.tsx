@@ -61,7 +61,7 @@ export default function ReceituarioPage() {
 
       if (error) throw error;
       setReceitas(data || []);
-    } catch (err) {
+    } catch {
       toast.error("Erro ao buscar receitas.");
     } finally {
       setLoading(false);

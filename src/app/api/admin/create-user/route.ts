@@ -8,8 +8,14 @@ export async function POST(req: NextRequest) {
     // 2) Authorization: Bearer <access_token> — verifica perfil do usuário (master/admin)
     const internalKey = req.headers.get('x-internal-key');
     let allowedByAuth = false;
-    if (internalKey && internalKey === process.env.INTERNAL_API_KEY) {
-      allowedByAuth = true;
+    let authFailReason = '';
+    if (internalKey) {
+      if (internalKey === process.env.INTERNAL_API_KEY) {
+        allowedByAuth = true;
+      } else {
+        authFailReason = 'internal-key-mismatch';
+        console.warn('internal key provided but does not match server value');
+      }
     } else {
       const authHeader = req.headers.get('authorization') || '';
       const match = authHeader.match(/^Bearer\s+(.*)$/i);
@@ -24,18 +30,39 @@ export async function POST(req: NextRequest) {
             const userRes: any = await (supabaseAdmin as any).auth.getUser({ access_token: token });
             const userId = userRes?.data?.user?.id;
             if (userId) {
-              const perfilRes = await supabaseAdmin.from('perfis').select('funcao').eq('id', userId).maybeSingle();
-              const funcao = (perfilRes.data?.funcao || '').toLowerCase();
+              // Tentativa robusta: a tabela `perfis` pode armazenar a referência ao auth user
+              // tanto como `id` (mesmo id) quanto em `user_id`. Consultamos ambos.
+              let perfilRes: any = null;
+              try {
+                perfilRes = await supabaseAdmin
+                  .from('perfis')
+                  .select('funcao, id, user_id')
+                  .or(`id.eq.${userId},user_id.eq.${userId}`)
+                  .maybeSingle();
+              } catch (e) {
+                console.warn('create-user: perfil lookup fallback failed', e);
+              }
+              const funcao = (perfilRes?.data?.funcao || '').toLowerCase();
               if (['master', 'admin', 'admin_clinica'].includes(funcao)) allowedByAuth = true;
             }
           } catch (e) {
+            authFailReason = 'token-validation-failed';
             console.warn('failed to validate bearer token', e);
           }
         }
       }
     }
 
-    if (!allowedByAuth) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    if (!allowedByAuth) {
+      const reason = authFailReason || 'no-valid-auth-provided';
+      console.warn('create-user unauthorized:', reason, {
+        hasInternalKey: !!internalKey,
+        hasAuthHeader: !!req.headers.get('authorization'),
+        hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      });
+      return NextResponse.json({ error: 'Unauthorized', reason }, { status: 403 });
+    }
     const body = await req.json();
     const { clinica_id, nome_completo, email, perfil, ativo, password } = body;
     

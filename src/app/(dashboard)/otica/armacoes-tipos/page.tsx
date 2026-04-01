@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -15,6 +16,8 @@ export default function CadastroTiposArmacaoPage() {
   const [editNome, setEditNome] = useState("");
   const [editPreco, setEditPreco] = useState("");
   const toast = useToast();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<any | null>(null);
 
   async function carregar() {
     const ctx = await resolveClinicaContext();
@@ -99,12 +102,7 @@ export default function CadastroTiposArmacaoPage() {
               <button onClick={() => iniciarEdicao(t)} className="p-2 text-slate-400 hover:text-cyan-600 transition-colors">
                 <Edit3 size={18} />
               </button>
-              <button onClick={async () => { 
-                  if(confirm("Excluir?")) { 
-                      await supabase.from("otica_tipos_armacao").delete().eq("id", t.id); 
-                      carregar(); 
-                  } 
-              }} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
+              <button onClick={() => { setConfirmTarget(t); setConfirmOpen(true); }} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
                 <Trash2 size={18} />
               </button>
             </div>
@@ -134,6 +132,15 @@ export default function CadastroTiposArmacaoPage() {
           </div>
         </div>
       ) : null}
+
+      <ConfirmDialog open={confirmOpen} title="Excluir" message="Excluir?" onConfirm={async () => {
+        const id = confirmTarget?.id;
+        setConfirmOpen(false);
+        setConfirmTarget(null);
+        if (!id) return;
+        await supabase.from("otica_tipos_armacao").delete().eq("id", id);
+        carregar();
+      }} onCancel={() => setConfirmOpen(false)} />
     </div>
   );
 }

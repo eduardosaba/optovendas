@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { ArrowLeft, Plus, Trash2, Tag, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -13,6 +14,8 @@ export default function CategoriasPage() {
   const [categorias, setCategorias] = useState<any[]>([]);
   const [novoNome, setNovoNome] = useState("");
   const [clinicaId, setClinicaId] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -41,16 +44,26 @@ export default function CategoriasPage() {
       setCategorias([...categorias, data]);
       setNovoNome("");
       toast?.success?.("Categoria adicionada!");
-    } catch (e) { toast?.error?.("Erro ao adicionar."); }
+    } catch { toast?.error?.("Erro ao adicionar."); }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Excluir esta categoria? Isso não afetará lançamentos antigos.")) return;
+    setConfirmTarget(id);
+    setConfirmOpen(true);
+  }
+
+  async function handleDeleteConfirmed() {
+    const id = confirmTarget;
+    setConfirmOpen(false);
+    setConfirmTarget(null);
+    if (!id) return;
     try {
       await supabase.from("financeiro_categorias").delete().eq("id", id);
-      setCategorias(categorias.filter(c => c.id !== id));
+      setCategorias((prev) => prev.filter((c) => c.id !== id));
       toast?.success?.("Removida.");
-    } catch (e) { toast?.error?.("Erro ao excluir."); }
+    } catch {
+      toast?.error?.("Erro ao excluir.");
+    }
   }
 
   return (
@@ -94,6 +107,15 @@ export default function CategoriasPage() {
           }
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Excluir categoria"
+        message="Excluir esta categoria? Isso não afetará lançamentos antigos."
+        confirmText="Excluir"
+        cancelText="Cancelar"
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

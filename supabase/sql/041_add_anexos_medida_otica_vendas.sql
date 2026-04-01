@@ -1,5 +1,5 @@
--- Migration: 041_add_anexos_medida_otica_vendas.sql
--- Adiciona campos para anexos e medidas na tabela otica_vendas
+-- Migration: 041_add_anexos_medida_vendas.sql
+-- Adiciona campos para anexos e medidas na tabela vendas
 BEGIN;
 
 ALTER TABLE IF EXISTS vendas
@@ -11,4 +11,4 @@ ALTER TABLE IF EXISTS vendas
 COMMIT;
 
 -- Run with psql or via your migration runner. Example:
--- psql $DATABASE_URL -f supabase/sql/041_add_anexos_medida_otica_vendas.sql
+-- psql $DATABASE_URL -f supabase/sql/041_add_anexos_medida_vendas.sql

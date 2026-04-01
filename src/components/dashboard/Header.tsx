@@ -7,8 +7,13 @@ import {
   Bell,
   Building2,
   ChevronDown,
+  ArrowRight,
   LogOut,
   Search,
+  Monitor,
+  FileText,
+  Package,
+  AlertCircle,
   Settings,
   ShieldCheck,
   User,
@@ -16,6 +21,7 @@ import {
   Minimize2,
 } from "lucide-react";
 import { FocusContext } from "@/context/FocusContext";
+import { SyncContext } from "@/context/SyncContext";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -47,6 +53,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
   const [busca, setBusca] = useState("");
   const [buscando, setBuscando] = useState(false);
   const [resultadoBusca, setResultadoBusca] = useState<SearchItem[]>([]);
+  const [resultadosDB, setResultadosDB] = useState<{ pacientes: any[]; vendas: any[]; estoque: any[]; financeiro: any[] }>({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
   const [buscaAberta, setBuscaAberta] = useState(false);
   const inputBuscaRef = useRef<HTMLInputElement | null>(null);
   const containerBuscaRef = useRef<HTMLDivElement | null>(null);
@@ -138,69 +145,75 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
       const termo = busca.trim();
       if (!termo || termo.length < 2 || !clinicaId) {
         setResultadoBusca([]);
+        setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
         return;
       }
 
       setBuscando(true);
       try {
-        const [pacientesRes, osRes, vendasRes] = await Promise.all([
+        const [pacientesRes, vendasRes, armacoesRes, lentesRes, parcelasRes] = await Promise.all([
+          // 1) Pacientes por nome ou CPF
           supabase
             .from("pacientes")
-            .select("id, nome_completo, cidade_atendimento")
+            .select("id, nome_completo, cpf, cidade_atendimento")
             .eq("clinica_id", clinicaId)
-            .ilike("nome_completo", `%${termo}%`)
-            .limit(5),
-          supabase
-            .from("ordens_servico")
-            .select("id, numero_os, status_os")
-            .eq("clinica_id", clinicaId)
-            .or(`numero_os.ilike.%${termo}%,status_os.ilike.%${termo}%`)
-            .limit(5),
+            .or(`nome_completo.ilike.%${termo}%,cpf.ilike.%${termo}%`)
+            .limit(3),
+
+          // 2) Vendas por localidade ou id parcial
           supabase
             .from("vendas")
-            .select("id, forma_pagamento, valor_total")
+            .select("id, valor_total, localidade_venda, criado_em, perfis (nome)")
             .eq("clinica_id", clinicaId)
-            .order("created_at", { ascending: false })
-            .limit(5),
+            .or(`localidade_venda.ilike.%${termo}%,id.ilike.%${termo}%`)
+            .order("criado_em", { ascending: false })
+            .limit(2),
+
+          // 3) Estoque de armações
+          supabase
+            .from("estoque_armacoes")
+            .select("id, marca, modelo, referencia, quantidade_atual, preco_venda")
+            .or(`marca.ilike.%${termo}%,modelo.ilike.%${termo}%,referencia.ilike.%${termo}%`)
+            .limit(3),
+
+          // 4) Lentes no catálogo
+          supabase
+            .from("otica_lentes")
+            .select("id, tipo, material, tratamento, preco_base")
+            .or(`tipo.ilike.%${termo}%,material.ilike.%${termo}%`)
+            .limit(2),
+
+          // 5) Parcelas pendentes (installments)
+          supabase
+            .from("installments")
+            .select("id, valor_parcela, vencimento, paciente_id")
+            .eq("status", "atrasado")
+            .limit(2),
         ]);
 
         if (!active) return;
 
-        const pacientes = ((pacientesRes.data ?? []) as Array<{ id: string; nome_completo?: string | null; cidade_atendimento?: string | null }>).map((p) => ({
-          id: p.id,
-          tipo: "paciente" as const,
-          titulo: p.nome_completo || "Paciente sem nome",
-          subtitulo: p.cidade_atendimento || "Paciente",
-          rota: `/consultorio/pacientes/novo?pacienteId=${p.id}`,
-        }));
+        const pacientes = (pacientesRes.data ?? []) as Array<any>;
+        const vendas = (vendasRes.data ?? []) as Array<any>;
+        const armacoes = (armacoesRes.data ?? []) as Array<any>;
+        const lentes = (lentesRes.data ?? []) as Array<any>;
+        const parcelas = (parcelasRes.data ?? []) as Array<any>;
 
-        const ordens = ((osRes.data ?? []) as Array<{ id: string; numero_os?: string | null; status_os?: string | null }>).map((o) => ({
-          id: o.id,
-          tipo: "os" as const,
-          titulo: `OS ${o.numero_os || "(sem numero)"}`,
-          subtitulo: o.status_os || "Ordem de servico",
-          rota: "/otica/os",
-        }));
+        const features = [
+          { id: 'feat-vendas', titulo: 'Vendas', subtitulo: 'Abrir painel de vendas', rota: '/otica/vendas' },
+          { id: 'feat-nova-venda', titulo: 'Nova Venda', subtitulo: 'Iniciar nova venda', rota: '/otica/vendas/nova' },
+          { id: 'feat-estoque', titulo: 'Estoque', subtitulo: 'Gerenciar estoque de armações', rota: '/otica/estoque' },
+        ];
 
-        const termoNormalizado = termo.toLowerCase();
-        const vendas = ((vendasRes.data ?? []) as Array<{ id: string; forma_pagamento?: string | null; valor_total?: number | null }>).
-          filter((v) => {
-            const forma = (v.forma_pagamento || "").toLowerCase();
-            const valor = String(v.valor_total ?? "").toLowerCase();
-            return !termoNormalizado || forma.includes(termoNormalizado) || valor.includes(termoNormalizado);
-          })
-          .map((v) => ({
-            id: v.id,
-            tipo: "venda" as const,
-            titulo: `Venda R$ ${Number(v.valor_total ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-            subtitulo: v.forma_pagamento || "Venda",
-            rota: "/financeiro",
-          }));
+        const termoNormalizado2 = termo.toLowerCase();
+        const featureMatches = (features as any[]).filter(f => f.titulo.toLowerCase().includes(termoNormalizado2) || f.subtitulo.toLowerCase().includes(termoNormalizado2));
 
-        setResultadoBusca([...pacientes, ...ordens, ...vendas].slice(0, 10));
+        setResultadosDB({ pacientes, vendas, estoque: [...armacoes, ...lentes], financeiro: parcelas });
+        setResultadoBusca(featureMatches.map((f) => ({ id: f.id, tipo: 'feature' as any, titulo: f.titulo, subtitulo: f.subtitulo, rota: f.rota })));
       } catch {
         if (active) {
           setResultadoBusca([]);
+          setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
         }
       } finally {
         if (active) setBuscando(false);
@@ -209,7 +222,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
     const handle = window.setTimeout(() => {
       void pesquisar();
-    }, 250);
+    }, 300);
 
     return () => {
       active = false;
@@ -258,6 +271,23 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     if (item.tipo === "os") toast.info(`Abrindo modulo de OS para localizar: ${item.titulo}`);
   }
 
+  function SearchItem({ href, title, sub, icon, color = "bg-slate-100 text-slate-500" }: any) {
+    return (
+      <Link href={href} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-all group">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-xl ${color} group-hover:scale-110 transition-transform`}>
+            {icon}
+          </div>
+          <div>
+            <p className="font-bold text-slate-800 text-sm leading-tight">{title}</p>
+            <p className="text-[10px] font-medium text-slate-400 uppercase">{sub}</p>
+          </div>
+        </div>
+        <ArrowRight size={14} className="text-slate-200 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all" />
+      </Link>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
       <div className="flex items-center justify-between gap-3">
@@ -277,30 +307,93 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
           {buscaAberta && (
             <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
-              {buscando && <p className="px-3 py-2 text-xs font-semibold text-slate-500">Buscando...</p>}
+              {/* DROPDOWN INTELIGENTE */}
+              {(resultadoBusca.length > 0 || resultadosDB.pacientes.length > 0 || resultadosDB.vendas.length > 0 || resultadosDB.estoque.length > 0 || resultadosDB.financeiro.length > 0) ? (
+                <div className="space-y-3">
+                  {/* SEÇÃO: PÁGINAS E AÇÕES */}
+                  {resultadoBusca.length > 0 && (
+                    <div className="mb-2">
+                      <p className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Páginas e Funções</p>
+                      {resultadoBusca.map((item) => (
+                        <SearchItem key={item.id} href={item.rota} title={item.titulo} sub={item.subtitulo} icon={<Monitor size={14} />} />
+                      ))}
+                    </div>
+                  )}
 
-              {!buscando && busca.trim().length < 2 && (
-                <p className="px-3 py-2 text-xs font-semibold text-slate-500">Digite ao menos 2 caracteres para buscar.</p>
+                  {/* SEÇÃO: PACIENTES */}
+                  {resultadosDB.pacientes.length > 0 && (
+                    <div className="mb-2">
+                      <p className="px-4 py-2 text-[10px] font-black text-cyan-600 uppercase tracking-widest">Pacientes</p>
+                      {resultadosDB.pacientes.map((c) => (
+                        <SearchItem key={c.id} href={`/clientes/${c.id}`} title={c.nome_completo || c.nome || 'Paciente sem nome'} sub={`${c.cidade_atendimento || 'Feira de Santana'} • CPF: ${c.cpf || 'Não informado'}`} icon={<User size={14}/>} color="bg-cyan-50 text-cyan-600" />
+                      ))}
+                    </div>
+                  )}
+
+                      {/* SEÇÃO: VENDAS */}
+                      {resultadosDB.vendas.length > 0 && (
+                        <div className="mb-2 border-t border-slate-50 pt-2">
+                          <p className="px-4 py-2 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Vendas</p>
+                          {resultadosDB.vendas.map((v) => (
+                            <SearchItem 
+                              key={v.id} 
+                              href={`/otica/vendas/${v.id}`} 
+                              title={`Venda ${v.id}`} 
+                              sub={`${v.localidade_venda || '-'} • R$ ${Number(v.valor_total ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})}`} 
+                              icon={<FileText size={14}/>} 
+                              color="bg-indigo-50 text-indigo-600" 
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* SEÇÃO: PRODUTOS / ESTOQUE */}
+                      {resultadosDB.estoque.length > 0 && (
+                        <div className="border-t border-slate-50 pt-2">
+                          <p className="px-4 py-2 text-[10px] font-black text-emerald-600 uppercase tracking-tighter">Produtos em Estoque</p>
+                          {resultadosDB.estoque.map((p) => (
+                            <SearchItem 
+                              key={p.id} 
+                              href={p.marca ? `/otica/estoque/${p.id}` : `/otica/lentes/${p.id}`} 
+                              title={p.marca ? `${p.marca} ${p.modelo || ''}`.trim() : `${p.tipo || ''} ${p.material || ''}`.trim()} 
+                              sub={p.quantidade_atual !== undefined ? `Qtd: ${p.quantidade_atual} • R$ ${Number(p.preco_venda ?? p.preco_base ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})}` : `Tabela: R$ ${Number(p.preco_base ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})}`} 
+                              icon={<Package size={14}/>} 
+                              color="bg-emerald-50 text-emerald-600" 
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* SEÇÃO: FINANCEIRO */}
+                      {resultadosDB.financeiro.length > 0 && (
+                        <div className="bg-rose-50 rounded-2xl p-2">
+                          <p className="px-4 py-2 text-[10px] font-black text-rose-600 uppercase mb-2 ml-2">Pendências Financeiras</p>
+                          {resultadosDB.financeiro.map((f) => (
+                            <SearchItem
+                              key={f.id}
+                              href={`/financeiro/parcelas/${f.id}`}
+                              title={f.paciente_nome || f.paciente_id || 'Cliente'}
+                              sub={`Parcela de R$ ${Number(f.valor_parcela ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})} vence em ${new Date(f.vencimento || f.data_vencimento || Date.now()).toLocaleDateString()}`}
+                              icon={<AlertCircle size={14}/>} 
+                              color="text-rose-500"
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {buscando && <p className="p-4 text-center text-xs text-slate-400 animate-pulse">Consultando banco de dados...</p>}
+                </div>
+              ) : (
+                <div>
+                  {buscando && <p className="px-3 py-2 text-xs font-semibold text-slate-500">Buscando...</p>}
+                  {!buscando && busca.trim().length < 2 && (
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-500">Digite ao menos 2 caracteres para buscar.</p>
+                  )}
+                  {!buscando && busca.trim().length >= 2 && (
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-500">Nenhum resultado encontrado.</p>
+                  )}
+                </div>
               )}
-
-              {!buscando && busca.trim().length >= 2 && resultadoBusca.length === 0 && (
-                <p className="px-3 py-2 text-xs font-semibold text-slate-500">Nenhum resultado encontrado.</p>
-              )}
-
-              {resultadoBusca.map((item) => (
-                <button
-                  key={`${item.tipo}-${item.id}`}
-                  type="button"
-                  onClick={() => abrirResultado(item)}
-                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:bg-slate-50"
-                >
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">{item.titulo}</p>
-                    <p className="text-xs text-slate-500">{item.subtitulo}</p>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-500">{item.tipo}</span>
-                </button>
-              ))}
             </div>
           )}
         </div>
@@ -314,6 +407,50 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
         </button>
 
         <div className="ml-auto flex items-center gap-4">
+          {/* Indicador de sincronização */}
+          <SyncContext.Consumer>
+            {(sync) => (
+              <div className="mr-2 flex items-center gap-2">
+                <div
+                  title={
+                    sync?.status === "syncing"
+                      ? "Sincronizando..."
+                      : sync?.status === "success"
+                      ? "Sincronizado"
+                      : sync?.status === "error"
+                      ? "Erro na sincronização"
+                      : "Sem sincronização"
+                  }
+                  className="flex items-center"
+                >
+                  {sync?.status === "syncing" ? (
+                    <span className="relative inline-flex h-3 w-3 items-center justify-center">
+                      <span className="absolute inline-flex h-3 w-3 rounded-full bg-cyan-300 opacity-60 animate-ping" />
+                      <span className="relative inline-flex h-3 w-3 rounded-full bg-cyan-600" />
+                    </span>
+                  ) : sync?.status === "success" ? (
+                    <span className="inline-block h-3 w-3 rounded-full bg-emerald-500" />
+                  ) : sync?.status === "error" ? (
+                    <span className="inline-block h-3 w-3 rounded-full bg-rose-500" />
+                  ) : (
+                    <span className="inline-block h-3 w-3 rounded-full bg-slate-300" />
+                  )}
+                </div>
+
+                {sync?.status !== "syncing" && (
+                  <button
+                    type="button"
+                    onClick={() => sync?.triggerSync?.()}
+                    className="rounded-md border border-slate-100 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    title="Sincronizar agora"
+                  >
+                    Sincronizar agora
+                  </button>
+                )}
+              </div>
+            )}
+          </SyncContext.Consumer>
+
           {/* Focus / Fullscreen Toggle */}
           <FocusContext.Consumer>
             {(ctx) => (

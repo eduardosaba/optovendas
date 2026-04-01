@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { UserPlus, Shield, Mail, Trash2, ArrowLeft, Loader2, Send } from "lucide-react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import SeçãoCadastroEquipe from "./SeccaoCadastroEquipe";
 import Link from "next/link";
 
@@ -13,6 +14,8 @@ export default function GestaoEquipeOticaPage() {
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; nome: string } | null>(null);
   const toast = useToast();
 
   async function carregarEquipe() {
@@ -21,14 +24,14 @@ export default function GestaoEquipeOticaPage() {
       const ctx = await resolveClinicaContext();
       // Buscamos apenas quem tem a função de vendedor (via relação `perfis`)
       const { data, error } = await supabase
-        .from("profiles")
+        .from("perfis")
         .select("id, display_name, email, perfis(funcao)")
         .eq("clinica_id", ctx.clinicaId)
         .eq("perfis.funcao", "vendedor_otica");
 
       if (error) throw error;
       setUsuarios(data || []);
-    } catch (err) {
+    } catch {
       toast.error("Falha ao carregar equipe.");
     } finally {
       setLoading(false);
@@ -78,14 +81,22 @@ export default function GestaoEquipeOticaPage() {
   }
 
   async function removerVendedor(id: string, nome: string) {
-    if (!confirm(`Deseja remover ${nome} da equipe de vendas?`)) return;
+    setConfirmTarget({ id, nome });
+    setConfirmOpen(true);
+  }
+
+  async function confirmarRemoverVendedor() {
+    const target = confirmTarget;
+    setConfirmOpen(false);
+    setConfirmTarget(null);
+    if (!target) return;
 
     setSalvando(true);
     try {
       const res = await fetch('/api/otica/remove', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: id }),
+        body: JSON.stringify({ profileId: target.id }),
       });
 
       if (!res.ok) {
@@ -94,7 +105,7 @@ export default function GestaoEquipeOticaPage() {
       }
 
       toast.success('Acesso removido.');
-      setUsuarios(prev => prev.filter(u => u.id !== id));
+      setUsuarios(prev => prev.filter(u => u.id !== target.id));
     } catch (err: any) {
       toast.error('Erro ao remover: ' + err.message);
     } finally {
@@ -110,6 +121,7 @@ export default function GestaoEquipeOticaPage() {
             <ArrowLeft size={20} />
           </Link>
           <div>
+          <ConfirmDialog open={confirmOpen} title="Remover vendedor" message={`Deseja remover ${confirmTarget?.nome} da equipe de vendas?`} onConfirm={confirmarRemoverVendedor} onCancel={() => setConfirmOpen(false)} />
             <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Gestão de Pessoas</p>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Equipe de Vendas<span className="text-cyan-600">.</span></h1>
           </div>

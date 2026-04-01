@@ -35,7 +35,8 @@ export default function ConfiguracoesOticaPage() {
     logo_url: "",
     mensagem_rodape: "",
     cobrar_comissao: false,
-    comissao_padrao_porcentagem: 0
+    comissao_padrao_porcentagem: 0,
+    meta_mensal: 0
   });
   
   const toast = useToast();
@@ -52,13 +53,30 @@ export default function ConfiguracoesOticaPage() {
         if (!mounted) return;
         const f = (res.data?.funcao as string) || null;
         setUserFuncao(f);
-      } catch (e) {
+      } catch {
         // noop
       }
     }
     void carregarFuncao();
     return () => { mounted = false };
   }, []);
+
+  function formatCpfCnpj(value: string) {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length <= 11) {
+      // CPF: 000.000.000-00
+      return digits
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    }
+    // CNPJ: 00.000.000/0000-00
+    return digits
+      .replace(/(\d{2})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1/$2')
+      .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+  }
 
   useEffect(() => {
     async function carregarDados() {
@@ -74,7 +92,9 @@ export default function ConfiguracoesOticaPage() {
           const normalized = {
             ...(data as any),
             cobrar_comissao: !!(data as any).cobrar_comissao,
-            comissao_padrao_porcentagem: Number((data as any).comissao_padrao_porcentagem) || 0
+            comissao_padrao_porcentagem: Number((data as any).comissao_padrao_porcentagem) || 0,
+            cnpj: formatCpfCnpj(String((data as any).cnpj || '')),
+            meta_mensal: Number((data as any).meta_mensal ?? 0)
           };
           setConfig(normalized as any);
         }
@@ -125,22 +145,31 @@ export default function ConfiguracoesOticaPage() {
   async function salvarConfiguracoes() {
     setSalvando(true);
     try {
+      // Use server-side upsert to avoid RLS issues
       const ctx = await resolveClinicaContext();
+      const session = await supabase.auth.getSession();
+      const token = (session as any)?.data?.session?.access_token;
       const payload: any = {
         ...config,
         clinica_id: ctx.clinicaId,
         updated_at: new Date()
       };
-
-      // se o id estiver vazio ou for string vazia, remova-o para não enviar UUID inválido
       if (!payload.id) delete payload.id;
+      // normalize CNPJ to digits only for storage
+      if (payload.cnpj !== undefined && payload.cnpj !== null) payload.cnpj = String(payload.cnpj).replace(/\D/g, '') || null;
 
-      const { error } = await supabase
-        .from("otica_configuracoes")
-        .upsert(payload);
+      const res = await fetch('/api/otica/configuracoes/upsert', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
 
-      if (error) throw error;
-      toast.success("Configurações da Ótica atualizadas!");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Erro ao salvar configurações');
+      toast.success('Configurações da Ótica atualizadas!');
     } catch (err: any) {
       toast.error("Erro ao salvar: " + (err?.message || String(err)));
     } finally {
@@ -192,8 +221,10 @@ export default function ConfiguracoesOticaPage() {
                 </div>
                 <ChevronRight size={20} className="ml-auto text-slate-200 group-hover:text-cyan-600" />
               </div>
+              
             </Link>
           </div>
+          
         )}
         
         {/* COLUNA ESQUERDA: LOGO */}
@@ -234,12 +265,12 @@ export default function ConfiguracoesOticaPage() {
               <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">Informações Comerciais</h2>
             </div>
 
-            <ConfigInput label="Nome da Ótica" value={config.nome_otica} onChange={v => setConfig({...config, nome_otica: v})} placeholder="Ex: Ótica Confectio Premium" />
-            <ConfigInput label="CNPJ (Opcional)" value={config.cnpj} onChange={v => setConfig({...config, cnpj: v})} placeholder="00.000.000/0001-00" />
-            <ConfigInput label="Telefone Fixo" value={config.telefone} onChange={v => setConfig({...config, telefone: v})} icon={<Phone size={14}/>} />
-            <ConfigInput label="WhatsApp" value={config.whatsapp} onChange={v => setConfig({...config, whatsapp: v})} icon={<Globe size={14}/>} />
+            <ConfigInput label="Nome da Ótica" value={config.nome_otica} onValueChange={v => setConfig({...config, nome_otica: v})} placeholder="Ex: Ótica Confectio Premium" />
+            <ConfigInput label="CNPJ / CPF (Opcional)" value={config.cnpj} onValueChange={v => setConfig(prev => ({...prev, cnpj: formatCpfCnpj(v)}))} placeholder="000.000.000-00 ou 00.000.000/0000-00" />
+            <ConfigInput label="Telefone Fixo" value={config.telefone} onValueChange={v => setConfig({...config, telefone: v})} icon={<Phone size={14}/>} />     
+            <ConfigInput label="WhatsApp" value={config.whatsapp} onValueChange={v => setConfig({...config, whatsapp: v})} icon={<Globe size={14}/>} />
             <div className="md:col-span-2">
-              <ConfigInput label="E-mail de Contato" value={config.email} onChange={v => setConfig({...config, email: v})} icon={<Mail size={14}/>} />
+              <ConfigInput label="E-mail de Contato" value={config.email} onValueChange={v => setConfig({...config, email: v})} icon={<Mail size={14}/>} />      
                 <div className="md:col-span-2 flex items-center gap-4">
                   <label className="flex items-center gap-3">
                     <input
@@ -266,6 +297,19 @@ export default function ConfiguracoesOticaPage() {
                       <span className="text-slate-400 font-black">%</span>
                     </div>
                   </div>
+                  <div className="ml-6">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Meta Mensal (R$)</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={config.meta_mensal as any}
+                        onChange={e => setConfig({...config, meta_mensal: Number(e.target.value) || 0})}
+                        className="w-40 bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 shadow-inner transition-all"
+                      />
+                    </div>
+                  </div>
                 </div>
             </div>
           </section>
@@ -275,8 +319,8 @@ export default function ConfiguracoesOticaPage() {
               <MapPin className="text-cyan-500" size={18} />
               <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest">Localização</h2>
             </div>
-            <ConfigInput label="Endereço Completo" value={config.endereco} onChange={v => setConfig({...config, endereco: v})} placeholder="Rua, Número, Bairro..." />
-            <ConfigInput label="Cidade / UF" value={config.cidade} onChange={v => setConfig({...config, cidade: v})} placeholder="Ex: São Paulo - SP" />
+            <ConfigInput label="Endereço Completo" value={config.endereco} onValueChange={v => setConfig({...config, endereco: v})} placeholder="Rua, Número, Bairro..." />
+            <ConfigInput label="Cidade / UF" value={config.cidade} onValueChange={v => setConfig({...config, cidade: v})} placeholder="Ex: São Paulo - SP" />    
           </section>
         </div>
       </div>
@@ -284,17 +328,28 @@ export default function ConfiguracoesOticaPage() {
   );
 }
 
-function ConfigInput({ label, value, onChange, icon, ...props }: { label: string; value: string; onChange: (v: string) => void; icon?: React.ReactNode; [key: string]: any }) {
+type ConfigInputProps = {
+  label: string;
+  value: string;
+  onValueChange?: (v: string) => void;
+  icon?: React.ReactNode;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value'>;
+
+function ConfigInput(props: ConfigInputProps) {
+  const { label, value, onValueChange, icon, ...rest } = props;
   return (
     <div className="space-y-2">
       <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter flex items-center gap-2">
         {icon} {label}
       </label>
-      <input 
-        {...props}
+      <input
+        {...rest}
         value={value || ""}
-        onChange={e => onChange(e.target.value)}
-        className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 shadow-inner transition-all placeholder:text-slate-300" 
+        onChange={e => {
+          if (onValueChange) onValueChange(e.target.value);
+          if (typeof (rest as any).onChange === 'function') (rest as any).onChange(e);
+        }}
+        className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 shadow-inner transition-all placeholder:text-slate-300"
       />
     </div>
   );

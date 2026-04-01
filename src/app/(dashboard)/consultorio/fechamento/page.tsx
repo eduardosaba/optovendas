@@ -41,22 +41,50 @@ export default function FechamentoConsultorioPage() {
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
+      // Muitas instalações não usam `consultorio_receitas` — a fonte técnica é `receitas_optometricas`.
+      // Aqui fazemos uma consulta em `receitas_optometricas` e mapeamos os campos para a forma esperada
+      // pelo frontend. Campos financeiros como `valor_final` e `forma_pagamento` não existem nesta
+      // tabela e serão mantidos como null (poderemos criar uma view/trigger no banco posteriormente).
       let query = supabase
-        .from("consultorio_receitas")
-        .select("id, paciente_id, valor_final, forma_pagamento, status_pagamento, data_atendimento, localidade, modelo_cobranca, tipo_atendimento, pacientes(nome_completo)")
+        .from("receitas_optometricas")
+        .select("id, paciente_id, data_exame, localidade_atendimento, pacientes(nome_completo)")
         .eq("clinica_id", ctx.clinicaId)
-        .eq("data_atendimento", dataRef)
-        .order("data_atendimento", { ascending: false });
+        .eq("data_exame", dataRef)
+        .order("data_exame", { ascending: false });
 
       if (cidade.trim()) {
-        query = query.ilike("localidade", `%${cidade.trim()}%`);
+        query = query.ilike("localidade_atendimento", `%${cidade.trim()}%`);
       }
 
       const { data, error } = await query;
       if (error) throw error;
-      setLinhas((data as ConsultaFinanceira[]) ?? []);
-    } catch (err: any) {
-      toast.error(`Erro ao carregar fechamento: ${err.message}`);
+
+      type ReceitaRow = {
+        id: string;
+        paciente_id?: string | null;
+        data_exame?: string | null;
+        localidade_atendimento?: string | null;
+        pacientes?: { nome_completo?: string | null } | Array<{ nome_completo?: string | null }> | null;
+      };
+
+      const rows = (data as ReceitaRow[]) || [];
+      const mapped = rows.map((r) => ({
+        id: r.id,
+        paciente_id: r.paciente_id,
+        valor_final: null,
+        forma_pagamento: null,
+        status_pagamento: null,
+        data_atendimento: r.data_exame,
+        localidade: r.localidade_atendimento,
+        modelo_cobranca: null,
+        tipo_atendimento: null,
+        pacientes: r.pacientes,
+      }));
+
+      setLinhas(mapped ?? []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Erro ao carregar fechamento: ${msg}`);
       setLinhas([]);
     } finally {
       setLoading(false);

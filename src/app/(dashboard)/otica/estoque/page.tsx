@@ -26,6 +26,7 @@ type ItemEstoque = {
   codigo_referencia: string;
   grife: string;
   modelo: string;
+    categoria?: string | null;
   cor?: string | null;
   quantidade_atual: number;
   preco_venda: number;
@@ -45,6 +46,8 @@ export default function EstoquePage() {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [categoria, setCategoria] = useState("");
+  const [novaCategoria, setNovaCategoria] = useState("");
 
   const [editandoItem, setEditandoItem] = useState<ItemEstoque | null>(null);
 
@@ -86,11 +89,12 @@ export default function EstoquePage() {
     setSalvando(true);
     const formData = new FormData(e.currentTarget);
 
-    const payload: any = {
+          const payload: any = {
       clinica_id: clinicaId,
       codigo_referencia: String(formData.get("codigo_referencia")),
       grife: String(formData.get("grife")),
       modelo: String(formData.get("modelo")),
+          categoria: (categoria === "Outra..." ? (novaCategoria || null) : (categoria || null)),
       cor: String(formData.get("cor") || ""),
       quantidade_atual: Number(formData.get("quantidade_atual")),
       preco_venda: Number(String(formData.get("preco_venda")).replace(",", ".")),
@@ -142,6 +146,8 @@ export default function EstoquePage() {
     setEditandoItem(null);
     setSelectedFile(null);
     setPreviewUrl(null);
+    setCategoria("");
+    setNovaCategoria("");
   }
 
   async function ajustarQuantidade(id: string, atual: number, delta: number) {
@@ -191,6 +197,28 @@ export default function EstoquePage() {
             <InputEstoque name="codigo_referencia" label="Cód. Referência" defaultValue={editandoItem?.codigo_referencia} required />
             <InputEstoque name="grife" label="Grife / Marca" defaultValue={editandoItem?.grife} required />
             <InputEstoque name="modelo" label="Modelo" defaultValue={editandoItem?.modelo} required />
+            <div>
+              <label className="text-[9px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Categoria</label>
+              <select
+                name="categoria"
+                value={categoria || editandoItem?.categoria || ""}
+                onChange={e => setCategoria(e.target.value)}
+                className="w-full bg-slate-50 border-none rounded-xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 transition-all text-sm"
+              >
+                <option value="">Selecione ou crie...</option>
+                <option value="Standard">Standard</option>
+                <option value="Premium">Premium</option>
+                <option value="Luxo">Luxo</option>
+                <option value="Promocional">Promocional</option>
+                <option value="Outra...">Outra...</option>
+              </select>
+            </div>
+            {categoria === "Outra..." && (
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Nova Categoria</label>
+                <input value={novaCategoria} onChange={e => setNovaCategoria(e.target.value)} name="categoria_nova" className="w-full bg-slate-50 border-none rounded-xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 transition-all text-sm" />
+              </div>
+            )}
             <InputEstoque name="cor" label="Cor / Detalhes" defaultValue={editandoItem?.cor || ""} />
             <InputEstoque name="quantidade_atual" label="Quantidade" type="number" defaultValue={editandoItem?.quantidade_atual} required />
             <InputEstoque name="preco_custo" label="Preço de Custo (R$)" defaultValue={editandoItem?.preco_custo} placeholder="0,00" />

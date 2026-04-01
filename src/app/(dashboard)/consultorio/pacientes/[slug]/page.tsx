@@ -120,14 +120,14 @@ export default function PacienteSlugRedirectPage() {
                 const medidas = [...medidasFromVendas, ...medidasFromArquivos, ...medidasFromAnexos];
 
                 setHistorico({ vendas, receitas, anexos, pagamentos, medidas, financeiroStatus: pagamentos.length > 0 ? `${pagamentos.length} registros` : 'Sem registros' });
-            } catch (e) {
+            } catch {
               // ignore history load errors
                 setHistorico({ vendas: [], receitas: [], anexos: [], pagamentos: [], medidas: [], financeiroStatus: 'Erro ao carregar histórico' });
             }
             try {
               const termosRes = await supabase.from('termos_aceite').select('id, tipo_termo, termo_texto, assinatura_base64, created_at, venda_id').eq('paciente_id', match.id).order('created_at', { ascending: false }).limit(50);
               if (!termosRes.error && termosRes.data) setTermos(termosRes.data as any[]);
-            } catch (e) {
+            } catch {
               // ignore
             }
           } catch {
@@ -290,7 +290,7 @@ export default function PacienteSlugRedirectPage() {
                         <div className="mt-3 space-y-2 max-h-64 overflow-auto">
                           {attachFiles.map((af, idx) => (
                             <div key={idx} className="flex gap-3 items-start p-2 border rounded">
-                              <img src={af.preview} className="w-20 h-16 object-cover rounded" />
+                              <img src={af.preview} className="w-20 h-16 object-cover rounded" alt="" />
                               <div className="flex-1">
                                 <input type="text" placeholder="Descrição (ex: receita Dr. Silva)" value={af.descricao} onChange={(e) => setAttachFiles(prev => prev.map((p,i) => i===idx?{...p, descricao:e.target.value}:p))} className="w-full p-2 rounded border" />
                                 <input type="text" placeholder="Tags (separadas por vírgula)" value={af.tags} onChange={(e) => setAttachFiles(prev => prev.map((p,i) => i===idx?{...p, tags:e.target.value}:p))} className="w-full p-2 rounded border mt-2" />
@@ -356,7 +356,7 @@ export default function PacienteSlugRedirectPage() {
                     ) : (
                       <div className="grid grid-cols-3 gap-2 mt-2">{(historico.anexos || []).map((a: any, i: number) => (
                         <a key={i} href={a.url || a} target="_blank" rel="noreferrer" className="block border rounded overflow-hidden">
-                          <img src={a.url || a} className="w-full h-20 object-cover" />
+                          <img src={a.url || a} className="w-full h-20 object-cover" alt="" />
                         </a>
                       ))}</div>
                     )}

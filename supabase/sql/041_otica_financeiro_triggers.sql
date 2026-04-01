@@ -81,16 +81,16 @@ AFTER UPDATE ON public.vendas
 FOR EACH ROW
 EXECUTE FUNCTION public.atualizar_venda_no_financeiro();
 
--- 5. Triggers para tabela `otica_vendas` (caso o sistema use essa tabela para sync/offline)
-DROP TRIGGER IF EXISTS trg_otica_venda_financeiro ON public.otica_vendas;
+-- 5. Triggers para tabela `vendas` (caso o sistema use essa tabela para sync/offline)
+DROP TRIGGER IF EXISTS trg_otica_venda_financeiro ON public.vendas;
 CREATE TRIGGER trg_otica_venda_financeiro
-AFTER INSERT ON public.otica_vendas
+AFTER INSERT ON public.vendas
 FOR EACH ROW
 EXECUTE FUNCTION public.lancar_venda_no_financeiro();
 
-DROP TRIGGER IF EXISTS trg_otica_venda_financeiro_update ON public.otica_vendas;
+DROP TRIGGER IF EXISTS trg_otica_venda_financeiro_update ON public.vendas;
 CREATE TRIGGER trg_otica_venda_financeiro_update
-AFTER UPDATE ON public.otica_vendas
+AFTER UPDATE ON public.vendas
 FOR EACH ROW
 EXECUTE FUNCTION public.atualizar_venda_no_financeiro();
 

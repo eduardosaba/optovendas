@@ -27,3 +27,24 @@ body {
 .border-primary {
   border-color: var(--cor-primaria);
 }
+
+/* Ajustes para o modo Focus / Fullscreen */
+/* Quando a classe opv-focus-mode estiver ativa (aplicada por FocusContext),
+   escondemos a barra lateral e removemos padding/margem que reservam espaço para ela.
+   Usamos !important deliberadamente para sobrepor utilitários gerados pelo Tailwind
+   que possam ainda estar presentes antes do re-render. */
+html.opv-focus-mode aside {
+  display: none !important;
+}
+
+html.opv-focus-mode main {
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+}
+
+/* Forçar fundo claro no modo fullscreen caso algum componente aplique dark bg */
+html.opv-focus-mode, html.opv-focus-mode body {
+  background: var(--background) !important;
+  color: var(--foreground) !important;
+}
+

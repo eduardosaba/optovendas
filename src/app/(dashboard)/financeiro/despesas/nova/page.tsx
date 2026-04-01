@@ -14,6 +14,7 @@ export default function NovaDespesaPage() {
   const [loading, setLoading] = useState(false);
   const [categorias, setCategorias] = useState<any[]>([]);
   const [clinicaId, setClinicaId] = useState("");
+  const [cidades, setCidades] = useState<string[]>([]);
 
   const [form, setForm] = useState({
     descricao: "",
@@ -34,6 +35,20 @@ export default function NovaDespesaPage() {
         .eq("tipo", "despesa")
         .eq("clinica_id", ctx.clinicaId);
       setCategorias(data || []);
+      try {
+        const [{ data: vendasData }, { data: pacientesData }] = await Promise.all([
+          supabase.from('vendas').select('localidade_venda').eq('clinica_id', ctx.clinicaId),
+          supabase.from('pacientes').select('cidade_atendimento').eq('clinica_id', ctx.clinicaId),
+        ]);
+
+        const cidadesSet = new Set<string>();
+        (vendasData || []).forEach((r: any) => { if (r?.localidade_venda) cidadesSet.add(String(r.localidade_venda).trim()); });
+        (pacientesData || []).forEach((p: any) => { if (p?.cidade_atendimento) cidadesSet.add(String(p.cidade_atendimento).trim()); });
+        setCidades(Array.from(cidadesSet).sort());
+      } catch (e) {
+        // não crítico - se falhar, continuamos com input livre
+        console.warn('falha ao carregar cidades para sugestão', e);
+      }
     }
     void carregarDados();
   }, []);
@@ -47,17 +62,40 @@ export default function NovaDespesaPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.from("despesas").insert({
+      const valorNumber = Number(String(form.valor).replace(",", "."));
+
+      const { data: despData, error } = await supabase.from("despesas").insert({
         clinica_id: clinicaId,
         descricao: form.descricao,
-        valor: Number(String(form.valor).replace(",", ".")),
+        valor: valorNumber,
         data_vencimento: form.data_vencimento,
         categoria_id: form.categoria_id,
         localidade_rota: form.localidade_rota || "Geral",
         status: "pago",
-      });
+      }).select("id").single();
 
       if (error) throw error;
+
+      try {
+        // registra saída no fluxo de caixa quando a despesa é marcada como paga
+        const fluxoPayload = {
+          clinica_id: clinicaId,
+          tipo: 'saida',
+          valor: valorNumber,
+          descricao: `Despesa: ${form.descricao}`,
+          data_movimento: form.data_vencimento,
+          localidade: form.localidade_rota || 'Geral',
+          origem: 'despesa',
+          origem_id: despData?.id || null,
+        } as any;
+
+        const { error: fluxoErr } = await supabase.from('fluxo_caixa').insert(fluxoPayload);
+        if (fluxoErr) {
+          console.warn('Falha ao registrar fluxo_caixa para despesa:', fluxoErr);
+        }
+      } catch (e) {
+        console.warn('Erro ao inserir fluxo_caixa (não bloqueante):', e);
+      }
 
       toast.success("Despesa lançada com sucesso!");
       router.push("/financeiro/lucratividade");
@@ -132,14 +170,20 @@ export default function NovaDespesaPage() {
             </select>
           </div>
           <div>
-            <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block"><MapPin size={10} className="inline mr-1"/> Cidade / Rota</label>
-            <input
-              type="text"
-              placeholder="Ex: Humildes"
-              value={form.localidade_rota}
-              onChange={(e) => setForm({ ...form, localidade_rota: e.target.value })}
-              className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500"
-            />
+              <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block"><MapPin size={10} className="inline mr-1"/> Cidade / Rota</label>
+              <input
+                list="cidades-list"
+                type="text"
+                placeholder="Ex: Humildes"
+                value={form.localidade_rota}
+                onChange={(e) => setForm({ ...form, localidade_rota: e.target.value })}
+                className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500"
+              />
+              <datalist id="cidades-list">
+                {cidades.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
           </div>
         </div>
 

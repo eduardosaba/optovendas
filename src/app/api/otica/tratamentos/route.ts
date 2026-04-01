@@ -15,7 +15,7 @@ async function getUserFromBearer(token: string | null) {
   try {
     const userRes: any = await (supabaseAdmin as any).auth.getUser({ access_token: token });
     return userRes?.data?.user ?? null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }

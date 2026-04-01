@@ -23,7 +23,7 @@ export default function ReceitaPreview({ dados, clinica }: { dados: Dados; clini
             <p className="text-sm text-slate-500">{clinica?.endereco_completo || ''}</p>
           </div>
           {clinica?.logomarca_url ? (
-            // eslint-disable-next-line jsx-a11y/alt-text
+             
             <img src={clinica.logomarca_url} alt="logo" className="w-28 object-contain" />
           ) : null}
         </div>

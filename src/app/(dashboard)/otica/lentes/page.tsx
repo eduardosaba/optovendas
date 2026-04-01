@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { Layers, Plus, Trash2, ArrowLeft, Loader2, Tag, Edit3 } from "lucide-react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 
 export default function CadastroLentesPage() {
@@ -14,6 +15,8 @@ export default function CadastroLentesPage() {
   const [preco, setPreco] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
   const toast = useToast();
 
   async function carregarLentes() {
@@ -65,8 +68,16 @@ export default function CadastroLentesPage() {
   }
 
   async function excluirLente(id: string) {
-    if (!confirm("Deseja realmente excluir esta lente do catálogo?")) return;
-    
+    setConfirmTarget(id);
+    setConfirmOpen(true);
+  }
+
+  async function excluirLenteConfirmado() {
+    const id = confirmTarget;
+    setConfirmOpen(false);
+    setConfirmTarget(null);
+    if (!id) return;
+
     const { error } = await supabase.from("otica_lentes").delete().eq("id", id);
     if (!error) {
       toast.success("Lente removida.");
@@ -209,6 +220,7 @@ export default function CadastroLentesPage() {
         <Layers size={14} />
         <p className="text-[10px] font-black uppercase tracking-[0.2em]">Total de tecnologias: {lentes.length}</p>
       </div>
+      <ConfirmDialog open={confirmOpen} title="Excluir lente" message="Deseja realmente excluir esta lente do catálogo?" onConfirm={excluirLenteConfirmado} onCancel={() => setConfirmOpen(false)} />
     </div>
   );
 }

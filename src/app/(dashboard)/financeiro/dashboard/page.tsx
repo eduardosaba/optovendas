@@ -258,6 +258,15 @@ export default function DashboardFinanceiroPage() {
           icon={<CheckCircle2 className="text-emerald-500" />}
           bgColor="bg-emerald-50"
         />
+        <div className="rounded-[40px] border border-slate-50 p-8 shadow-sm bg-white">
+          <Link href="/financeiro/contas" className="flex h-full w-full flex-col items-start justify-between">
+            <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 shadow-inner">
+              <Calendar className="text-slate-500" />
+            </div>
+            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Contas / Caixas</p>
+            <p className="text-2xl font-black tracking-tighter text-slate-900">Gerenciar contas</p>
+          </Link>
+        </div>
       </div>
 
       <section className="space-y-8 rounded-[48px] border border-slate-50 bg-white p-8 shadow-sm">

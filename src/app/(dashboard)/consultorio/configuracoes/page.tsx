@@ -249,7 +249,7 @@ export default function ConfigUnidadePage() {
           // atualizar estado com a URL limpa; preview já contém cache-bust param
           setConfig((prev) => ({ ...prev, logo_unidade_url: publicUrl }));
         }
-      } catch (e) {
+      } catch {
         // não interromper o fluxo principal
       }
     } catch (err) {

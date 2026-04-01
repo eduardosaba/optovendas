@@ -14,80 +14,67 @@ export const FocusContext = createContext<FocusContextType>({
   toggleFocusMode: () => {},
 });
 
-export function FocusProvider({ children, focusRef }: { children: React.ReactNode; focusRef?: React.RefObject<HTMLElement | null> }) {
+export function FocusProvider({ children }: { children: React.ReactNode }) {
   const [isFocusMode, setIsFocusMode] = useState(false);
 
+  // Força o modo claro e remove classes de margem via injeção de estilo se necessário
   const forceLightUi = useCallback(() => {
     try {
-      document.documentElement.classList.remove("dark");
-      document.body.classList.remove("dark");
-      document.documentElement.style.colorScheme = "light";
-      localStorage.setItem("opv_theme", "light");
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const enterFullscreen = useCallback(async () => {
-    try {
-      if (document.fullscreenElement) return;
-      // Fullscreen no documento inteiro evita fundo preto quando o alvo e um container interno.
-      const target = document.documentElement as Element;
-      await (target as any).requestFullscreen?.();
-    } catch {
-      // ignore
-    }
-  }, [focusRef]);
-
-  const exitFullscreen = useCallback(async () => {
-    try {
-      if (!document.fullscreenElement) return;
-      await document.exitFullscreen?.();
-    } catch {
-      // ignore
+      const html = document.documentElement;
+      html.classList.remove("dark");
+      html.classList.add("light");
+      html.style.colorScheme = "light";
+      // Remove o background escuro que o Fullscreen do navegador costuma colocar
+      html.style.backgroundColor = "#ffffff";
+    } catch (e) {
+      console.error(e);
     }
   }, []);
 
   const setFocus = useCallback(
-    (v: boolean) => {
+    async (v: boolean) => {
       setIsFocusMode(v);
       forceLightUi();
-      if (v) void enterFullscreen();
-      else void exitFullscreen();
+
+      if (v) {
+        try {
+          if (!document.fullscreenElement) {
+            await document.documentElement.requestFullscreen();
+          }
+        } catch (err) {
+          console.warn("Erro ao entrar em fullscreen:", err);
+        }
+      } else {
+        try {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+          }
+        } catch (err) {
+          console.warn("Erro ao sair do fullscreen:", err);
+        }
+      }
     },
-    [enterFullscreen, exitFullscreen, forceLightUi]
+    [forceLightUi]
   );
 
   const toggleFocusMode = useCallback(() => setFocus(!isFocusMode), [setFocus, isFocusMode]);
 
   useEffect(() => {
-    // Não tenta entrar em fullscreen automaticamente sem gesto do usuário.
-    forceLightUi();
-
-    function onFullscreenChange() {
-      // if user exited fullscreen (ESC), sync state
-      const active = !!document.fullscreenElement;
-      if (!active) setIsFocusMode(false);
-    }
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
+    const handleSync = () => {
+      if (!document.fullscreenElement) {
         setIsFocusMode(false);
       }
-    }
-
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    window.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
-      window.removeEventListener("keydown", onKeyDown);
     };
-  }, [forceLightUi]);
+
+    document.addEventListener("fullscreenchange", handleSync);
+    return () => document.removeEventListener("fullscreenchange", handleSync);
+  }, []);
 
   return (
     <FocusContext.Provider value={{ isFocusMode, setIsFocusMode: setFocus, toggleFocusMode }}>
-      {children}
+      <div className={isFocusMode ? "light bg-white" : ""}>
+        {children}
+      </div>
     </FocusContext.Provider>
   );
 }

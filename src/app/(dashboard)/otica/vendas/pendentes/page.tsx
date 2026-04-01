@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarClock, PhoneCall, Search } from "lucide-react";
+import { ArrowLeft, CalendarClock, PhoneCall, Search, CreditCard, Image, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -20,6 +20,7 @@ type VendaPendente = {
   saldo_restante?: number | null;
   localidade_venda?: string | null;
   tipo_fechamento?: string | null;
+  anexos_urls?: string[];
   pacientes?: PacienteRel | PacienteRel[] | null;
 };
 
@@ -181,10 +182,30 @@ export default function VendasPendentesPage() {
             const link = waLink(paciente?.celular, mensagem);
 
             return (
-              <article key={venda.id} className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+              <article key={venda.id} className={`rounded-3xl border p-5 shadow-sm transition-all ${
+                (venda.anexos_urls?.length || 0) > 0 ? 'border-cyan-100 bg-white' : 'border-slate-100 bg-white'
+              }`}>
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-rose-600">Pendente</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-rose-600">Pendente</p>
+
+                      { (venda.anexos_urls?.length || 0) >= 3 ? (
+                        <span className="flex items-center gap-1 bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter">
+                          <CheckCircle2 size={10} /> Documentação Completa
+                        </span>
+                        ) : (
+                        <span className="flex items-center gap-1 bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter">
+                          <Image size={10} /> {(venda.anexos_urls?.length || 0)}/3 Fotos
+                        </span>
+                      )}
+
+                      {venda.criado_em && (new Date().getTime() - new Date(venda.criado_em).getTime()) > 7 * 24 * 60 * 60 * 1000 && (
+                        <span className="flex items-center gap-1 bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full text-[9px] font-black animate-pulse">
+                          <AlertTriangle size={10} /> Crítico (+7 dias)
+                        </span>
+                      )}
+                    </div>
                     <h3 className="text-lg font-black text-slate-900">{paciente?.nome_completo || "Cliente sem nome"}</h3>
                     <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                       Venda #{venda.id.slice(0, 8)} • {paciente?.cidade_atendimento || venda.localidade_venda || "Local nao informado"}
@@ -198,9 +219,15 @@ export default function VendasPendentesPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <Link href="/otica/vendas/nova" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50">
-                      Nova negociacao
-                    </Link>
+                      <Link href="/otica/vendas/nova" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50">
+                        Nova negociacao
+                      </Link>
+                      <Link 
+                        href={`/otica/vendas/nova?vendaId=${venda.id}`} 
+                        className="rounded-xl bg-blue-600 px-4 py-2 text-[11px] font-black uppercase tracking-wider text-white hover:bg-blue-700 transition-all flex items-center gap-2"
+                      >
+                        <CreditCard size={14} /> Concluir Fechamento
+                      </Link>
                     <button
                       type="button"
                       disabled={!link}

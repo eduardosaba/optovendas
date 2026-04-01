@@ -8,7 +8,7 @@ import HistoricoEvolucao from "@/components/consultorio/HistoricoEvolucao";
 import ReceitaPdf from "@/components/consultorio/ReceitaPdf";
 import ReceitaPreview from "@/components/consultorio/ReceitaPreview";
 import Modal from '@/components/ui/Modal';
-import { fmtNumber, fmtEixo, v } from "@/lib/refracaoFormat";
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { resolveClinicaContext } from "@/lib/clinica";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -17,38 +17,74 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import SelectLocalidade from "@/components/otica/SelectLocalidade";
 
-type PacienteOption = {
+// --- INTERFACES ---
+interface PacienteOption {
   id: string;
   nome_completo: string;
   cpf?: string | null;
   celular?: string | null;
   data_nascimento?: string | null;
-};
+}
 
-type AgendaAtiva = {
+interface AgendaAtiva {
   agendaId: string;
   cidade: string;
   data: string;
   local?: string;
   clinicaId?: string;
-};
+}
+
+interface AnamneseState {
+  motivoConsulta: string;
+  antecedentesPessoais: string[];
+  antecedentesFamiliares: string;
+  motivosConsulta: string[];
+  ultimoExame: string;
+  usuarioOculos: string[];
+  usaOculos: boolean;
+  observacoesInternas?: string;
+}
+
+interface ConfigUnidade {
+  nota_rodape_receita?: string;
+  carimbo_nome?: string;
+  carimbo_titulo?: string;
+  carimbo_registro?: string;
+  logo_unidade_url?: string;
+  endereco_completo?: string;
+  modelo_timbrado?: string;
+  email_contato?: string;
+  instagram_handle?: string;
+  exibir_carimbo_automatico?: boolean;
+}
 
 type TipoAtendimento = "interno" | "externo";
 type ModeloCobranca = "pago" | "gratuito";
 
 const AGENDA_ATIVA_KEY = "optovendas-agenda-ativa";
 
-type ReceitaHistorico = {
+interface ReceitaHistorico {
   id: string;
   data_exame?: string | null;
   od_esferico?: number | null;
   od_cilindrico?: number | null;
   od_eixo?: number | null;
+  od_av?: string | null;
   oe_esferico?: number | null;
   oe_cilindrico?: number | null;
   oe_eixo?: number | null;
+  oe_av?: string | null;
   adicao?: number | null;
-};
+  dp_dnp?: string | null;
+  miopia?: boolean;
+  astigmatismo?: boolean;
+  hipermetropia?: boolean;
+  presbiopia?: boolean;
+  tipo_lente?: string | null;
+  tratamento_antirreflexo?: boolean;
+  tratamento_fotossensivel?: boolean;
+  retorno?: string | null;
+}
 
 const DEFAULT_REFRACAO: RefracaoValue = {
   odEsferico: "",
@@ -68,7 +104,7 @@ const DEFAULT_REFRACAO: RefracaoValue = {
   presbiopia: false,
   tipoLente: null,
   tratamentoAntiReflexo: false,
-  tratamentoFotossivel: false,
+  tratamentoFotossensivel: false,
 };
 
 function StepButton({
@@ -81,7 +117,7 @@ function StepButton({
   active: boolean;
   current: boolean;
   label: string;
-  icon: any;
+  icon: React.ReactNode;
   onClick: () => void;
 }) {
   return (
@@ -99,7 +135,7 @@ function StepButton({
 
 export default function NovoAtendimentoPage() {
   const [loading, setLoading] = useState(false);
-  const [etapa, setEtapa] = useState(1); // 1: Anamnese, 2: Exame, 3: Conclusão
+  const [etapa, setEtapa] = useState(1);
   const [pacientes, setPacientes] = useState<PacienteOption[]>([]);
   const [pacienteId, setPacienteId] = useState("");
   const [pacienteCriadoId, setPacienteCriadoId] = useState<string | null>(null);
@@ -112,13 +148,13 @@ export default function NovoAtendimentoPage() {
   const [historico, setHistorico] = useState<ReceitaHistorico[]>([]);
   const [showPreviewReceita, setShowPreviewReceita] = useState(false);
 
-  const [anamnese, setAnamnese] = useState({
+  const [anamnese, setAnamnese] = useState<AnamneseState>({
     motivoConsulta: "",
-    antecedentesPessoais: [] as string[],
+    antecedentesPessoais: [],
     antecedentesFamiliares: "",
-    motivosConsulta: [] as string[],
+    motivosConsulta: [],
     ultimoExame: "",
-    usuarioOculos: [] as string[],
+    usuarioOculos: [],
     usaOculos: false,
   });
   const [refracao, setRefracao] = useState<RefracaoValue>(DEFAULT_REFRACAO);
@@ -127,15 +163,16 @@ export default function NovoAtendimentoPage() {
   const [logomarcaUrl, setLogomarcaUrl] = useState<string | null>(null);
   const [profissionalNome, setProfissionalNome] = useState<string | null>(null);
   const [notaRodapeReceita, setNotaRodapeReceita] = useState("Valido por 6 meses.");
-  const [configUnidade, setConfigUnidade] = useState<any | null>(null);
+  const [configUnidade, setConfigUnidade] = useState<ConfigUnidade | null>(null);
   const [showSegundaVia, setShowSegundaVia] = useState(false);
-  const [dadosSegundaVia, setDadosSegundaVia] = useState<any>(null);
+  const [dadosSegundaVia, setDadosSegundaVia] = useState<ReceitaHistorico | null>(null);
   const [agendaAtiva, setAgendaAtiva] = useState<AgendaAtiva | null>(null);
   const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimento>("interno");
   const [localidadeAtendimento, setLocalidadeAtendimento] = useState("");
   const [modeloCobranca, setModeloCobranca] = useState<ModeloCobranca>("pago");
   const [valorConsulta, setValorConsulta] = useState("0");
   const [formaPagamento, setFormaPagamento] = useState("pix");
+  
   const toast = useToast();
   const { corPrimaria } = useConfig();
   const searchParams = useSearchParams();
@@ -145,276 +182,68 @@ export default function NovoAtendimentoPage() {
     [pacientes, pacienteId],
   );
   const pacienteNomeExibicao = pacienteNome || pacienteQuery.trim();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<ReceitaHistorico | null>(null);
 
+  // 1. Carregamento Inicial
   useEffect(() => {
     async function loadInitial() {
       try {
         const ctx = await resolveClinicaContext();
-
-        const [pRes, cRes, pfRes] = await Promise.all([
+        const [pRes, cRes, pfRes, configRes] = await Promise.all([
           supabase.from("pacientes").select("id, nome_completo, cpf, celular, data_nascimento").eq("clinica_id", ctx.clinicaId).order("nome_completo"),
-          supabase
-            .from("clinicas")
-            .select("nome_fantasia, logomarca_url")
-            .eq("id", ctx.clinicaId)
-            .single(),
+          supabase.from("clinicas").select("nome_fantasia, logomarca_url").eq("id", ctx.clinicaId).single(),
           supabase.from("perfis").select("nome").eq("id", ctx.userId).maybeSingle(),
+          supabase.from("config_unidade").select("*").eq("clinica_id", ctx.clinicaId).maybeSingle()
         ]);
 
-        const configRes = await supabase
-          .from("config_unidade")
-          .select("nota_rodape_receita, carimbo_nome, carimbo_titulo, carimbo_registro, logo_unidade_url, endereco_completo, modelo_timbrado, email_contato, instagram_handle, exibir_carimbo_automatico")
-          .eq("clinica_id", ctx.clinicaId)
-          .maybeSingle();
-
-        let pacientesBase = (pRes.data as PacienteOption[]) ?? [];
-
-        const agendaRaw = window.localStorage.getItem(AGENDA_ATIVA_KEY);
-        if (agendaRaw) {
-          const agenda = JSON.parse(agendaRaw) as AgendaAtiva;
-          if (agenda?.agendaId && (!agenda.clinicaId || agenda.clinicaId === ctx.clinicaId)) {
-            const agendaRes = await supabase
-              .from("agenda_externa")
-              .select("id, cidade, data_atendimento, local_especifico, clinica_id")
-              .eq("id", agenda.agendaId)
-              .eq("clinica_id", ctx.clinicaId)
-              .maybeSingle();
-
-            if (agendaRes.data) {
-              const ag = agendaRes.data as {
-                id: string;
-                cidade: string;
-                data_atendimento: string;
-                local_especifico?: string | null;
-              };
-
-              setAgendaAtiva({
-                agendaId: ag.id,
-                cidade: ag.cidade,
-                data: ag.data_atendimento,
-                local: ag.local_especifico ?? "",
-                clinicaId: ctx.clinicaId,
-              });
-
-              const listaRes = await supabase
-                .from("agenda_pacientes")
-                .select("paciente_id")
-                .eq("agenda_id", ag.id);
-
-              const idsPrioridade = new Set(((listaRes.data as Array<{ paciente_id: string }>) ?? []).map((x) => x.paciente_id));
-              if (idsPrioridade.size > 0) {
-                pacientesBase = [...pacientesBase].sort((a, b) => {
-                  const aP = idsPrioridade.has(a.id) ? 0 : 1;
-                  const bP = idsPrioridade.has(b.id) ? 0 : 1;
-                  if (aP !== bP) return aP - bP;
-                  return a.nome_completo.localeCompare(b.nome_completo);
-                });
-              }
-            }
-          }
-        }
-
-        setPacientes(pacientesBase);
-        setClinicaNome((cRes.data as { nome_fantasia?: string } | null)?.nome_fantasia ?? "OptoVendas");
-        setLogomarcaUrl((cRes.data as { logomarca_url?: string | null } | null)?.logomarca_url ?? null);
-        setProfissionalNome((pfRes.data as { nome?: string | null } | null)?.nome ?? null);
-        setNotaRodapeReceita(((configRes.data as { nota_rodape_receita?: string | null } | null)?.nota_rodape_receita || "Valido por 6 meses.").trim());
-        setConfigUnidade((configRes.data as any) || null);
-      } catch {
-        // manter fallback visual
+        setPacientes((pRes.data as PacienteOption[]) ?? []);
+        setClinicaNome(cRes.data?.nome_fantasia ?? "OptoVendas");
+        setLogomarcaUrl(cRes.data?.logomarca_url ?? null);
+        setProfissionalNome(pfRes.data?.nome ?? null);
+        setNotaRodapeReceita(configRes.data?.nota_rodape_receita?.trim() || "Valido por 6 meses.");
+        setConfigUnidade(configRes.data as ConfigUnidade || null);
+      } catch (e) {
+        console.error("Erro no loadInitial", e);
       }
     }
-
     loadInitial();
   }, []);
 
-  useEffect(() => {
-    if (!agendaAtiva?.cidade) return;
-    setTipoAtendimento("externo");
-    setLocalidadeAtendimento((prev) => prev || agendaAtiva.cidade);
-  }, [agendaAtiva?.cidade]);
-
-  useEffect(() => {
-    const t = setTimeout(async () => {
-      const q = pacienteQuery.trim();
-      if (!q) {
-        setSugestoes([]);
-        setLoadingSugestoes(false);
-        return;
-      }
-
-      setLoadingSugestoes(true);
-      const digits = q.replace(/\D/g, "");
-
-      const encontradosLocal = pacientes.filter((p) => {
-        if (p.nome_completo.toLowerCase().includes(q.toLowerCase())) return true;
-        if (digits && p.cpf && p.cpf.replace(/\D/g, "").includes(digits)) return true;
-        if (digits && p.celular && p.celular.replace(/\D/g, "").includes(digits)) return true;
-        return false;
-      });
-
-      if (encontradosLocal.length > 0) {
-        setSugestoes(encontradosLocal.slice(0, 30));
-        setLoadingSugestoes(false);
-        return;
-      }
-
-      try {
-        const ctx = await resolveClinicaContext();
-        // Pesquisa no servidor por nome ou cpf (ilike para nome, cpf contém)
-        const orQuery = `nome_completo.ilike.%${q}% , cpf.ilike.%${q}%`;
-        const { data } = await supabase
-          .from("pacientes")
-          .select("id, nome_completo, cpf, celular, data_nascimento")
-          .or(orQuery)
-          .eq("clinica_id", ctx.clinicaId)
-          .limit(30);
-
-        setSugestoes((data as PacienteOption[]) ?? []);
-      } catch {
-        setSugestoes([]);
-      } finally {
-        setLoadingSugestoes(false);
-      }
-    }, 250);
-
-    return () => clearTimeout(t);
-  }, [pacienteQuery, pacientes]);
-
-  useEffect(() => {
-    if (!pacienteId) {
-      setHistorico([]);
-      return;
-    }
-
-    async function loadHistorico() {
-      const { data } = await supabase
-        .from("receitas_optometricas")
-        .select("id, data_exame, od_esferico, od_cilindrico, od_eixo, oe_esferico, oe_cilindrico, oe_eixo, adicao")
-        .eq("paciente_id", pacienteId)
-        .order("data_exame", { ascending: false })
-        .limit(3);
-
-      setHistorico((data as ReceitaHistorico[]) ?? []);
-    }
-
-    loadHistorico();
-  }, [pacienteId]);
-
-  useEffect(() => {
-    const fromQuery = searchParams.get("pacienteId") || "";
-    if (!fromQuery) return;
-
-    setPacienteId(fromQuery);
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (!pacienteId) {
-      setIdadeAutoCadastro(false);
-      return;
-    }
-
-    const p = pacientes.find((x) => x.id === pacienteId);
-    const idadeCalc = calcularIdadePorNascimento(p?.data_nascimento);
-    if (idadeCalc) {
-      setIdadePaciente(String(idadeCalc));
-      setIdadeAutoCadastro(true);
-      return;
-    }
-
-    setIdadeAutoCadastro(false);
-    setIdadePaciente("");
-  }, [pacienteId, pacientes]);
-
-  function calcularIdadePorNascimento(dataNascimento?: string | null) {
-    if (!dataNascimento) return null;
-    const d = new Date(dataNascimento);
-    if (Number.isNaN(d.getTime())) return null;
-
-    const hoje = new Date();
-    let idade = hoje.getFullYear() - d.getFullYear();
-    const m = hoje.getMonth() - d.getMonth();
-    if (m < 0 || (m === 0 && hoje.getDate() < d.getDate())) idade -= 1;
-
-    if (idade < 0 || idade > 130) return null;
-    return idade;
-  }
-
-  function normalizeAgeInput(raw: string) {
-    const digits = raw.replace(/\D/g, "").slice(0, 3);
-    return digits;
-  }
-
-  function toNumberOrNull(v: string) {
-    if (!v.trim()) return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
+  // 2. Lógica de Salvar (O Coração da Mudança)
   async function salvarAtendimento() {
     setLoading(true);
-
     try {
       if (!idadePaciente.trim()) {
-        toast.info("Informe a idade do paciente para gerar a receita.");
+        toast.info("Informe a idade do paciente.");
         return;
       }
 
       const ctx = await resolveClinicaContext();
       let pacienteFinalId = pacienteId;
 
+      // Cadastro Rápido de Paciente se não selecionado
       if (!pacienteFinalId) {
         const nomeLivre = pacienteQuery.trim();
-        if (!nomeLivre) {
-          toast.info("Busque um paciente por nome/CPF. Se não existir, digite o nome completo e salve para cadastro rápido.");
-          return;
-        }
+        if (!nomeLivre) throw new Error("Selecione ou digite o nome do paciente.");
 
-        const pacienteInsert = await supabase
+        const { data: pNew, error: pErr } = await supabase
           .from("pacientes")
-          .insert([
-            {
-              clinica_id: ctx.clinicaId,
-              nome_completo: nomeLivre,
-              cidade_atendimento: agendaAtiva?.cidade ?? null,
-            },
-          ])
-          .select("id, nome_completo, data_nascimento")
-          .single();
-
-        if (pacienteInsert.error) throw pacienteInsert.error;
-
-        const novoPaciente = pacienteInsert.data as PacienteOption;
-        pacienteFinalId = novoPaciente.id;
-        setPacienteId(novoPaciente.id);
-        setPacienteQuery(novoPaciente.nome_completo);
-        setPacienteCriadoId(novoPaciente.id);
-        setPacientes((prev) => [novoPaciente, ...prev]);
-        toast.info("Paciente criado rapidamente. Complete o cadastro depois na página de pacientes.");
+          .insert([{ clinica_id: ctx.clinicaId, nome_completo: nomeLivre, cidade_atendimento: localidadeAtendimento || null }])
+          .select("id, nome_completo").single();
+        
+        if (pErr) throw pErr;
+        pacienteFinalId = pNew.id;
+        setPacienteId(pNew.id);
       }
 
-      const anamneseInsert = await supabase.from("anamnese").insert([
-        {
+      // A. Salvar Receita Técnica (Obrigatório primeiro)
+      const { data: recData, error: recErr } = await supabase
+        .from("receitas_optometricas")
+        .insert([{
           paciente_id: pacienteFinalId,
           clinica_id: ctx.clinicaId,
-          motivo_consulta: (anamnese.motivoConsulta || "").trim(),
-          antecedentes_pessoais: (anamnese.antecedentesPessoais || []).map((s) => String(s || "").trim()).filter(Boolean).join(", ") || null,
-          antecedentes_familiares: (anamnese.antecedentesFamiliares || "").trim() || null,
-          motivos_consulta: (anamnese.motivosConsulta || []).map((s) => String(s || "").trim()).filter(Boolean).join(", ") || null,
-          ultimo_exame: (anamnese.ultimoExame || "").trim() || null,
-          usuario_oculos: (anamnese.usuarioOculos || []).map((s) => String(s || "").trim()).filter(Boolean).join(", ") || null,
-          usa_oculos: anamnese.usaOculos ?? false,
-          observacoes_internas: ((anamnese as any).observacoesInternas || "").trim() || null,
-        },
-      ]);
-
-      if (anamneseInsert.error) throw anamneseInsert.error;
-
-      const receitaInsert = await supabase.from("receitas_optometricas").insert([
-        {
-          paciente_id: pacienteFinalId,
-          clinica_id: ctx.clinicaId,
-          localidade_atendimento: agendaAtiva?.cidade ?? null,
+          localidade_atendimento: localidadeAtendimento || null,
           od_esferico: toNumberOrNull(refracao.odEsferico),
           od_cilindrico: toNumberOrNull(refracao.odCilindrico),
           od_eixo: toNumberOrNull(refracao.odEixo),
@@ -425,510 +254,224 @@ export default function NovoAtendimentoPage() {
           oe_av: refracao.oeAv || null,
           adicao: toNumberOrNull(refracao.adicao),
           dp_dnp: refracao.dpDnp || null,
-          miopia: (refracao as any).miopia ?? false,
-          astigmatismo: (refracao as any).astigmatismo ?? false,
-          hipermetropia: (refracao as any).hipermetropia ?? false,
-          presbiopia: (refracao as any).presbiopia ?? false,
-          tipo_lente: refracao.tipoLente || null,
-          tratamento_antirreflexo: (refracao as any).tratamentoAntiReflexo ?? false,
-          tratamento_fotossensivel: (refracao as any).tratamentoFotossivel ?? false,
-          retorno: (refracao as any).retorno || null,
-          tipo_documento: "Receita",
+          miopia: refracao.miopia,
+          astigmatismo: refracao.astigmatismo,
+          hipermetropia: refracao.hipermetropia,
+          presbiopia: refracao.presbiopia,
+          tipo_lente: refracao.tipoLente,
+          tratamento_antirreflexo: refracao.tratamentoAntiReflexo,
+          tratamento_fotossensivel: refracao.tratamentoFotossensivel,
+          retorno: refracao.retorno,
           nota_rodape: notaRodapeReceita,
-        },
-      ]).select("id");
+        }])
+        .select("id")
+        .single();
 
-      if (receitaInsert.error) throw receitaInsert.error;
+      if (recErr) throw new Error(`Erro na receita: ${recErr.message}`);
 
-      const receitaData = (receitaInsert.data as Array<{ id: string }> | null) ?? [];
-      let receitaIdGerada: string | null = receitaData[0]?.id ?? null;
-      if (!receitaIdGerada) {
-        const receitaBusca = await supabase
-          .from("receitas_optometricas")
-          .select("id")
-          .eq("paciente_id", pacienteFinalId)
-          .order("criado_em", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        receitaIdGerada = (receitaBusca.data as { id?: string } | null)?.id ?? null;
+      // B. Salvar Ficha Administrativa (consultorio_receitas) vinculando a receita
+      const valorNum = Math.max(0, Number(valorConsulta.replace(",", ".")) || 0);
+      // Verifica existência de registro em `profiles` para evitar violação de FK
+      let profissionalIdToSave: string | null = null;
+      try {
+        const profCheck = await supabase.from("profiles").select("id").eq("id", ctx.userId).maybeSingle();
+        if (!profCheck.error && profCheck.data) profissionalIdToSave = ctx.userId;
+      } catch (e) {
+        // ignore fallback to null
       }
 
-      const valorConsultaNum = Math.max(0, Number((valorConsulta || "0").replace(",", ".")) || 0);
-      const isGratuito = modeloCobranca === "gratuito";
-      const statusPagamento = isGratuito ? "isento" : valorConsultaNum > 0 ? "pago" : "pendente";
-
-      const consRes = await supabase
+      const { data: consData, error: consErr } = await supabase
         .from("consultorio_receitas")
         .insert({
           clinica_id: ctx.clinicaId,
           paciente_id: pacienteFinalId,
-          profissional_id: ctx.userId,
-          valor_final: isGratuito ? 0 : valorConsultaNum,
-          forma_pagamento: isGratuito ? null : formaPagamento,
-          status_pagamento: statusPagamento,
+          profissional_id: profissionalIdToSave,
+          receita_id: recData.id, // VÍNCULO CRUCIAL
+          valor_final: modeloCobranca === "gratuito" ? 0 : valorNum,
+          forma_pagamento: modeloCobranca === "gratuito" ? null : formaPagamento,
+          status_pagamento: modeloCobranca === "gratuito" ? "isento" : valorNum > 0 ? "pago" : "pendente",
           data_atendimento: new Date().toISOString().slice(0, 10),
-          observacoes: isGratuito ? "Atendimento gratuito" : "Atendimento pago",
-          receita_id: receitaIdGerada,
-          localidade: (localidadeAtendimento || agendaAtiva?.cidade || "").trim() || null,
+          localidade: localidadeAtendimento || null,
           tipo_atendimento: tipoAtendimento,
           modelo_cobranca: modeloCobranca,
         })
         .select("id")
         .single();
 
-      if (consRes.error) throw consRes.error;
+      if (consErr) throw consErr;
 
-      if (!isGratuito && valorConsultaNum > 0) {
-        const finRes = await supabase.from("financeiro_consultorio").insert({
-          consulta_id: consRes.data.id,
-          clinica_id: ctx.clinicaId,
-          paciente_id: pacienteFinalId,
-          valor: valorConsultaNum,
-          forma_pagamento: formaPagamento,
-          categoria: "consulta_particular",
-          vendedor_id: ctx.userId,
-        });
-        if (finRes.error) throw finRes.error;
-      }
+      // C. Salvar Anamnese
+      await supabase.from("anamnese").insert([{
+        paciente_id: pacienteFinalId,
+        clinica_id: ctx.clinicaId,
+        motivo_consulta: anamnese.motivoConsulta,
+        motivos_consulta: anamnese.motivosConsulta.join(", "),
+        usa_oculos: anamnese.usaOculos,
+        observacoes_internas: anamnese.observacoesInternas,
+      }]);
 
-      toast.success("Atendimento salvo com sucesso.");
-
-      const { data } = await supabase
-        .from("receitas_optometricas")
-        .select("id, data_exame, od_esferico, od_cilindrico, od_eixo, oe_esferico, oe_cilindrico, oe_eixo, adicao")
-        .eq("paciente_id", pacienteFinalId)
-        .order("data_exame", { ascending: false })
-        .limit(3);
-      setHistorico((data as ReceitaHistorico[]) ?? []);
-    } catch (err) {
-      const e = err as Error | null;
-      toast.error(`Erro ao salvar atendimento: ${e?.message ?? "erro desconhecido"}`);
+      toast.success("Atendimento e receita salvos com sucesso!");
+      setEtapa(3);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar atendimento.");
     } finally {
       setLoading(false);
     }
   }
 
-  // --- FUNÇÕES DE APOIO AO HISTÓRICO ---
-
-  // 1. Função para carregar o grau antigo no formulário atual (com verificação de vencimento)
-  function copiarGrauHistorico(item: any) {
-    try {
-      const dataExame = new Date(item.data_atendimento || item.data_exame || null);
-      const hoje = new Date();
-      const diffDias = Number.isFinite(dataExame.getTime()) ? Math.floor((hoje.getTime() - dataExame.getTime()) / (1000 * 60 * 60 * 24)) : 0;
-      const estaVencido = diffDias > 365;
-
-      if (estaVencido) {
-        const confirmou = confirm(
-          `⚠️ ATENÇÃO: Este exame tem ${diffDias} dias (mais de 1 ano).\n\n` +
-            `O grau pode estar desatualizado. Deseja realmente copiar estes dados como base para o novo exame?`
-        );
-        if (!confirmou) return;
-      } else {
-        if (!confirm("Deseja carregar os dados deste exame anterior no atendimento atual?")) return;
-      }
-
-      setRefracao({
-        odEsferico: String(item.od_esferico ?? ""),
-        odCilindrico: String(item.od_cilindrico ?? ""),
-        odEixo: String(item.od_eixo ?? ""),
-        odAv: String(item.od_av ?? ""),
-        oeEsferico: String(item.oe_esferico ?? ""),
-        oeCilindrico: String(item.oe_cilindrico ?? ""),
-        oeEixo: String(item.oe_eixo ?? ""),
-        oeAv: String(item.oe_av ?? ""),
-        adicao: String(item.adicao ?? ""),
-        dpDnp: String(item.dp_dnp ?? refracao.dpDnp),
-        miopia: !!item.miopia,
-        astigmatismo: !!item.astigmatismo,
-        hipermetropia: !!item.hipermetropia,
-        presbiopia: !!item.presbiopia,
-        tipoLente: item.tipo_lente || null,
-        tratamentoAntiReflexo: !!item.tratamento_antirreflexo,
-        tratamentoFotossivel: !!item.tratamento_fotossensivel,
-        retorno: item.retorno || "",
-      });
-
-      setEtapa(2);
-      toast.success(estaVencido ? "Grau antigo carregado. Revise com atenção!" : "Grau carregado!");
-    } catch (e) {
-      toast.error("Não foi possível carregar o grau do histórico.");
-    }
+  // --- FUNÇÕES AUXILIARES ---
+  function toNumberOrNull(val: string) {
+    const n = Number(val.replace(",", "."));
+    return isNaN(n) || val.trim() === "" ? null : n;
   }
 
-  // 2. Função para disparar a reimpressão de um exame antigo (abre modal de segunda via)
-  function handleImprimirRapido(item: any) {
-    const dadosFormatados = {
-      ...item,
-      paciente_nome: pacienteNomeExibicao,
-      idade_paciente: idadePaciente,
+  function copiarGrauHistorico(item: ReceitaHistorico) {
+    setConfirmTarget(item);
+    setConfirmOpen(true);
+  }
+
+  function confirmarCopia() {
+    const item = confirmTarget;
+    setConfirmOpen(false);
+    setConfirmTarget(null);
+    if (!item) return;
+    setRefracao({
+      odEsferico: String(item.od_esferico ?? ""),
+      odCilindrico: String(item.od_cilindrico ?? ""),
+      odEixo: String(item.od_eixo ?? ""),
+      odAv: item.od_av ?? "",
+      oeEsferico: String(item.oe_esferico ?? ""),
+      oeCilindrico: String(item.oe_cilindrico ?? ""),
+      oeEixo: String(item.oe_eixo ?? ""),
+      oeAv: item.oe_av ?? "",
+      adicao: String(item.adicao ?? ""),
+      dpDnp: item.dp_dnp ?? "",
       miopia: !!item.miopia,
       astigmatismo: !!item.astigmatismo,
       hipermetropia: !!item.hipermetropia,
       presbiopia: !!item.presbiopia,
-      tratamento_antirreflexo: !!item.tratamento_antirreflexo,
-      tratamento_fotossivel: !!item.tratamento_fotossensivel,
-    };
-
-    setDadosSegundaVia(dadosFormatados);
-    setShowSegundaVia(true);
-    toast.info(`Preparando impressão de ${item.data_atendimento || item.data_exame || 'exame' }...`);
+      tipoLente: item.tipo_lente || null,
+      tratamentoAntiReflexo: !!item.tratamento_antirreflexo,
+      tratamentoFotossensivel: !!item.tratamento_fotossensivel,
+      retorno: item.retorno || "",
+    });
+    setEtapa(2);
+    toast.success("Dados copiados!");
   }
 
   return (
     <div className="mx-auto max-w-5xl p-6 lg:p-10 space-y-8 pb-32">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
+        <ConfirmDialog open={confirmOpen} title="Carregar exame" message="Deseja carregar os dados deste exame anterior?" onConfirm={confirmarCopia} onCancel={() => setConfirmOpen(false)} />
           <p className="text-blue-600 font-black text-xs uppercase tracking-[0.2em] mb-1">Prontuário Digital</p>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">Novo Atendimento<span className="text-blue-600">.</span></h1>
         </div>
-
-        {agendaAtiva && (
-          <div className="flex items-center gap-3 bg-blue-50 px-6 py-3 rounded-[24px] border border-blue-100">
-            <span className="text-blue-600 text-xl">📅</span>
-            <p className="text-xs font-bold text-blue-800 italic">Rota: {agendaAtiva.cidade}</p>
-          </div>
-        )}
       </header>
 
       <nav className="flex items-center justify-between bg-white p-4 rounded-[32px] shadow-sm border border-slate-50 overflow-x-auto gap-4">
-        <StepButton active={etapa >= 1} current={etapa === 1} label="Paciente & Anamnese" icon={<span className="text-lg">🩺</span>} onClick={() => setEtapa(1)} />
-        <div className="hidden md:block h-[2px] flex-1 bg-slate-100 mx-2 rounded-full" />
-        <StepButton active={etapa >= 2} current={etapa === 2} label="Exame de Refração" icon={<span className="text-lg">👁️</span>} onClick={() => setEtapa(2)} />
-        <div className="hidden md:block h-[2px] flex-1 bg-slate-100 mx-2 rounded-full" />
-        <StepButton active={etapa >= 3} current={etapa === 3} label="Conclusão" icon={<span className="text-lg">📝</span>} onClick={() => setEtapa(3)} />
+        <StepButton active={etapa >= 1} current={etapa === 1} label="Paciente & Anamnese" icon="🩺" onClick={() => setEtapa(1)} />
+        <StepButton active={etapa >= 2} current={etapa === 2} label="Exame de Refração" icon="👁️" onClick={() => setEtapa(2)} />
+        <StepButton active={etapa >= 3} current={etapa === 3} label="Conclusão" icon="📝" onClick={() => setEtapa(3)} />
       </nav>
 
-      <div className="bg-white p-8 md:p-12 rounded-[48px] shadow-sm border border-slate-50 min-h-[500px] transition-all duration-500">
+      <div className="bg-white p-8 md:p-12 rounded-[48px] shadow-sm border border-slate-50 min-h-[500px]">
         {etapa === 1 && (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
             <div className="p-8 bg-slate-50 rounded-[32px] border border-slate-100 space-y-4">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-blue-600 text-2xl">👤</span>
-                  <label className="text-sm font-black text-slate-800 uppercase tracking-widest">Selecionar Paciente</label>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 mb-3 md:grid-cols-3">
-                  <div className="md:col-span-1">
-                    <div className="text-[10px] font-black uppercase text-slate-400 mb-2">Tipo de Atendimento</div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setTipoAtendimento("interno")}
-                        className={`flex-1 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-wider ${
-                          tipoAtendimento === "interno" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        Interno
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTipoAtendimento("externo")}
-                        className={`flex-1 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-wider ${
-                          tipoAtendimento === "externo" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        Externo
-                      </button>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <SelectLocalidade valor={localidadeAtendimento} aoMudar={setLocalidadeAtendimento} />
+                <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400">Tipo</label>
+                    <div className="flex gap-2 mt-1">
+                        <button onClick={() => setTipoAtendimento("interno")} className={`flex-1 py-2 rounded-xl text-xs font-bold ${tipoAtendimento === 'interno' ? 'bg-blue-600 text-white' : 'bg-white'}`}>Interno</button>
+                        <button onClick={() => setTipoAtendimento("externo")} className={`flex-1 py-2 rounded-xl text-xs font-bold ${tipoAtendimento === 'externo' ? 'bg-blue-600 text-white' : 'bg-white'}`}>Externo</button>
                     </div>
-                  </div>
-
-                  <div className="md:col-span-1">
-                    <SelectLocalidade valor={localidadeAtendimento} aoMudar={(v) => setLocalidadeAtendimento(v)} />
-                  </div>
-
-                  <div className="md:col-span-1">
-                    <div className="text-[10px] font-black uppercase text-slate-400 mb-2">Cobrança</div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setModeloCobranca("gratuito")}
-                        className={`flex-1 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-wider ${
-                          modeloCobranca === "gratuito" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"
-                        }`}
-                      >
-                        Gratuito
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setModeloCobranca("pago")}
-                        className={`flex-1 rounded-2xl px-3 py-2 text-xs font-black uppercase tracking-wider ${
-                          modeloCobranca === "pago" ? "bg-emerald-600 text-white" : "bg-white text-emerald-700"
-                        }`}
-                      >
-                        Pago
-                      </button>
-                    </div>
-                  </div>
                 </div>
-              <div className="relative">
+                <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400">Cobrança</label>
+                    <div className="flex gap-2 mt-1">
+                        <button onClick={() => setModeloCobranca("pago")} className={`flex-1 py-2 rounded-xl text-xs font-bold ${modeloCobranca === 'pago' ? 'bg-emerald-600 text-white' : 'bg-white'}`}>Pago</button>
+                        <button onClick={() => setModeloCobranca("gratuito")} className={`flex-1 py-2 rounded-xl text-xs font-bold ${modeloCobranca === 'gratuito' ? 'bg-emerald-600 text-white' : 'bg-white'}`}>Grátis</button>
+                    </div>
+                </div>
+              </div>
+
+              <div className="relative mt-4">
                 <input
                   type="text"
-                  value={pacienteQuery || (pacientes.find((p) => p.id === pacienteId)?.nome_completo ?? "")}
-                  onChange={(e) => { setPacienteQuery(e.target.value); setShowSugestoes(true); setPacienteId(""); setIdadeAutoCadastro(false); }}
-                  onFocus={() => setShowSugestoes(true)}
-                  onBlur={() => setTimeout(() => setShowSugestoes(false), 150)}
-                  placeholder="Buscar paciente por nome ou CPF"
-                  className="w-full rounded-[20px] border-none bg-white p-5 text-lg font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all italic text-slate-600"
+                  value={pacienteQuery}
+                  onChange={(e) => { setPacienteQuery(e.target.value); setShowSugestoes(true); }}
+                  placeholder="Nome do paciente para busca ou cadastro rápido"
+                  className="w-full rounded-[20px] p-5 text-lg font-bold shadow-sm focus:ring-2 focus:ring-blue-500 border-none"
                 />
-
-                {showSugestoes && (
-                  <ul className="absolute z-50 mt-2 max-h-72 w-full overflow-auto rounded-lg bg-white border border-slate-100 shadow-lg">
-                    {loadingSugestoes ? (
-                      <li className="p-3 text-sm text-slate-500">Buscando...</li>
-                    ) : sugestoes.length === 0 ? (
-                      <li className="p-3 text-sm text-slate-500">Nenhum paciente encontrado</li>
-                    ) : (
-                      sugestoes.map((p) => (
-                        <li
-                          key={p.id}
-                          onMouseDown={(ev) => { ev.preventDefault(); setPacienteId(p.id); setPacienteQuery(p.nome_completo); setShowSugestoes(false); }}
-                          className="px-4 py-2 hover:bg-slate-50 cursor-pointer"
-                        >
-                          <div className="font-bold">{p.nome_completo}</div>
-                          <div className="text-xs text-slate-400">{p.cpf ?? ""} {(p.celular ? `• ${p.celular}` : "")}</div>
-                        </li>
-                      ))
-                    )}
-                  </ul>
+                {showSugestoes && sugestoes.length > 0 && (
+                   <div className="absolute z-50 w-full bg-white shadow-xl rounded-2xl mt-2 border border-slate-100 overflow-hidden">
+                      {sugestoes.map(p => (
+                        <div key={p.id} onClick={() => { setPacienteId(p.id); setPacienteQuery(p.nome_completo); setShowSugestoes(false); }} className="p-4 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-none">
+                          <p className="font-bold text-slate-800">{p.nome_completo}</p>
+                          <p className="text-xs text-slate-400">{p.cpf || 'Sem CPF'}</p>
+                        </div>
+                      ))}
+                   </div>
                 )}
               </div>
 
-              <div>
-                <label className="text-xs font-black uppercase text-slate-400 tracking-widest">Idade do paciente</label>
-                <div className="mt-2 flex items-center gap-3">
-                  <input
-                    value={idadePaciente}
-                    onChange={(e) => {
-                      if (idadeAutoCadastro) return;
-                      setIdadePaciente(normalizeAgeInput(e.target.value));
-                    }}
-                    readOnly={idadeAutoCadastro}
-                    placeholder="Ex: 42"
-                    className={`w-full rounded-[20px] border-none bg-white p-4 text-lg font-bold shadow-sm focus:ring-2 focus:ring-blue-500 transition-all ${idadeAutoCadastro ? "text-emerald-700" : "text-slate-700"}`}
-                  />
-                  <span className="text-sm font-bold text-slate-500">anos</span>
-                </div>
-                <p className="mt-2 text-xs text-slate-400 font-medium">
-                  {idadeAutoCadastro
-                    ? "Idade calculada automaticamente com base na data de nascimento do cadastro."
-                    : "Se for o primeiro atendimento e não houver cadastro, informe a idade manualmente."}
-                </p>
+              <div className="flex items-center gap-4">
+                 <div className="flex-1">
+                    <label className="text-xs font-bold text-slate-400 uppercase">Idade</label>
+                    <input value={idadePaciente} onChange={(e) => setIdadePaciente(e.target.value.replace(/\D/g, ""))} className="w-full bg-white p-4 rounded-2xl font-bold mt-1" placeholder="Ex: 25"/>
+                 </div>
               </div>
-
-              <p className="text-xs text-slate-400 font-medium">
-                Se não encontrar o paciente na busca, mantenha o nome digitado e salve. O sistema cria um cadastro rápido para completar depois.
-              </p>
             </div>
 
             <FichaAnamnese value={anamnese} onChange={setAnamnese} />
-
-            {/* Modelo de Atendimento e seleção de cidade foram movidos para acima do cliente para forçar escolha antes do paciente */}
           </div>
         )}
 
         {etapa === 2 && (
-          <div className="animate-in fade-in slide-in-from-right-4">
+          <div className="animate-in fade-in">
             <ExameRefracao value={refracao} onChange={setRefracao} />
             <div className="mt-12 pt-12 border-t border-slate-100">
-              <HistoricoEvolucao historico={historico} onCopiar={copiarGrauHistorico} onImprimir={handleImprimirRapido} />
+              <HistoricoEvolucao historico={historico} onCopiar={copiarGrauHistorico} />
             </div>
           </div>
         )}
 
         {etapa === 3 && (
           <div className="text-center py-12 space-y-8 animate-in zoom-in-95">
-              <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <span className="text-4xl">📝</span>
+            <h3 className="text-3xl font-black text-slate-900">Finalizar Atendimento</h3>
+            <button
+              onClick={salvarAtendimento}
+              disabled={loading}
+              className="w-full max-w-sm bg-blue-600 text-white py-6 rounded-[24px] font-black text-xl shadow-xl hover:scale-[1.02] transition-all disabled:bg-slate-300"
+            >
+              {loading ? "Processando..." : "💾 Salvar e Gerar Receita"}
+            </button>
+            
+            {/* O PDFDownloadLink só deve aparecer ou ser útil se houver dados salvos ou para preview */}
+            <div className="flex flex-col gap-3 max-w-sm mx-auto">
+                <button onClick={() => setShowPreviewReceita(true)} className="w-full py-4 bg-slate-100 rounded-2xl font-bold">👁️ Visualizar Antes de Salvar</button>
             </div>
-            <div>
-              <h3 className="text-3xl font-black text-slate-900">Tudo pronto!</h3>
-              <p className="text-slate-500 font-medium mt-2 max-w-md mx-auto">Verifique os dados antes de salvar e gerar a receita final.</p>
-            </div>
-
-            <div className="flex flex-col items-center gap-4 max-w-sm mx-auto">
-              <button
-                onClick={salvarAtendimento}
-                disabled={loading}
-                className="w-full bg-blue-600 text-white py-6 rounded-[24px] font-black text-xl shadow-xl shadow-blue-200 hover:scale-[1.02] transition-all disabled:bg-slate-300 flex items-center justify-center gap-3"
-              >
-                <span className="text-xl">💾</span>
-                {loading ? "Salvando..." : "Salvar Atendimento"}
-              </button>
-
-              <PDFDownloadLink
-                document={
-                  <ReceitaPdf
-                    dados={{
-                      od_esferico: refracao.odEsferico || null,
-                      od_cilindrico: refracao.odCilindrico || null,
-                      od_eixo: refracao.odEixo || null,
-                      od_av: refracao.odAv || null,
-                      oe_esferico: refracao.oeEsferico || null,
-                      oe_cilindrico: refracao.oeCilindrico || null,
-                      oe_eixo: refracao.oeEixo || null,
-                      oe_av: refracao.oeAv || null,
-                      adicao: refracao.adicao || null,
-                      tipo_lente: refracao.tipoLente || null,
-                      tratamento_lente: [refracao.tratamentoAntiReflexo ? "Anti Reflexo" : null, refracao.tratamentoFotossivel ? "Fotossensível" : null].filter(Boolean).join(" • ") || null,
-                      nota_rodape: notaRodapeReceita,
-                      retorno: refracao.retorno || null,
-                      miopia: refracao.miopia ?? false,
-                      astigmatismo: refracao.astigmatismo ?? false,
-                      hipermetropia: refracao.hipermetropia ?? false,
-                      presbiopia: refracao.presbiopia ?? false,
-                      tratamento_antirreflexo: refracao.tratamentoAntiReflexo ?? false,
-                      tratamento_fotossensivel: refracao.tratamentoFotossivel ?? false,
-                      paciente_nome: pacienteNomeExibicao || null,
-                      idade_paciente: idadePaciente || null,
-                      data_exame: new Date().toISOString().slice(0, 10),
-                    }}
-                    clinica={{
-                      nome_fantasia: clinicaNome,
-                      telefone: null,
-                      cnpj_cpf: null,
-                      logomarca_url: logomarcaUrl,
-                      cor_primaria: corPrimaria,
-                      endereco_completo: configUnidade?.endereco_completo || null,
-                      modelo_timbrado: configUnidade?.modelo_timbrado || "modelo1",
-                      config_unidade: configUnidade,
-                    }}
-                  />
-                }
-                fileName={`RX_${(pacienteNomeExibicao || "paciente").split(" ")[0]}.pdf`}
-                className="w-full bg-white border-2 border-slate-100 text-slate-800 py-5 rounded-[24px] font-black text-lg hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
-              >
-                <span className="text-xl">🖨️</span>
-                Imprimir Receita
-              </PDFDownloadLink>
-
-              <button
-                type="button"
-                onClick={() => setShowPreviewReceita(true)}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-800 py-4 rounded-[24px] font-black text-lg hover:bg-slate-100 transition-all"
-              >
-                Visualizar Receita
-              </button>
-
-              {pacienteCriadoId && (
-                <Link
-                  href={`/consultorio/pacientes/novo?pacienteId=${pacienteCriadoId}`}
-                  className="w-full text-center bg-blue-50 text-blue-700 py-4 rounded-[20px] font-black text-sm hover:bg-blue-100 transition-all"
-                >
-                  Completar Cadastro do Paciente
-                </Link>
-              )}
-              {/* Botões rápidos para gerar outros documentos */}
-              <div className="w-full mt-4">
-                <div className="text-sm font-black text-slate-600 mb-2">Gerar documento (rápido)</div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <Link
-                    href={`/consultorio/atestado?pacienteId=${pacienteId || pacienteCriadoId || ""}`}
-                    className="w-full text-center bg-white border border-slate-100 text-slate-800 py-3 rounded-[16px] font-black text-sm hover:bg-slate-50 transition-all"
-                  >
-                    Atestado
-                  </Link>
-
-                  <Link
-                    href={`/consultorio/laudo?pacienteId=${pacienteId || pacienteCriadoId || ""}`}
-                    className="w-full text-center bg-white border border-slate-100 text-slate-800 py-3 rounded-[16px] font-black text-sm hover:bg-slate-50 transition-all"
-                  >
-                    Laudo
-                  </Link>
-
-                  <Link
-                    href={`/consultorio/encaminhamento?pacienteId=${pacienteId || pacienteCriadoId || ""}`}
-                    className="w-full text-center bg-white border border-slate-100 text-slate-800 py-3 rounded-[16px] font-black text-sm hover:bg-slate-50 transition-all"
-                  >
-                    Encaminhamento
-                  </Link>
-                </div>
-              </div>
-            </div>
-            <Modal open={showPreviewReceita} onClose={() => setShowPreviewReceita(false)} title="Visualizar Receita">
-              <ReceitaPreview
-                dados={{
-                  ...refracao,
-                  paciente_nome: pacienteNomeExibicao || null,
-                  idade_paciente: idadePaciente || null,
-                  data_exame: new Date().toISOString().slice(0, 10),
-                  nota_rodape: notaRodapeReceita,
-                }}
-                clinica={{
-                  nome_fantasia: clinicaNome,
-                  logomarca_url: logomarcaUrl,
-                  cor_primaria: corPrimaria,
-                  endereco_completo: configUnidade?.endereco_completo || null,
-                  config_unidade: configUnidade,
-                }}
-              />
-            </Modal>
           </div>
         )}
       </div>
 
+      {/* Modal de Preview */}
+      <Modal open={showPreviewReceita} onClose={() => setShowPreviewReceita(false)} title="Preview da Receita">
+          <ReceitaPreview 
+            dados={{ ...refracao, paciente_nome: pacienteNomeExibicao, idade_paciente: idadePaciente, data_exame: new Date().toISOString() }}
+            clinica={{ nome_fantasia: clinicaNome, logomarca_url: logomarcaUrl, cor_primaria: corPrimaria, config_unidade: configUnidade }}
+          />
+      </Modal>
+
       <footer className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-6 z-50">
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-[32px] shadow-2xl flex items-center justify-between border border-white/10">
-            <button
-            onClick={() => setEtapa(Math.max(1, etapa - 1))}
-            disabled={etapa === 1}
-            className={`p-4 rounded-2xl text-white hover:bg-white/10 transition-colors ${etapa === 1 ? "opacity-20" : ""}`}
-          >
-            <span className="text-white text-2xl">‹</span>
-          </button>
-
-          <span className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em]">Etapa {etapa} de 3</span>
-
-          {etapa < 3 ? (
-            <button onClick={() => setEtapa(etapa + 1)} className="bg-blue-600 text-white p-4 rounded-2xl hover:bg-blue-500 transition-all active:scale-95">
-              <span className="text-white text-2xl">›</span>
-            </button>
-          ) : (
-            <div className="w-12 h-12" />
-          )}
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-[32px] flex items-center justify-between border border-white/10">
+          <button onClick={() => setEtapa(Math.max(1, etapa - 1))} disabled={etapa === 1} className="p-4 text-white disabled:opacity-20">‹</button>
+          <span className="text-white/40 text-[10px] font-black uppercase">Etapa {etapa} de 3</span>
+          <button onClick={() => setEtapa(Math.min(3, etapa + 1))} disabled={etapa === 3} className="bg-blue-600 p-4 rounded-2xl text-white">›</button>
         </div>
       </footer>
-      {/* MODAL DE SEGUNDA VIA - IMPRESSÃO RÁPIDA */}
-      <Modal open={showSegundaVia} onClose={() => setShowSegundaVia(false)} title="Reimprimir Receita Anterior">
-        <div className="space-y-6 p-4">
-          <div className="bg-blue-50 p-6 rounded-[32px] border border-blue-100">
-            <p className="text-[10px] font-black uppercase text-blue-600 mb-2">Resumo da Receita Selecionada</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Data do Exame</p>
-                <p className="font-black text-slate-700">{new Date(dadosSegundaVia?.data_atendimento || dadosSegundaVia?.data_exame || new Date()).toLocaleDateString('pt-BR')}</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Paciente</p>
-                <p className="font-black text-slate-700 truncate">{pacienteNomeExibicao}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <PDFDownloadLink
-              document={
-                <ReceitaPdf
-                  dados={dadosSegundaVia}
-                  clinica={configUnidade ? { ...configUnidade, nome_fantasia: clinicaNome, logomarca_url: logomarcaUrl, cor_primaria: corPrimaria } : null}
-                />
-              }
-              fileName={`Segunda_Via_${(pacienteNomeExibicao || 'paciente').split(' ')[0]}.pdf`}
-              className="w-full bg-emerald-600 text-white py-5 rounded-[24px] font-black text-center hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-3"
-            >
-              <span className="text-xl">🖨️</span>
-              Baixar Segunda Via (PDF)
-            </PDFDownloadLink>
-
-            <button
-              onClick={() => setShowSegundaVia(false)}
-              className="w-full bg-slate-100 text-slate-500 py-4 rounded-[24px] font-black uppercase text-xs hover:bg-slate-200 transition-all"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

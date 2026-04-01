@@ -127,6 +127,33 @@ export async function POST(req: NextRequest) {
         const receitaRes = await supabaseAdmin.from('receitas_optometricas').insert({ clinica_id: clinicaId, paciente_id: pacienteIdFinal, localidade_atendimento: vendaData.clienteManualCidade || null, data_exame: r.data_exame || new Date().toISOString().slice(0,10), od_esferico: r.od_esferico || null, oe_esferico: r.oe_esferico || null, od_cilindrico: r.od_cilindrico || null, oe_cilindrico: r.oe_cilindrico || null, od_eixo: r.od_eixo || null, oe_eixo: r.oe_eixo || null, adicao: r.adicao || null, dp_dnp: r.dp_dnp || null }).select('id').maybeSingle();
         if (receitaRes.error) throw receitaRes.error;
         receitaIdFinal = receitaRes.data?.id ?? receitaIdFinal;
+        // Criar também o registro administrativo de atendimento (consultorio_receitas)
+        try {
+          if (receitaIdFinal) {
+            const valorConsultaNum = vendaData.valorConsulta ? Number(String(vendaData.valorConsulta).replace(',', '.')) : null;
+            const tipoFechamentoLocal = vendaData.financeiro?.tipoFechamento || 'entrada_crediario';
+            const statusLocal = tipoFechamentoLocal === 'total' ? 'pago' : tipoFechamentoLocal === 'pendente' ? 'pendente' : (Number(vendaData.financeiro?.valorEntrada || 0) > 0 ? 'pago_parcial' : 'pendente');
+            const consPayload: any = {
+              clinica_id: clinicaId,
+              paciente_id: pacienteIdFinal,
+              profissional_id: criadoPor || null,
+              valor_final: valorConsultaNum !== null ? valorConsultaNum : null,
+              forma_pagamento: vendaData.financeiro?.formaEntrada || null,
+              status_pagamento: statusLocal || null,
+              data_atendimento: new Date().toISOString().slice(0, 10),
+              observacoes: 'Gerado automaticamente pelo sync de venda/manutenção',
+              receita_id: receitaIdFinal,
+              localidade: vendaData.localidadeVenda || null,
+              tipo_atendimento: vendaData.tipoAtendimento || null,
+              modelo_cobranca: vendaData.modeloCobranca || null,
+            };
+
+            const consRes = await supabaseAdmin.from('consultorio_receitas').insert(consPayload).select('id').maybeSingle();
+            if (consRes.error) console.warn('sync: failed to create consultorio_receitas', consRes.error);
+          }
+        } catch (e) {
+          console.warn('sync: consultorio_receitas insert failed', e);
+        }
       }
     }
 
@@ -144,7 +171,8 @@ export async function POST(req: NextRequest) {
       armacao_propria: vendaData.armacaoPropria || false,
       termo_quebra_aceito: vendaData.armacaoPropria ? (vendaData.termoQuebraAceito || false) : false,
       valor_total: valorTotal,
-      valor_final: valorTotal,
+      // valor_final pode ser ajustado pelo frontend (combo/desconto manual)
+      valor_final: vendaData.valor_final ?? vendaData.financeiro?.total ?? valorTotal,
       vendedor_id: vendaData.vendedorId || criadoPor || null,
       localidade_venda: vendaData.localidadeVenda || null,
       valor_entrada: valorEntrada,
@@ -156,21 +184,65 @@ export async function POST(req: NextRequest) {
       status_pagamento: statusFinanceiro,
       anexos_urls: resolvedAnexos.length ? resolvedAnexos : null,
       pupilometro_foto_url: pupilometroUrl || null,
+      // combo tracking
+      combo_aplicado_id: vendaData.comboId || vendaData.combo_aplicado_id || null,
+      valor_desconto_combo: Number(vendaData.valor_desconto_combo || vendaData.valorDescontoCombo || 0),
+      // desconto manual / autorizacao
+      valor_desconto_manual: Number(vendaData.valor_desconto_manual || vendaData.descontoManual || 0),
+      autorizado_por: vendaData.autorizado_por || vendaData.autorizadorId || null,
+      justificativa_desconto: vendaData.justificativa_desconto || vendaData.justificativa || null,
     };
 
     const vendaInsert = await supabaseAdmin.from('vendas').insert(vendaPayload).select('id').maybeSingle();
     if (vendaInsert.error) throw vendaInsert.error;
     const vendaId = vendaInsert.data?.id;
 
-    // create ordem_servico
+    // create ordem_servico with pricing and rateio
     const armacaoModelo = vendaData.armacaoSelecionada ? `${vendaData.armacaoSelecionada.grife} ${vendaData.armacaoSelecionada.modelo}`.trim() : (vendaData.armacaoTipoSelecionado?.nome ?? null);
     const armacaoTipo = vendaData.armacaoSelecionada?.cor ?? vendaData.armacaoTipoSelecionado?.nome ?? null;
+
+    // Fetch base prices for armacao and lente to compute proportional discount (rateio)
+    const armacaoId = vendaData.armacaoId || null;
+    const lenteId = vendaData.lenteId || null;
+    let precoArm = 0;
+    let precoLente = 0;
+    try {
+      if (armacaoId) {
+        const a = await supabaseAdmin.from('estoque_armacoes').select('preco_venda').eq('id', armacaoId).maybeSingle();
+        if (!a.error && a.data) precoArm = Number(a.data.preco_venda || 0);
+      }
+      if (lenteId) {
+        const l = await supabaseAdmin.from('otica_lentes').select('preco_base').eq('id', lenteId).maybeSingle();
+        if (!l.error && l.data) precoLente = Number(l.data.preco_base || 0);
+      }
+    } catch (e) {
+      console.warn('sync: failed to fetch item prices for rateio', e);
+    }
+
+    const totalOriginal = Math.max(0, precoArm + precoLente);
+    const descontoCombo = Number(vendaData.valor_desconto_combo || vendaData.valorDescontoCombo || 0);
+    const descontoManual = Number(vendaData.valor_desconto_manual || vendaData.descontoManual || 0) || 0;
+    const totalDesconto = Math.max(0, descontoCombo + descontoManual);
+
+    let descontoArm = 0;
+    let descontoLente = 0;
+    if (totalDesconto > 0 && totalOriginal > 0) {
+      const shareArm = precoArm / totalOriginal;
+      const shareLente = precoLente / totalOriginal;
+      descontoArm = Math.round((totalDesconto * shareArm) * 100) / 100;
+      descontoLente = Math.round((totalDesconto * shareLente) * 100) / 100;
+      const diff = Math.round((totalDesconto - (descontoArm + descontoLente)) * 100) / 100;
+      if (Math.abs(diff) >= 0.01) descontoLente = Math.round((descontoLente + diff) * 100) / 100;
+    }
+
+    const valorFinalArm = Math.max(0, Math.round((precoArm - descontoArm) * 100) / 100);
+    const valorFinalLente = Math.max(0, Math.round((precoLente - descontoLente) * 100) / 100);
 
     const osPayload: any = {
       venda_id: vendaId,
       clinica_id: clinicaId,
       receita_id: receitaIdFinal,
-      armacao_id: vendaData.armacaoId || null,
+      armacao_id: armacaoId,
       numero_os: numeroFinal || null,
       laboratorio_nome: vendaData.laboratorioNome || null,
       armacao_modelo: armacaoModelo,
@@ -189,6 +261,13 @@ export async function POST(req: NextRequest) {
       armacao_ponte_pt: vendaData.medidas?.armacao_ponte_pt ?? null,
       escala_usada: vendaData.medidas?.escala_usada ?? null,
       pupilometro_foto_url: pupilometroUrl || null,
+      // pricing / rateio
+      preco_armacao: precoArm,
+      desconto_armacao: descontoArm,
+      valor_final_armacao: valorFinalArm,
+      preco_lente: precoLente,
+      desconto_lente: descontoLente,
+      valor_final_lente: valorFinalLente,
     };
 
     const osRes = await supabaseAdmin.from('ordens_servico').insert(osPayload);
@@ -199,20 +278,37 @@ export async function POST(req: NextRequest) {
       if (valorEntrada > 0) {
         const formaEntradaLower = (vendaData.financeiro?.formaEntrada || '').toLowerCase();
         const isCartao = formaEntradaLower.includes('cart') || formaEntradaLower.includes('credito') || formaEntradaLower.includes('debito') || formaEntradaLower.includes('débito');
-        const fluxoRes = await supabaseAdmin.from('fluxo_caixa').insert({
-          clinica_id: clinicaId,
-          tipo: 'entrada',
-          origem: 'entrada_venda_otica',
-          referencia_id: vendaId,
-          descricao: `Entrada da venda ${vendaId?.slice(0,8)} (${vendaData.financeiro?.formaEntrada || 'nao informada'})`,
-          valor: valorEntrada,
-          valor_bruto: valorEntrada,
-          taxa_cartao: 0,
-          status_conciliacao: isCartao ? 'pendente' : 'concluido',
-          localidade: vendaData.localidadeVenda || null,
-          data_movimento: new Date().toISOString().slice(0,10),
-        });
-        if (fluxoRes.error) console.warn('sync: failed to insert fluxo_caixa', fluxoRes.error);
+        // Só insere no fluxo de caixa quando o pagamento foi confirmado ou o status financeiro está confirmado.
+        if (vendaData.financeiro?.pagamento_confirmado || vendaData.financeiro?.status === 'confirmado') {
+          const contaDestinoId = vendaData.financeiro?.contaDestinoId || vendaData.financeiro?.conta_destino_id || null;
+          const fluxoRes = await supabaseAdmin.from('fluxo_caixa').insert({
+            clinica_id: clinicaId,
+            tipo: 'entrada',
+            origem: 'entrada_venda_otica',
+            referencia_id: vendaId,
+            descricao: `Entrada da venda ${vendaId?.slice(0,8)} (${vendaData.financeiro?.formaEntrada || 'nao informada'})`,
+            valor: valorEntrada,
+            valor_bruto: valorEntrada,
+            taxa_cartao: 0,
+            status_conciliacao: isCartao ? 'pendente' : 'concluido',
+            localidade: vendaData.localidadeVenda || null,
+            data_movimento: new Date().toISOString().slice(0,10),
+            conta_id: contaDestinoId,
+          });
+          if (fluxoRes.error) console.warn('sync: failed to insert fluxo_caixa', fluxoRes.error);
+          else if (contaDestinoId) {
+            try {
+              const contaRes = await supabaseAdmin.from('conta_corrente').select('saldo_atual').eq('id', contaDestinoId).maybeSingle();
+              const current = (contaRes.data?.saldo_atual as number) || 0;
+              const novoSaldo = current + valorEntrada;
+              await supabaseAdmin.from('conta_corrente').update({ saldo_atual: novoSaldo }).eq('id', contaDestinoId);
+            } catch (e) {
+              console.warn('sync: failed to update conta_corrente saldo', e);
+            }
+          }
+        } else {
+          console.log('sync: pagamento não confirmado — pulando inserção em fluxo_caixa para venda', vendaId);
+        }
       }
     } catch (e) {
       console.warn('sync: error inserting fluxo_caixa', e);
@@ -250,7 +346,12 @@ export async function POST(req: NextRequest) {
     }
 
     // baixa estoque
-    if (vendaData.armacaoId) {
+    // OBS: a trigger definida no DB (trg_os_baixa_estoque_insert) já chama `baixar_estoque`
+    // após o INSERT em `ordens_servico`. Para evitar dupla baixa, **não** chamamos
+    // a RPC aqui por padrão. Mantemos uma condição de compatibilidade para casos
+    // antigos/externos que precisem forçar a RPC: envie `job.forceRpcBaixa === true`
+    // ou `vendaData.forceRpcBaixa === true` no payload.
+    if (vendaData.armacaoId && (job?.forceRpcBaixa === true || vendaData.forceRpcBaixa === true)) {
       try {
         const baixa = await supabaseAdmin.rpc('baixar_estoque', { p_id: vendaData.armacaoId, p_qtd: 1 });
         if (baixa.error) console.warn('baixar_estoque warning', baixa.error);

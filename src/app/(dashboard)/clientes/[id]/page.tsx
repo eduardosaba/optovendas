@@ -37,7 +37,7 @@ export default function ClientesByIdRedirectPage() {
         const nome = data.nome_completo || `paciente-${id}`;
         const slug = toPacienteSlug(nome);
         if (!cancelled) router.replace(`/consultorio/pacientes/${slug}`);
-      } catch (e) {
+      } catch {
         if (!cancelled) router.replace("/clientes");
       } finally {
         if (!cancelled) setLoading(false);

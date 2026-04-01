@@ -12,6 +12,7 @@ import { TrendingUp, ShieldCheck, AlertCircle, Terminal } from "lucide-react";
 import FocusProvider, { FocusContext } from "@/context/FocusContext";
 import { useRef } from "react";
 import ThemeProvider from "@/context/ThemeContext";
+import SyncProvider from "@/context/SyncContext";
 
 const WelcomeTour = dynamic(() => import("@/components/onboarding/WelcomeTour"), {
   ssr: false,
@@ -92,10 +93,29 @@ export default function DashboardLayout({
           try {
             const { data } = await supabase
               .from("clinicas")
-              .select("possui_otica")
+              .select("possui_otica, status, data_vencimento")
               .eq("id", ctx.clinicaId)
               .single();
+
             setPossuiOtica(data?.possui_otica ?? true);
+
+            // Bloqueio por expiração / status
+            try {
+              const status = (data?.status || "ativo").toLowerCase();
+              const venc = data?.data_vencimento ? new Date(data.data_vencimento) : null;
+              const expirado = venc ? venc < new Date() : false;
+
+              if (status !== "ativo" || expirado) {
+                // redireciona para página de bloqueio
+                // usamos replace para evitar voltar para área interna
+                router.replace("/bloqueado");
+                return;
+              }
+            } catch (e) {
+              // não bloquear em caso de erro de parsing
+              console.warn("Erro ao validar status de clinica", e);
+            }
+
           } catch {
             setPossuiOtica(true);
           }
@@ -126,7 +146,7 @@ export default function DashboardLayout({
         const parsed = JSON.parse(raw) as { x: number; y: number };
         if (parsed && typeof parsed.x === 'number' && typeof parsed.y === 'number') setShortcutsPos(parsed);
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
 
@@ -157,7 +177,7 @@ export default function DashboardLayout({
       try {
         const cur = shortcutsPosRef.current;
         if (cur) localStorage.setItem('opv.shortcuts.pos', JSON.stringify(cur));
-      } catch (e) {}
+      } catch {}
       draggingRef.current = null;
       // restore cursor on container if exists
       const el = document.querySelector('[aria-label="Atalhos flutuantes"]') as HTMLElement | null;
@@ -246,8 +266,9 @@ export default function DashboardLayout({
   return (
     <ThemeProvider>
       {/* mainRef is the content area that will enter fullscreen */}
-      <FocusProvider focusRef={mainRef}>
-        <div className="min-h-screen bg-transparent">
+      <FocusProvider>
+        <SyncProvider>
+          <div className="min-h-screen bg-transparent">
           <KeyboardShortcuts />
         <FocusContext.Consumer>
           {(ctx) =>
@@ -347,9 +368,9 @@ export default function DashboardLayout({
           }
         </FocusContext.Consumer>
 
-      <FocusContext.Consumer>
-        {(ctx) => (
-          <div className={ctx?.isFocusMode ? "" : "md:pl-[20rem]"}>
+        <FocusContext.Consumer>
+          {(ctx) => (
+          <div>
             {ctx?.isFocusMode ? null : <DashboardHeader onOpenMobileMenu={() => setMobileMenuOpen((v) => !v)} />}
 
         {mobileMenuOpen && (
@@ -402,7 +423,7 @@ export default function DashboardLayout({
           </div>
         )}
 
-        <main ref={mainRef} className={`flex-1 overflow-y-auto p-4 pb-24 md:p-10 md:pb-10 transition-all duration-500`}>
+        <main ref={mainRef} className={`flex-1 overflow-y-auto p-4 pb-24 md:p-10 md:pb-10 transition-all duration-500 ${ctx?.isFocusMode ? 'md:pl-0' : 'md:pl-[20rem]'}`}>
           {children}
           {layoutHydrated ? <WelcomeTour /> : null}
         </main>
@@ -503,10 +524,12 @@ export default function DashboardLayout({
             <span className="text-[10px]">Perfil</span>
           </Link>
         </nav>
-          </div>
-        )}
-      </FocusContext.Consumer>
-    </div>
+              </div>
+            )}
+          </FocusContext.Consumer>
+
+        </div>
+        </SyncProvider>
       </FocusProvider>
     </ThemeProvider>
   );

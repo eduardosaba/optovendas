@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { venda, parcelas = [], cliente, financeiro, mostrarPix, pixText, qrBase64, clinicaId } = body as any;
+    const { venda, parcelas = [], cliente, clinicaId } = body as any;
 
     // Determine clinic info (prefer service role access)
     let clinica: any = null;
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
         // Preferir configurações específicas da ótica
         const { data: oticaCfg, error: oticaErr } = await supa
           .from('otica_configuracoes')
-          .select('nome_otica, logo_url')
+          .select('nome_otica, logo_url, cnpj, whatsapp, mensagem_rodape')
           .eq('clinica_id', clinicaId)
           .maybeSingle();
 
@@ -26,6 +26,9 @@ export async function POST(request: Request) {
           clinica = {
             nome_fantasia: (oticaCfg as any).nome_otica || null,
             logomarca_url: (oticaCfg as any).logo_url || null,
+            cnpj: (oticaCfg as any).cnpj || null,
+            whatsapp: (oticaCfg as any).whatsapp || null,
+            mensagem_rodape: (oticaCfg as any).mensagem_rodape || null,
           };
         } else {
           // fallback para tabela clinicas
@@ -38,9 +41,8 @@ export async function POST(request: Request) {
     }
 
     // Render PDF to buffer (pass clinic info if available)
-    const doc = pdf(
-      <PDFCarne venda={venda} parcelas={parcelas} cliente={cliente} financeiro={financeiro} mostrarPix={mostrarPix} pixText={pixText} qrBase64={qrBase64} clinica={clinica} />
-    );
+    const paciente = cliente ?? venda?.paciente ?? null;
+    const doc = pdf(<PDFCarne venda={venda} parcelas={parcelas} paciente={paciente} config={clinica} />);
     const buffer = await doc.toBuffer();
 
     // `doc.toBuffer()` may return a Buffer or a stream-like value depending on environment.
@@ -56,8 +58,11 @@ export async function POST(request: Request) {
     // If service role key exists, upload to Supabase storage and return public URL
     if (supabaseUrl && serviceKey && clinicaId) {
       const supa = createClient(supabaseUrl, serviceKey);
-      const filename = `carne-${Date.now()}.pdf`;
-      const path = `clinicas/${clinicaId}/carnes/${filename}`;
+        // build sanitized filename using cliente name when possible
+        const clienteNome = (cliente?.nome_completo) || (venda?.clienteManualNome) || (venda?.paciente?.nome_completo) || 'venda';
+        const sanitize = (s: string) => String(s || '').replace(/\s+/g, '').replace(/[^\w-]/g, '');
+        const filename = `carne_vendas_${sanitize(clienteNome)}.pdf`;
+        const path = `clinicas/${clinicaId}/carnes/${filename}`;
       const { error: upErr } = await supa.storage.from('branding-assets').upload(path, buf, { contentType: 'application/pdf', upsert: true });
       if (upErr) {
         console.warn('upload error', upErr);

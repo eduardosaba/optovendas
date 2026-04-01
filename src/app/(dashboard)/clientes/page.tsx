@@ -154,14 +154,7 @@ function ClienteCard({ cliente }: { cliente: any }) {
             <MessageCircle size={18} />
           </a>
           
-          {/* Abrir Histórico Completo */}
-          <Link
-            href={`/clientes/${cliente.id}/historico`}
-            className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
-            title="Ver Histórico e Medidas"
-          >
-            <History size={18} />
-          </Link>
+      
 
           {/* Editar Cadastro */}
           <Link
@@ -175,7 +168,7 @@ function ClienteCard({ cliente }: { cliente: any }) {
 
         {/* Link para Nova Venda Direta */}
         <Link
-          href={`/otica/venda/nova?pacienteId=${cliente.id}`}
+          href={`/otica/vendas/nova?pacienteId=${cliente.id}`}
           className="flex items-center gap-2 p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
           title="Nova Venda para este cliente"
         >
@@ -188,7 +181,7 @@ function ClienteCard({ cliente }: { cliente: any }) {
         href={`/clientes/${cliente.id}/historico`}
         className="mt-4 flex w-full items-center justify-center gap-2 py-3 bg-slate-50 text-[10px] font-black uppercase text-slate-400 rounded-2xl group-hover:bg-emerald-50 group-hover:text-emerald-700 transition-all"
       >
-        Acessar Prontuário Completo <ArrowRight size={14} />
+        Acessar Histórico Completo <ArrowRight size={14} />
       </Link>
     </div>
   );

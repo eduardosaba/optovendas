@@ -15,6 +15,8 @@ export function QuickReceiptDocument({ venda, cliente, total }: { venda: any; cl
     total: { marginTop: 12, fontSize: 16, fontWeight: '700' },
   });
 
+  const formatBRL = (v?: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v || 0));
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -35,7 +37,7 @@ export function QuickReceiptDocument({ venda, cliente, total }: { venda: any; cl
             <Text>{(venda?.financeiro && venda.financeiro.metodo) || (venda?.financeiro && venda.financeiro.tipoFechamento) || '—'}</Text>
           </View>
 
-          <Text style={styles.total}>Total: R$ {typeof total === 'number' ? total.toFixed(2) : '-'}</Text>
+          <Text style={styles.total}>Total: {typeof total === 'number' ? formatBRL(total) : '-'}</Text>
         </View>
 
         <View style={{ marginTop: 24 }}>

@@ -70,6 +70,9 @@ export type FinanceiroData = {
   saldoRestante?: number;
   statusFinanceiro?: "pago" | "pago_parcial" | "pendente";
   formaSaldo?: string;
+  pagamento_confirmado?: boolean;
+  status?: string;
+  contaDestinoId?: string | null;
 };
 
 export type ReceitaManualData = {
@@ -85,10 +88,12 @@ export type ReceitaManualData = {
 };
 
 export type VendaData = {
+  id?: string;
   vendaManual: boolean;
   clienteManualNome: string;
   clienteManualCpf: string;
   clienteManualCidade: string;
+  cliente?: PacienteOption | null;
   localidadeVenda: string;
   receitaManual: ReceitaManualData;
   pacienteId: string;
@@ -117,6 +122,10 @@ export type VendaData = {
   anexos_urls?: string[];
   medida_obrigatoria?: boolean;
   status_medida?: string;
+  // Combo fields
+  comboId?: string | null;
+  combo_aplicado_id?: string | null;
+  valor_desconto_combo?: number;
 };
 
 export const VALOR_CARTAO_MM = 85.6;

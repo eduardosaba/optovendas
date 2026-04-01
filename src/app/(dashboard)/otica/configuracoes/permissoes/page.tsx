@@ -41,7 +41,7 @@ export default function GestaoPermissoesPage() {
         const { data } = await supabase.from("permissoes_roles").select("*").order("role");
         if (!mounted) return;
         setPermissoes(data || []);
-      } catch (e) {
+      } catch {
         // silencioso
       } finally {
         if (mounted) setLoading(false);
@@ -60,7 +60,7 @@ export default function GestaoPermissoesPage() {
       const { error } = await supabase.from("permissoes_roles").upsert(permissoes);
       if (!error) toast?.success?.("Permissões atualizadas globalmente!");
       else toast?.error?.("Erro ao salvar permissões.");
-    } catch (e) {
+    } catch {
       toast?.error?.("Erro ao salvar permissões.");
     } finally {
       setSalvando(false);

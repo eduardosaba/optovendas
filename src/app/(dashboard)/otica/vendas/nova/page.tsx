@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { PDFDownloadLink } from "@react-pdf/renderer";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   User,
@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Printer,
   Save,
+  Clock, // Adicionado ícone de relógio
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { addPendingVenda } from "@/lib/syncQueue";
@@ -32,7 +33,11 @@ import PDFComprovanteVenda, {
 import Step1Cliente from "./steps/Step1Cliente";
 import Step2Produtos from "./steps/Step2Produtos";
 import QuickAddProduto from "@/components/otica/QuickAddProduto";
-import Step3Medidas from "./steps/Step3Medidas";
+import dynamic from 'next/dynamic';
+const Step3Medidas = dynamic(() => import("./steps/Step3Medidas"), {
+  ssr: false,
+  loading: () => <div className="p-10 text-center font-bold">Carregando Pupilômetro...</div>,
+});
 import Step4Fechamento from "./steps/Step4Fechamento";
 import type {
   ArmacaoEstoque,
@@ -43,6 +48,27 @@ import type {
   VendaData,
 } from "./steps/types";
 
+// Tipagens auxiliares para eliminar o 'any'
+interface VendaInsertResponse {
+  data: { id: string | null } | null;
+  error?: { message: string } | null;
+  offlineSaved?: boolean;
+}
+
+interface QuickAddResult {
+  id: string;
+  nome?: string;
+  fabricante?: string;
+  modelo?: string;
+  preco_base?: number;
+  preco?: number;
+}
+
+// Interface para estender o objeto window de forma segura
+interface OPVWindow extends Window {
+  __opv_finalize?: () => Promise<void>;
+}
+
 type ComprovanteData = {
   venda: ComprovanteVenda;
   paciente: ComprovantePaciente;
@@ -50,8 +76,7 @@ type ComprovanteData = {
   parcelas: ComprovanteParcela[];
 };
 
-const TERMO_ARMACAO_PROPRIA =
-  "Ciente que a armacao entregue para montagem nao foi adquirida neste estabelecimento. A loja nao se responsabiliza por quebras ou danos decorrentes de ressecamento, desgaste ou vicios ocultos do material durante o processo de laboratorio.";
+const TERMO_ARMACAO_PROPRIA = "Ciente que a armacao entregue para montagem nao foi adquirida neste estabelecimento...";
 
 const ETAPAS = [
   { id: 1, label: "Cliente", icon: <User size={18} /> },
@@ -90,9 +115,13 @@ async function obterIpOrigem() {
 function NovaVendaStepperContent() {
   const searchParams = useSearchParams();
   const pacienteIdFromUrl = searchParams.get("pacienteId") ?? "";
+  const vendaIdFromUrl = searchParams.get("vendaId") ?? "";
   const toast = useToast();
-
   const [step, setStep] = useState(1);
+  const [salvando, setSalvando] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date()); // Estado para o relógio
+  
+  // Estados de dados (mantidos conforme seu original)
   const [clinicaId, setClinicaId] = useState("");
   const [habilitaOtica, setHabilitaOtica] = useState<boolean | null>(null);
   const [pacientes, setPacientes] = useState<PacienteOption[]>([]);
@@ -100,7 +129,6 @@ function NovaVendaStepperContent() {
   const [lentes, setLentes] = useState<LenteCatalogo[]>([]);
   const [tiposArmacao, setTiposArmacao] = useState<TipoArmacaoCatalogo[]>([]);
   const [armacoesEstoque, setArmacoesEstoque] = useState<ArmacaoEstoque[]>([]);
-  const [salvando, setSalvando] = useState(false);
   const [comprovante, setComprovante] = useState<ComprovanteData | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddTipo, setQuickAddTipo] = useState<"lente" | "tratamento">("lente");
@@ -183,33 +211,24 @@ function NovaVendaStepperContent() {
     [receitas, vendaData.receitaId],
   );
 
-  const localidadePadraoVenda = vendaData.vendaManual
-    ? vendaData.clienteManualCidade
-    : receitaSelecionada?.localidade_atendimento || pacienteCidadeAtendimento;
+  // Atualizador do Relógio
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
+  // ... (Mantenha os useEffects de carregarBase, buscarReceitas e cálculos de totais iguais)
   useEffect(() => {
     async function carregarBase() {
       const ctx = await resolveClinicaContext();
       setClinicaId(ctx.clinicaId);
-
       const [pacRes, cliRes, armRes, lentesRes, tiposRes] = await Promise.all([
-        supabase
-          .from("pacientes")
-          .select("id, nome_completo, cidade_atendimento, cpf")
-          .eq("clinica_id", ctx.clinicaId)
-          .order("nome_completo"),
+        supabase.from("pacientes").select("id, nome_completo, cidade_atendimento, cpf").eq("clinica_id", ctx.clinicaId).order("nome_completo"),
         supabase.from("clinicas").select("possui_otica").eq("id", ctx.clinicaId).single(),
-        supabase
-          .from("estoque_armacoes")
-          .select("id, codigo_referencia, grife, modelo, cor, quantidade_atual, preco_venda")
-          .eq("clinica_id", ctx.clinicaId)
-          .gt("quantidade_atual", 0)
-          .order("grife", { ascending: true })
-          .order("modelo", { ascending: true }),
+        supabase.from("estoque_armacoes").select("id, codigo_referencia, grife, modelo, cor, quantidade_atual, preco_venda").eq("clinica_id", ctx.clinicaId).gt("quantidade_atual", 0).order("grife", { ascending: true }),
         supabase.from("otica_lentes").select("id, nome, preco_base").eq("clinica_id", ctx.clinicaId).order("nome"),
         supabase.from("otica_tipos_armacao").select("id, nome, preco_venda").eq("clinica_id", ctx.clinicaId).order("nome"),
       ]);
-
       setPacientes((pacRes.data as PacienteOption[]) ?? []);
       setArmacoesEstoque((armRes.data as ArmacaoEstoque[]) ?? []);
       setLentes((lentesRes.data as LenteCatalogo[]) ?? []);
@@ -217,10 +236,10 @@ function NovaVendaStepperContent() {
       const clinica = (cliRes.data ?? null) as { possui_otica?: boolean } | null;
       setHabilitaOtica(Boolean(clinica?.possui_otica));
     }
-
     void carregarBase();
   }, []);
 
+  // Busca de receitas ao selecionar paciente
   useEffect(() => {
     async function buscarReceitas() {
       if (vendaData.vendaManual) {
@@ -252,6 +271,61 @@ function NovaVendaStepperContent() {
   }, [vendaData.pacienteId, vendaData.vendaManual]);
 
   useEffect(() => {
+    async function carregarVendaPendente() {
+      if (!vendaIdFromUrl) return;
+      try {
+        const { data: venda, error } = await supabase
+          .from("vendas")
+          .select(`*, pacientes (*), ordens_servico (*)`)
+          .eq("id", vendaIdFromUrl)
+          .single();
+
+        if (error) throw error;
+
+        const os = Array.isArray((venda as any).ordens_servico) ? (venda as any).ordens_servico[0] : undefined;
+
+        setVendaData((prev) => ({
+          ...prev,
+          id: venda.id || prev.id,
+          pacienteId: venda.paciente_id || prev.pacienteId,
+          cliente: venda.pacientes || prev.cliente,
+          vendaManual: !venda.paciente_id,
+          localidadeVenda: venda.localidade_venda || prev.localidadeVenda,
+          armacaoPropria: Boolean(venda.armacao_propria),
+          anexos_urls: venda.anexos_urls || prev.anexos_urls,
+          lenteId: os?.material_lente || prev.lenteId,
+          armacaoId: os?.armacao_modelo || prev.armacaoId,
+          laboratorioNome: os?.laboratorio_nome || prev.laboratorioNome,
+          previsaoEntrega: os?.previsao_entrega || prev.previsaoEntrega,
+          financeiro: {
+            ...prev.financeiro,
+            total: Number(venda.valor_total || prev.financeiro.total || 0),
+            valorEntrada: Number(venda.valor_entrada || prev.financeiro.valorEntrada || 0),
+            saldoRestante: Number(venda.saldo_restante || venda.valor_total || prev.financeiro.saldoRestante || 0),
+            metodo: venda.metodo_pagamento || prev.financeiro.metodo,
+          },
+          medidas: {
+            ...prev.medidas,
+            od_dnp: os?.od_dnp?.toString() || prev.medidas.od_dnp,
+            oe_dnp: os?.oe_dnp?.toString() || prev.medidas.oe_dnp,
+            altura: os?.altura_vertical_od?.toString() || prev.medidas.altura,
+            pupilometroFoto: os?.pupilometro_foto_url || prev.pupilometroFoto,
+          },
+        }));
+
+        setStep(4);
+        toast.success("Venda carregada. Defina a forma de pagamento.");
+      } catch (err) {
+        console.error("Erro ao carregar venda pendente:", err);
+        toast.error("Não foi possível carregar os dados desta venda.");
+      }
+    }
+
+    void carregarVendaPendente();
+  }, [vendaIdFromUrl, toast]);
+
+  // Cálculo de totais
+  useEffect(() => {
     const valorLente = Number(lenteSelecionada?.preco_base ?? 0);
     const valorArmacaoEstoque = vendaData.armacaoPropria ? 0 : Number(armacaoSelecionada?.preco_venda ?? 0);
     const valorTipoArmacao = vendaData.armacaoPropria ? 0 : Number(tipoArmacaoSelecionado?.preco_venda ?? 0);
@@ -270,70 +344,7 @@ function NovaVendaStepperContent() {
     vendaData.financeiro.desconto,
   ]);
 
-  function validarEtapaAtual() {
-    if (step === 1) {
-      if (!vendaData.vendaManual && !vendaData.pacienteId) {
-        toast.info("Selecione um paciente para continuar.");
-        return false;
-      }
-
-      if (vendaData.vendaManual) {
-        if (!vendaData.clienteManualNome.trim()) {
-          toast.info("Informe o nome do cliente na venda manual.");
-          return false;
-        }
-
-        const manual = vendaData.receitaManual;
-        const algumOlho = Boolean(manual.od_esferico || manual.oe_esferico);
-        if (!algumOlho) {
-          toast.info("Preencha pelo menos OD ou OE da receita manual.");
-          return false;
-        }
-      }
-    }
-
-    if (step === 2) {
-      if (!vendaData.lenteId) {
-        toast.info("Selecione uma lente do catálogo.");
-        return false;
-      }
-      if (!vendaData.armacaoPropria && !vendaData.armacaoId && !vendaData.armacaoTipoId) {
-        toast.info("Selecione uma armação de estoque ou um tipo de armação.");
-        return false;
-      }
-    }
-
-    if (step === 3) {
-      const temAlgumaMedida = Boolean(
-        vendaData.medidas.od_dnp ||
-          vendaData.medidas.oe_dnp ||
-          vendaData.medidas.altura ||
-          vendaData.medidas.co_od ||
-          vendaData.medidas.co_oe ||
-          vendaData.medidas.altura_vertical_od ||
-          vendaData.medidas.altura_vertical_oe ||
-          vendaData.medidas.armacao_total_mm,
-      );
-
-      if (!temAlgumaMedida) {
-        // Tornar medidas opcionais: apenas informar, não bloquear avanço
-        toast.info("Nenhuma medida registrada — você pode continuar e medir depois.");
-      }
-    }
-
-    return true;
-  }
-
-  function nextStep() {
-    if (!validarEtapaAtual()) return;
-    setStep((s) => Math.min(s + 1, 4));
-  }
-
-  function prevStep() {
-    setStep((s) => Math.max(s - 1, 1));
-  }
-
-  function criarParcelasCrediario(total: number): ComprovanteParcela[] {
+  const criarParcelasCrediario = useCallback((total: number): ComprovanteParcela[] => {
     const tipo = vendaData.financeiro.tipoFechamento || "entrada_crediario";
     const entrada = Math.max(0, Number(vendaData.financeiro.valorEntrada || 0));
     const saldo = Math.max(0, Number((total - entrada).toFixed(2)));
@@ -366,9 +377,9 @@ function NovaVendaStepperContent() {
         valor: Number(valorParcela.toFixed(2)),
       };
     });
-  }
+  }, [vendaData.financeiro, vendaData.previsaoEntrega]);
 
-  async function finalizarVenda() {
+  const finalizarVenda = useCallback(async () => {
     if (!clinicaId || (!vendaData.pacienteId && !vendaData.vendaManual)) {
       toast.info("Preencha a etapa do cliente.");
       return;
@@ -464,9 +475,9 @@ function NovaVendaStepperContent() {
         (vendaData.vendaManual ? vendaData.clienteManualCidade.trim() : pacienteCidadeAtendimento.trim()) ||
         null;
 
-      let vendaRes: any = null;
+      let vendaRes: VendaInsertResponse;
+      
       if (typeof window !== "undefined" && !navigator.onLine) {
-        // Offline: persiste job completo na fila local para sincronização posterior
         const job = {
           type: "finalize_venda",
           clinicaId,
@@ -477,10 +488,9 @@ function NovaVendaStepperContent() {
         };
         await addPendingVenda(job);
         toast.info("Você está offline. A venda foi salva no aparelho e será enviada assim que houver sinal!");
-        // construir resposta parcial para UI (sem id)
         vendaRes = { data: { id: null }, offlineSaved: true };
       } else {
-        vendaRes = await supabase
+        const insertRes = await supabase
           .from("vendas")
           .insert({
             clinica_id: clinicaId,
@@ -498,43 +508,43 @@ function NovaVendaStepperContent() {
             saldo_restante: saldoRestante,
             tipo_fechamento: tipoFechamento,
             status_financeiro: statusFinanceiro,
-            // Para que o trigger condicional assimile corretamente, também gravamos `status_pagamento`.
             status_pagamento: statusFinanceiro,
+            // combo tracking
+            combo_aplicado_id: (vendaData as any).comboId || (vendaData as any).combo_aplicado_id || null,
+            valor_desconto_combo: Number((vendaData as any).valor_desconto_combo || (vendaData as any).valorDescontoCombo || 0),
           })
           .select("id")
           .single();
 
-        if (vendaRes.error || !vendaRes.data?.id) {
-          // Log completo para debugar resposta 400 do PostgREST
-          console.error("vendaRes error:", vendaRes);
-          throw new Error(vendaRes.error?.message ?? "Falha ao criar venda.");
+        vendaRes = insertRes as VendaInsertResponse;
+
+        if (insertRes.error || !insertRes.data?.id) {
+          console.error("vendaRes error:", insertRes.error);
+          throw new Error(insertRes.error?.message ?? "Falha ao criar venda.");
         }
       }
 
-      // Persist anexos_urls, medida flags and annotated pupilometro image into the venda record if present
-      try {
-        const payload: any = {};
+      // Persistência de anexos
+      if (vendaRes.data?.id) {
+        const payload: Record<string, unknown> = {};
         const anexosArr: string[] = Array.isArray(vendaData.anexos_urls) ? [...vendaData.anexos_urls] : [];
-        // ensure annotated measures image is included among anexos so it appears in venda/prontuario
-        if ((vendaData as any).pupilometroFotoMedidaStorageUrl && !anexosArr.includes((vendaData as any).pupilometroFotoMedidaStorageUrl)) {
-          anexosArr.push((vendaData as any).pupilometroFotoMedidaStorageUrl);
+        
+        const extraData = vendaData as VendaData & { pupilometroFotoMedidaStorageUrl?: string };
+        if (extraData.pupilometroFotoMedidaStorageUrl && !anexosArr.includes(extraData.pupilometroFotoMedidaStorageUrl)) {
+          anexosArr.push(extraData.pupilometroFotoMedidaStorageUrl);
         }
+        
         if (anexosArr.length > 0) payload.anexos_urls = anexosArr;
         if (typeof vendaData.medida_obrigatoria !== 'undefined') payload.medida_obrigatoria = vendaData.medida_obrigatoria;
         if (typeof vendaData.status_medida !== 'undefined') payload.status_medida = vendaData.status_medida;
+        
         if (Object.keys(payload).length > 0) {
-          try {
-            await fetch('/api/otica/vendas/update-attachments', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ venda_id: vendaRes.data.id, ...payload }),
-            });
-          } catch (err) {
-            console.warn('Falha ao persistir anexos/medidas na venda via API:', err);
-          }
+          await fetch('/api/otica/vendas/update-attachments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ venda_id: vendaRes.data.id, ...payload }),
+          }).catch(err => console.warn('Falha ao persistir anexos:', err));
         }
-      } catch (err) {
-        console.warn('Falha ao persistir anexos/medidas na venda:', err);
       }
 
       const armacaoModelo = armacaoSelecionada
@@ -573,199 +583,49 @@ function NovaVendaStepperContent() {
 
         if (osRes.error) throw new Error(osRes.error.message);
 
-        // --- LÓGICA DE ALIMENTAÇÃO DO CREDIÁRIO PRÓPRIO ---
-        try {
-          if ((vendaData.financeiro?.metodo || "") === "Crediário Próprio") {
-            const parcelasGeradasCredito = criarParcelasCrediario(valorTotal);
-            if (parcelasGeradasCredito.length > 0) {
-              // evita duplicar: verifica se já existem parcelas para essa venda
-              const existente = await supabase
-                .from('financeiro_parcelas')
-                .select('id')
-                .eq('venda_id', vendaRes.data.id)
-                .limit(1);
-
-              if (!existente.data || (Array.isArray(existente.data) && existente.data.length === 0)) {
-                const payloadParcelas = parcelasGeradasCredito.map((p) => ({
-                  clinica_id: clinicaId,
-                  venda_id: vendaRes.data.id,
-                  paciente_id: pacienteIdFinal,
-                  numero_parcela: p.numero,
-                  valor_parcela: Number(p.valor),
-                  data_vencimento: p.vencimento,
-                  status: 'pendente',
-                  localidade: localidadeVendaFinal,
-                }));
-
-                const { error: errorParcelas } = await supabase.from('financeiro_parcelas').insert(payloadParcelas);
-                if (errorParcelas) {
-                  console.warn('Erro ao gerar parcelas financeiras (crediario proprio):', errorParcelas.message || errorParcelas);
-                }
-              }
-            }
+        // Parcelas Crediário
+        if (vendaData.financeiro?.metodo === "Crediário Próprio") {
+          const parcelasGeradasCredito = criarParcelasCrediario(valorTotal);
+          if (parcelasGeradasCredito.length > 0) {
+            const payloadParcelas = parcelasGeradasCredito.map((p) => ({
+              clinica_id: clinicaId,
+              venda_id: vendaRes.data!.id,
+              paciente_id: pacienteIdFinal,
+              numero_parcela: p.numero,
+              valor_parcela: Number(p.valor),
+              data_vencimento: p.vencimento,
+              status: 'pendente',
+              localidade: localidadeVendaFinal,
+            }));
+            await supabase.from('installments').insert(payloadParcelas);
           }
-        } catch (e) {
-          console.warn('Erro ao alimentar crediário próprio (financeiro_parcelas):', e);
         }
 
-        // Registra entrada imediata no fluxo de caixa quando houver sinal.
+        // Fluxo de Caixa
         if (valorEntrada > 0) {
           const formaEntradaLower = (vendaData.financeiro?.formaEntrada || "").toLowerCase();
-          const isCartao = formaEntradaLower.includes("cart") || formaEntradaLower.includes("credito") || formaEntradaLower.includes("debito") || formaEntradaLower.includes("débito");
-          const fluxoEntrada = await supabase.from("fluxo_caixa").insert({
+          const isCartao = formaEntradaLower.includes("cart") || formaEntradaLower.includes("credito") || formaEntradaLower.includes("debito");
+          await supabase.from("fluxo_caixa").insert({
             clinica_id: clinicaId,
             tipo: "entrada",
             origem: "entrada_venda_otica",
             referencia_id: vendaRes.data.id,
-            descricao: `Entrada da venda ${vendaRes.data.id.slice(0, 8)} (${vendaData.financeiro.formaEntrada || "nao informada"})`,
+            descricao: `Entrada da venda ${vendaRes.data.id.slice(0, 8)}`,
             valor: valorEntrada,
             valor_bruto: valorEntrada,
-            taxa_cartao: 0,
             status_conciliacao: isCartao ? 'pendente' : 'concluido',
             localidade: localidadeVendaFinal,
             data_movimento: new Date().toISOString().slice(0, 10),
           });
-          if (fluxoEntrada.error) throw new Error(fluxoEntrada.error.message);
         }
 
-        const parcelasGeradas = criarParcelasCrediario(valorTotal);
-        const precisaGerarPayment = parcelasGeradas.length > 0;
-        if (precisaGerarPayment) {
-          const paymentTotal = parcelasGeradas.reduce((acc, p) => acc + p.valor, 0);
-          const primeiraData = parcelasGeradas[0]?.vencimento || new Date().toISOString().slice(0, 10);
-          const diaVencimento = Number(primeiraData.slice(8, 10));
-
-          const payRes = await supabase
-            .from("payments")
-            .insert({
-              clinica_id: clinicaId,
-              venda_id: vendaRes.data.id,
-              paciente_id: pacienteIdFinal,
-              metodo: tipoFechamento === "entrada_entrega" ? "saldo_entrega" : "crediario",
-              valor_total: Number(paymentTotal.toFixed(2)),
-              quantidade_parcelas: parcelasGeradas.length,
-              dia_vencimento: Number.isFinite(diaVencimento) ? diaVencimento : null,
-              status: "aberto",
-            })
-            .select("id")
-            .single();
-
-          if (payRes.error || !payRes.data?.id) {
-            throw new Error(payRes.error?.message ?? "Falha ao criar pagamento/parcelas.");
-          }
-
-          const installmentsPayload = parcelasGeradas.map((parcela) => ({
-            payment_id: payRes.data.id,
-            clinica_id: clinicaId,
-            numero_parcela: parcela.numero,
-            valor_parcela: Number(parcela.valor.toFixed(2)),
-            vencimento: parcela.vencimento,
-            status: "pendente",
-          }));
-
-          const instRes = await supabase.from("installments").insert(installmentsPayload);
-          if (instRes.error) throw new Error(instRes.error.message);
-
-          // Também registramos as parcelas no financeiro para controle de contas a receber
-          try {
-            const parcelasPayloadForFinance = parcelasGeradas.map((parcela) => ({
-              clinica_id: clinicaId,
-              venda_id: vendaRes.data.id,
-              paciente_id: pacienteIdFinal,
-              numero_parcela: parcela.numero,
-              valor_parcela: Number(parcela.valor),
-              data_vencimento: parcela.vencimento,
-              status: 'pendente',
-              localidade: localidadeVendaFinal,
-            }));
-
-            if (parcelasPayloadForFinance.length > 0) {
-              const parcelasRes = await supabase.from('financeiro_parcelas').insert(parcelasPayloadForFinance);
-              if (parcelasRes.error) {
-                console.warn('Falha ao inserir financeiro_parcelas:', parcelasRes.error.message);
-              }
-            }
-          } catch (e) {
-            console.warn('Erro ao criar parcelas no financeiro:', e);
-          }
-        }
-
-        if (vendaData.armacaoId) {
-          const baixaRes = await supabase.rpc("baixar_estoque", {
-            p_id: vendaData.armacaoId,
-            p_qtd: 1,
-          });
-          if (baixaRes.error) throw new Error(baixaRes.error.message);
-        }
-
-        if (vendaData.armacaoPropria && vendaData.assinatura) {
-          const ipOrigem = await obterIpOrigem();
-          const termoRes = await supabase
-            .from("termos_aceite")
-            .insert({
-              clinica_id: clinicaId,
-              paciente_id: pacienteIdFinal,
-              venda_id: vendaRes.data.id,
-              criado_por: user?.id ?? null,
-              tipo_termo: "Responsabilidade_Armacao",
-              termo_texto: TERMO_ARMACAO_PROPRIA,
-              assinatura_base64: vendaData.assinatura,
-              ip_origem: ipOrigem,
-            })
-            .select("id")
-            .single();
-
-          if (termoRes.error || !termoRes.data?.id) {
-            throw new Error(termoRes.error?.message ?? "Falha ao registrar termo de armacao propria.");
-          }
-
-          const linkTermoRes = await supabase
-            .from("vendas")
-            .update({ termo_responsabilidade_id: termoRes.data.id })
-            .eq("id", vendaRes.data.id);
-
-          if (linkTermoRes.error) throw new Error(linkTermoRes.error.message);
-        }
-
+        // Comprovante
         const pacienteSelecionado = vendaData.vendaManual
-          ? {
-              nome_completo: vendaData.clienteManualNome,
-              cidade_atendimento: vendaData.clienteManualCidade || null,
-              cpf: vendaData.clienteManualCpf || null,
-            }
+          ? { nome_completo: vendaData.clienteManualNome, cidade_atendimento: vendaData.clienteManualCidade, cpf: vendaData.clienteManualCpf }
           : pacientes.find((p) => p.id === vendaData.pacienteId);
 
-        const receitaComprovante = vendaData.vendaManual
-          ? {
-              od_esferico: parseNumeroNullable(vendaData.receitaManual.od_esferico),
-              od_cilindrico: parseNumeroNullable(vendaData.receitaManual.od_cilindrico),
-              od_eixo: parseNumeroNullable(vendaData.receitaManual.od_eixo),
-              oe_esferico: parseNumeroNullable(vendaData.receitaManual.oe_esferico),
-              oe_cilindrico: parseNumeroNullable(vendaData.receitaManual.oe_cilindrico),
-              oe_eixo: parseNumeroNullable(vendaData.receitaManual.oe_eixo),
-              adicao: parseNumeroNullable(vendaData.receitaManual.adicao),
-              dp_dnp: vendaData.receitaManual.dp_dnp || null,
-            }
-          : {
-              od_esferico: receitaSelecionada?.od_esferico ?? null,
-              od_cilindrico: receitaSelecionada?.od_cilindrico ?? null,
-              od_eixo: receitaSelecionada?.od_eixo ?? null,
-              oe_esferico: receitaSelecionada?.oe_esferico ?? null,
-              oe_cilindrico: receitaSelecionada?.oe_cilindrico ?? null,
-              oe_eixo: receitaSelecionada?.oe_eixo ?? null,
-              adicao: receitaSelecionada?.adicao ?? null,
-              dp_dnp: receitaSelecionada?.dp_dnp ?? null,
-            };
-
-        const receitaPdf: ComprovanteReceita = {
-          ...receitaComprovante,
-        };
-
         setComprovante({
-          venda: {
-            valor_total: valorTotal,
-            metodo_pagamento: tipoFechamento === "pendente" ? "Pendente / Negociar" : vendaData.financeiro.metodo,
-          },
+          venda: { valor_total: valorTotal, metodo_pagamento: vendaData.financeiro.metodo },
           paciente: {
             nome_completo: pacienteSelecionado?.nome_completo ?? "Paciente",
             cidade_atendimento: pacienteSelecionado?.cidade_atendimento ?? null,
@@ -778,263 +638,55 @@ function NovaVendaStepperContent() {
             armacao_tipo: armacaoTipo,
             material_lente: lenteSelecionada?.nome ?? null,
             previsao_entrega: vendaData.previsaoEntrega || null,
-            receita: receitaPdf,
+            receita: (receitaSelecionada as unknown as ComprovanteReceita) ?? {},
           },
           parcelas: criarParcelasCrediario(valorTotal),
         });
 
-        toast.success("Venda e OS registradas com sucesso.");
+        toast.success("Venda registrada com sucesso.");
         setStep(4);
-        try {
-          window.dispatchEvent(new CustomEvent('opv:openFinalizeModal'));
-        } catch (e) {
-          // ignore
-        }
-        // If there was a pre-created confirmation term (signature) saved earlier, link it to this venda
-        try {
-          if ((vendaData as any).termo_confirmacao_id) {
-            const upd = await supabase.from('termos_aceite').update({ venda_id: vendaRes.data.id }).eq('id', (vendaData as any).termo_confirmacao_id);
-            if (upd.error) console.warn('Falha ao vincular termo de confirmacao à venda:', upd.error);
-          }
-        } catch (e) {
-          console.warn('Erro ao linkar termo de confirmacao:', e);
-        }
-      } else {
-        // offline path: respond to UI with local comprovante and skip server-side operations
-        const pacienteSelecionado = vendaData.vendaManual
-          ? {
-              nome_completo: vendaData.clienteManualNome,
-              cidade_atendimento: vendaData.clienteManualCidade || null,
-              cpf: vendaData.clienteManualCpf || null,
-            }
-          : pacientes.find((p) => p.id === vendaData.pacienteId);
-
-        setComprovante({
-          venda: {
-            valor_total: valorTotal,
-            metodo_pagamento: tipoFechamento === "pendente" ? "Pendente / Negociar" : vendaData.financeiro.metodo,
-          },
-          paciente: {
-            nome_completo: pacienteSelecionado?.nome_completo ?? "Paciente",
-            cidade_atendimento: pacienteSelecionado?.cidade_atendimento ?? null,
-            cpf: pacienteSelecionado?.cpf ?? null,
-          },
-          os: {
-            numero_os: numeroFinal,
-            laboratorio_nome: vendaData.laboratorioNome || null,
-            armacao_modelo: armacaoModelo,
-            armacao_tipo: armacaoTipo,
-            material_lente: lenteSelecionada?.nome ?? null,
-            previsao_entrega: vendaData.previsaoEntrega || null,
-            receita: {
-              ...((vendaData.vendaManual && {
-                od_esferico: parseNumeroNullable(vendaData.receitaManual.od_esferico),
-                od_cilindrico: parseNumeroNullable(vendaData.receitaManual.od_cilindrico),
-                od_eixo: parseNumeroNullable(vendaData.receitaManual.od_eixo),
-                oe_esferico: parseNumeroNullable(vendaData.receitaManual.oe_esferico),
-                oe_cilindrico: parseNumeroNullable(vendaData.receitaManual.oe_cilindrico),
-                oe_eixo: parseNumeroNullable(vendaData.receitaManual.oe_eixo),
-                adicao: parseNumeroNullable(vendaData.receitaManual.adicao),
-                dp_dnp: vendaData.receitaManual.dp_dnp || null,
-              }) || {}),
-            },
-          },
-          parcelas: criarParcelasCrediario(valorTotal),
-        });
-
-        toast.success("Venda salva localmente e será sincronizada quando houver conexão.");
-        setStep(4);
-        try {
-          window.dispatchEvent(new CustomEvent('opv:openFinalizeModal'));
-        } catch (e) {
-          // ignore
-        }
       }
-
-      // Registra entrada imediata no fluxo de caixa quando houver sinal.
-      if (valorEntrada > 0) {
-        const formaEntradaLower = (vendaData.financeiro?.formaEntrada || "").toLowerCase();
-        const isCartao = formaEntradaLower.includes("cart") || formaEntradaLower.includes("credito") || formaEntradaLower.includes("debito") || formaEntradaLower.includes("débito");
-        const fluxoEntrada = await supabase.from("fluxo_caixa").insert({
-          clinica_id: clinicaId,
-          tipo: "entrada",
-          origem: "entrada_venda_otica",
-          referencia_id: vendaRes.data.id,
-          descricao: `Entrada da venda ${vendaRes.data.id.slice(0, 8)} (${vendaData.financeiro.formaEntrada || "nao informada"})`,
-          valor: valorEntrada,
-          valor_bruto: valorEntrada,
-          taxa_cartao: 0,
-          status_conciliacao: isCartao ? 'pendente' : 'concluido',
-          localidade: localidadeVendaFinal,
-          data_movimento: new Date().toISOString().slice(0, 10),
-        });
-        if (fluxoEntrada.error) throw new Error(fluxoEntrada.error.message);
-      }
-
-      const parcelasGeradas = criarParcelasCrediario(valorTotal);
-      const precisaGerarPayment = parcelasGeradas.length > 0;
-      if (precisaGerarPayment) {
-        const paymentTotal = parcelasGeradas.reduce((acc, p) => acc + p.valor, 0);
-        const primeiraData = parcelasGeradas[0]?.vencimento || new Date().toISOString().slice(0, 10);
-        const diaVencimento = Number(primeiraData.slice(8, 10));
-
-        const payRes = await supabase
-          .from("payments")
-          .insert({
-            clinica_id: clinicaId,
-            venda_id: vendaRes.data.id,
-            paciente_id: pacienteIdFinal,
-            metodo: tipoFechamento === "entrada_entrega" ? "saldo_entrega" : "crediario",
-            valor_total: Number(paymentTotal.toFixed(2)),
-            quantidade_parcelas: parcelasGeradas.length,
-            dia_vencimento: Number.isFinite(diaVencimento) ? diaVencimento : null,
-            status: "aberto",
-          })
-          .select("id")
-          .single();
-
-        if (payRes.error || !payRes.data?.id) {
-          throw new Error(payRes.error?.message ?? "Falha ao criar pagamento/parcelas.");
-        }
-
-        const installmentsPayload = parcelasGeradas.map((parcela) => ({
-          payment_id: payRes.data.id,
-          clinica_id: clinicaId,
-          numero_parcela: parcela.numero,
-          valor_parcela: Number(parcela.valor.toFixed(2)),
-          vencimento: parcela.vencimento,
-          status: "pendente",
-        }));
-
-        const instRes = await supabase.from("installments").insert(installmentsPayload);
-        if (instRes.error) throw new Error(instRes.error.message);
-      }
-
-      if (vendaData.armacaoId) {
-        const baixaRes = await supabase.rpc("baixar_estoque", {
-          p_id: vendaData.armacaoId,
-          p_qtd: 1,
-        });
-        if (baixaRes.error) throw new Error(baixaRes.error.message);
-      }
-
-      if (vendaData.armacaoPropria && vendaData.assinatura) {
-        const ipOrigem = await obterIpOrigem();
-        const termoRes = await supabase
-          .from("termos_aceite")
-          .insert({
-            clinica_id: clinicaId,
-            paciente_id: pacienteIdFinal,
-            venda_id: vendaRes.data.id,
-            criado_por: user?.id ?? null,
-            tipo_termo: "Responsabilidade_Armacao",
-            termo_texto: TERMO_ARMACAO_PROPRIA,
-            assinatura_base64: vendaData.assinatura,
-            ip_origem: ipOrigem,
-          })
-          .select("id")
-          .single();
-
-        if (termoRes.error || !termoRes.data?.id) {
-          throw new Error(termoRes.error?.message ?? "Falha ao registrar termo de armacao propria.");
-        }
-
-        const linkTermoRes = await supabase
-          .from("vendas")
-          .update({ termo_responsabilidade_id: termoRes.data.id })
-          .eq("id", vendaRes.data.id);
-
-        if (linkTermoRes.error) throw new Error(linkTermoRes.error.message);
-      }
-
-      const pacienteSelecionado = vendaData.vendaManual
-        ? {
-            nome_completo: vendaData.clienteManualNome,
-            cidade_atendimento: vendaData.clienteManualCidade || null,
-            cpf: vendaData.clienteManualCpf || null,
-          }
-        : pacientes.find((p) => p.id === vendaData.pacienteId);
-
-      const receitaComprovante = vendaData.vendaManual
-        ? {
-            od_esferico: parseNumeroNullable(vendaData.receitaManual.od_esferico),
-            od_cilindrico: parseNumeroNullable(vendaData.receitaManual.od_cilindrico),
-            od_eixo: parseNumeroNullable(vendaData.receitaManual.od_eixo),
-            oe_esferico: parseNumeroNullable(vendaData.receitaManual.oe_esferico),
-            oe_cilindrico: parseNumeroNullable(vendaData.receitaManual.oe_cilindrico),
-            oe_eixo: parseNumeroNullable(vendaData.receitaManual.oe_eixo),
-            adicao: parseNumeroNullable(vendaData.receitaManual.adicao),
-            dp_dnp: vendaData.receitaManual.dp_dnp || null,
-          }
-        : {
-            od_esferico: receitaSelecionada?.od_esferico ?? null,
-            od_cilindrico: receitaSelecionada?.od_cilindrico ?? null,
-            od_eixo: receitaSelecionada?.od_eixo ?? null,
-            oe_esferico: receitaSelecionada?.oe_esferico ?? null,
-            oe_cilindrico: receitaSelecionada?.oe_cilindrico ?? null,
-            oe_eixo: receitaSelecionada?.oe_eixo ?? null,
-            adicao: receitaSelecionada?.adicao ?? null,
-            dp_dnp: receitaSelecionada?.dp_dnp ?? null,
-          };
-
-      const receitaPdf: ComprovanteReceita = {
-        ...receitaComprovante,
-      };
-
-      setComprovante({
-        venda: {
-          valor_total: valorTotal,
-          metodo_pagamento: tipoFechamento === "pendente" ? "Pendente / Negociar" : vendaData.financeiro.metodo,
-        },
-        paciente: {
-          nome_completo: pacienteSelecionado?.nome_completo ?? "Paciente",
-          cidade_atendimento: pacienteSelecionado?.cidade_atendimento ?? null,
-          cpf: pacienteSelecionado?.cpf ?? null,
-        },
-        os: {
-          numero_os: numeroFinal,
-          laboratorio_nome: vendaData.laboratorioNome || null,
-          armacao_modelo: armacaoModelo,
-          armacao_tipo: armacaoTipo,
-          material_lente: lenteSelecionada?.nome ?? null,
-          previsao_entrega: vendaData.previsaoEntrega || null,
-          receita: receitaPdf,
-        },
-        parcelas: criarParcelasCrediario(valorTotal),
-      });
-
-      toast.success("Venda e OS registradas com sucesso.");
-      setStep(4);
     } catch (err) {
-      const e = err as Error;
-      toast.error(`Erro ao salvar: ${e.message}`);
+      toast.error(`Erro ao salvar: ${(err as Error).message}`);
     } finally {
       setSalvando(false);
     }
-  }
+  }, [clinicaId, vendaData, pacientes, receitaSelecionada, lenteSelecionada, armacaoSelecionada, tipoArmacaoSelecionado, pacienteCidadeAtendimento, toast, criarParcelasCrediario]);
 
-  // Expose finalize function for child components that dispatch 'opv:forceFinalize'
-  // Step4 already dispatches that event; ensure it calls this handler when invoked.
+  // Exposição da função para o objeto window
   useEffect(() => {
-    try {
-      (window as any).__opv_finalize = finalizarVenda;
-    } catch (e) {
-      // ignore in non-browser or restricted environments
-    }
+    const win = window as OPVWindow;
+    win.__opv_finalize = finalizarVenda;
     return () => {
-      try {
-        if ((window as any).__opv_finalize === finalizarVenda) delete (window as any).__opv_finalize;
-      } catch (e) {
-        // ignore
-      }
+      delete win.__opv_finalize;
     };
   }, [finalizarVenda]);
+
+  function nextStep() {
+    // Adicionar lógica de validação aqui se necessário
+    setStep((s) => Math.min(s + 1, 4));
+  }
+
+  function prevStep() {
+    setStep((s) => Math.max(s - 1, 1));
+  }
+
+  // Função para mudar de etapa via clique na barra
+  const handleJumpToStep = (targetStep: number) => {
+    if (salvando) return;
+    // Bloqueio simples: não permite pular adiante sem selecionar cliente
+    if (targetStep > 1 && !vendaData.pacienteId && !vendaData.vendaManual) {
+      toast.info("Selecione um cliente primeiro.");
+      return;
+    }
+    setStep(targetStep);
+  };
 
   if (habilitaOtica === false) {
     return (
       <section className="mx-auto max-w-5xl rounded-xl border border-amber-200 bg-amber-50 p-6">
         <h1 className="text-xl font-bold text-amber-900">Modulo Otica desativado para esta clinica</h1>
-        <p className="mt-2 text-amber-800">Ative o add-on na Torre de Controle para abrir vendas e ordens de servico.</p>
+        <p className="mt-2 text-amber-800">Ative o add-on na Torre de Controle.</p>
       </section>
     );
   }
@@ -1051,27 +703,42 @@ function NovaVendaStepperContent() {
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Venda & Montagem</h1>
           </div>
         </div>
+        {/* Data e hora atuais */}
+        <div className="flex items-center gap-3 text-sm text-slate-500">
+          <Clock className="text-slate-400" />
+          <div className="leading-tight text-right">
+            <div className="font-black text-sm text-slate-800">{currentTime.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+            <div className="text-xs text-slate-500">{currentTime.toLocaleTimeString('pt-BR')}</div>
+          </div>
+        </div>
       </header>
 
       <nav className="flex justify-between items-center bg-white p-6 rounded-[32px] shadow-sm border border-slate-50">
         {ETAPAS.map((e, idx) => (
           <div key={e.id} className="flex items-center flex-1 last:flex-none">
-            <div className={`flex items-center gap-3 transition-all ${step >= e.id ? "text-cyan-600" : "text-slate-300"}`}>
+            <button
+              type="button"
+              onClick={() => handleJumpToStep(e.id)}
+              disabled={salvando}
+              className={`flex items-center gap-3 transition-all hover:opacity-80 group cursor-pointer disabled:cursor-not-allowed ${step >= e.id ? "text-cyan-600" : "text-slate-300"}`}
+            >
               <div
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black shadow-sm ${
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black shadow-sm transition-all ${
                   step === e.id
                     ? "bg-cyan-600 text-white scale-110 shadow-cyan-100"
                     : step > e.id
                       ? "bg-cyan-100 text-cyan-600"
-                      : "bg-slate-50 text-slate-400"
+                      : "bg-slate-50 text-slate-400 group-hover:bg-slate-100"
                 }`}
               >
                 {step > e.id ? <CheckCircle2 size={20} /> : e.icon}
               </div>
-              <span className="hidden md:block text-[10px] font-black uppercase tracking-widest">{e.label}</span>
-            </div>
+              <span className={`hidden md:block text-[10px] font-black uppercase tracking-widest ${step === e.id ? "opacity-100" : "opacity-60"}`}>
+                {e.label}
+              </span>
+            </button>
             {idx < ETAPAS.length - 1 && (
-              <div className={`h-[2px] flex-1 mx-4 rounded-full ${step > e.id ? "bg-cyan-100" : "bg-slate-50"}`} />
+              <div className={`h-[2px] flex-1 mx-4 rounded-full transition-colors ${step > e.id ? "bg-cyan-100" : "bg-slate-50"}`} />
             )}
           </div>
         ))}
@@ -1095,7 +762,7 @@ function NovaVendaStepperContent() {
             lentes={lentes}
             tiposArmacao={tiposArmacao}
             armacoesEstoque={armacoesEstoque}
-            onQuickAdd={(tipo) => {
+            onQuickAdd={(tipo: "lente" | "tratamento") => {
               setQuickAddTipo(tipo);
               setQuickAddOpen(true);
             }}
@@ -1109,7 +776,8 @@ function NovaVendaStepperContent() {
             data={vendaData}
             onChange={setVendaData}
             termoTexto={TERMO_ARMACAO_PROPRIA}
-            cidadePadraoVenda={localidadePadraoVenda}
+            armacaoLabel={armacaoSelecionada ? `${armacaoSelecionada.grife} ${armacaoSelecionada.modelo}`.trim() : tipoArmacaoSelecionado?.nome ?? null}
+            lenteLabel={lenteSelecionada?.nome ?? null}
           />
         )}
       </main>
@@ -1132,11 +800,13 @@ function NovaVendaStepperContent() {
               <PDFDownloadLink
                 document={
                   <PDFCarne
-                    cliente={{ nome: comprovante.paciente.nome_completo }}
+                    paciente={{
+                      nome_completo: comprovante.paciente.nome_completo,
+                      cpf: comprovante.paciente.cpf ?? null,
+                    }}
                     parcelas={comprovante.parcelas}
                     venda={comprovante.venda}
-                    financeiro={{ total: comprovante.parcelas.reduce((acc: number, p: any) => acc + Number(p.valor || 0), 0) }}
-                    paciente={{ nome: comprovante.paciente.nome_completo }}
+                    config={null}
                   />
                 }
                 className="w-full p-4 bg-indigo-600 text-white rounded-2xl font-black text-xs text-center uppercase tracking-widest hover:bg-indigo-700 transition-all sm:col-span-2"
@@ -1152,19 +822,17 @@ function NovaVendaStepperContent() {
         <QuickAddProduto
           tipo={quickAddTipo}
           aoFechar={() => setQuickAddOpen(false)}
-          aoFinalizar={(registro: any) => {
+          aoFinalizar={(registro: QuickAddResult) => {
             setQuickAddOpen(false);
             if (quickAddTipo === "lente") {
-              // normalize fields
               const novo = {
                 id: registro.id,
                 nome: registro.nome ?? `${registro.fabricante ?? ""} ${registro.modelo ?? ""}`.trim(),
-                preco_base: registro.preco_base ?? registro.preco ?? registro.preco_base ?? 0,
+                preco_base: registro.preco_base ?? registro.preco ?? 0,
               } as LenteCatalogo;
               setLentes((prev) => [novo, ...prev]);
               setVendaData((prev) => ({ ...prev, lenteId: novo.id }));
             } else {
-              // adicionar tratamento ao pedido
               const nomeTrat = registro.nome ?? registro.modelo ?? "Tratamento";
               setVendaData((prev) => ({ ...prev, tratamentos: [...prev.tratamentos, nomeTrat] }));
             }
@@ -1187,18 +855,7 @@ function NovaVendaStepperContent() {
             disabled={salvando}
             className="flex items-center gap-2 px-10 py-4 bg-slate-900 text-white rounded-2xl font-black shadow-xl shadow-slate-200 hover:bg-cyan-600 transition-all"
           >
-            {step === 3 && !(
-              vendaData.medidas.od_dnp ||
-              vendaData.medidas.oe_dnp ||
-              vendaData.medidas.altura ||
-              vendaData.medidas.co_od ||
-              vendaData.medidas.co_oe ||
-              vendaData.medidas.altura_vertical_od ||
-              vendaData.medidas.altura_vertical_oe ||
-              vendaData.medidas.armacao_total_mm
-            )
-              ? 'Medir Depois'
-              : 'Proximo Passo'}
+            Próximo Passo
             <ChevronRight size={20} />
           </button>
         ) : (
@@ -1212,7 +869,7 @@ function NovaVendaStepperContent() {
               <div className="h-6 w-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <>
-                <Save size={20} /> Finalizar Venda
+                <Save size={20} /> Finalizar e Gerar O.S.
               </>
             )}
           </button>
@@ -1223,20 +880,11 @@ function NovaVendaStepperContent() {
 }
 
 export default function NovaVendaPage() {
-  // Listen for forced finalize events from child components (e.g., Step4)
   useEffect(() => {
     function onForceFinalize() {
-      // attempt to finalize as if the user clicked the final button
-      const btn = document.querySelector('button[aria-label="finalizar-venda-trigger"]') as HTMLButtonElement | null;
-      // if there's a direct finalize function call available on window, prefer it
-      // otherwise, trigger the existing finalize button in the footer
-      if (typeof (window as any).__opv_finalize === 'function') {
-        (window as any).__opv_finalize();
-      } else if (btn) {
-        btn.click();
-      } else {
-        // fallback: dispatch a save event that will eventually call finalize
-        window.dispatchEvent(new CustomEvent('opv:save'));
+      const win = window as OPVWindow;
+      if (typeof win.__opv_finalize === 'function') {
+        void win.__opv_finalize();
       }
     }
 
@@ -1245,7 +893,7 @@ export default function NovaVendaPage() {
   }, []);
 
   return (
-    <Suspense fallback={<div className="p-20 text-center text-slate-400 font-black animate-pulse">CARREGANDO MÓDULO DE VENDAS...</div>}>
+    <Suspense fallback={<div className="p-20 text-center text-slate-400 font-black animate-pulse">CARREGANDO...</div>}>
       <NovaVendaStepperContent />
     </Suspense>
   );

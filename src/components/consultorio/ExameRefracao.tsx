@@ -14,7 +14,7 @@ const OPCOES_TIPOS_LENTE = ["Visão Simples", "Progressivas"];
 
 const OPCOES_TRATAMENTOS = [
   { label: "Anti Reflexo", key: "tratamentoAntiReflexo" },
-  { label: "Fotossensível", key: "tratamentoFotossivel" },
+  { label: "Fotossensível", key: "tratamentoFotossensivel" },
 ];
 
 const OPCOES_RETORNO = ["6 meses", "1 ano", "Outro"];
@@ -36,7 +36,7 @@ export type RefracaoValue = {
   presbiopia?: boolean;
   tipoLente?: string | null;
   tratamentoAntiReflexo?: boolean;
-  tratamentoFotossivel?: boolean;
+  tratamentoFotossensivel?: boolean;
   retorno?: string | null;
 };
 

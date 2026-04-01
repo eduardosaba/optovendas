@@ -17,7 +17,9 @@ import {
   MessageCircle,
   Search,
   Printer,
+  X,
 } from "lucide-react";
+import { NumericFormat } from 'react-number-format';
 
 type ParcelaRow = {
   id: string;
@@ -58,6 +60,14 @@ export default function ReceberPage() {
   const [contas, setContas] = useState<any[]>([]);
   const [contaSelecionada, setContaSelecionada] = useState("");
 
+  // Modal de baixa
+  const [showModalBaixa, setShowModalBaixa] = useState(false);
+  const [parcelaSelecionada, setParcelaSelecionada] = useState<any>(null);
+  const [valorRecebido, setValorRecebido] = useState(0);
+  const [metodoRecebimento, setMetodoRecebimento] = useState("dinheiro");
+  const [observacao, setObservacao] = useState("");
+  const [valorTaxa, setValorTaxa] = useState(0);
+
   // Recibo modal
   const [showModalRecibo, setShowModalRecibo] = useState(false);
   const [dadosRecibo, setDadosRecibo] = useState<any>(null);
@@ -77,7 +87,7 @@ export default function ReceberPage() {
         if (!cli.error) setClinicaData(cli.data ?? null);
 
         await buscarDados(ctx.clinicaId);
-      } catch (err) {
+      } catch {
         toast.error("Erro ao carregar dados.");
       } finally {
         setLoading(false);
@@ -92,7 +102,8 @@ export default function ReceberPage() {
       .select(`
         *,
         payments (
-          vendas (localidade_venda),
+          metodo,
+          vendas (id, localidade_venda, ordens_servico (numero_os)),
           pacientes (nome_completo, cidade_atendimento, celular)
         )
       `)
@@ -124,44 +135,87 @@ export default function ReceberPage() {
     return Array.from(new Set(cidades));
   }, [rows]);
 
-  async function confirmarPagamento(row: ParcelaRow) {
+  // Abre modal para confirmar recebimento (substitui baixa automática)
+  function prepararBaixa(parcela: ParcelaRow) {
+    setParcelaSelecionada(parcela);
+    setValorRecebido(parcela.valor_parcela || 0);
+    setMetodoRecebimento('dinheiro');
+    setObservacao('');
+    setShowModalBaixa(true);
+  }
+
+  async function confirmarPagamento() {
     if (!contaSelecionada) return toast.info("Selecione uma conta.");
-    setBaixandoId(row.id);
+    if (!parcelaSelecionada) return;
+    if (valorRecebido <= 0) return toast.info("Informe um valor válido.");
+
+    setBaixandoId(parcelaSelecionada.id);
+    const hoje = new Date().toISOString().slice(0, 10);
+    const paciente = Array.isArray(parcelaSelecionada.payments?.pacientes) ? parcelaSelecionada.payments.pacientes[0] : parcelaSelecionada.payments?.pacientes;
+    const vendasRel = Array.isArray(parcelaSelecionada.payments?.vendas) ? parcelaSelecionada.payments.vendas[0] : parcelaSelecionada.payments?.vendas;
+    const osNum = vendasRel?.ordens_servico?.[0]?.numero_os || '';
 
     try {
-      const hoje = new Date().toISOString().slice(0, 10);
-      const paciente = Array.isArray(row.payments?.pacientes) ? row.payments.pacientes[0] : row.payments?.pacientes;
-      const vendasRel = Array.isArray(row.payments?.vendas) ? row.payments.vendas[0] : row.payments?.vendas;
-      const localidade = vendasRel?.localidade_venda || paciente?.cidade_atendimento;
+      const valorOriginal = Number(parcelaSelecionada.valor_parcela || 0);
+      const diferenca = valorOriginal - Number(valorRecebido || 0);
 
-      // 1. Atualiza a parcela
-      await supabase.from("installments").update({ status: "pago", pago_em: hoje, valor_pago: row.valor_parcela }).eq("id", row.id);
+      // 1. Atualiza a parcela atual como paga com o valor recebido
+      await supabase.from('installments').update({
+        status: 'pago',
+        pago_em: hoje,
+        valor_pago: valorRecebido,
+        metodo_pagamento: metodoRecebimento,
+      }).eq('id', parcelaSelecionada.id);
 
-      // 2. Alimenta fluxo_caixa com localidade
-      await supabase.from("fluxo_caixa").insert({
+      // 2. Se for baixa parcial, cria parcela residual
+      if (diferenca > 0.01) {
+        await supabase.from('installments').insert({
+          clinica_id: clinicaId,
+          payment_id: (parcelaSelecionada as any).payment_id,
+          numero_parcela: parcelaSelecionada.numero_parcela,
+          valor_parcela: diferenca,
+          vencimento: parcelaSelecionada.vencimento,
+          status: 'pendente',
+          descricao_interna: `Saldo devedor da parcela original de R$ ${valorOriginal}`,
+        });
+      }
+
+      // 3. Calcula taxa e valor líquido (se for cartão a taxa pode ser informada)
+      const eCartao = String(metodoRecebimento || '').toLowerCase().includes('cart');
+      const taxa = eCartao ? Number(valorTaxa || 0) : 0;
+      const valorLiquido = Math.max(0, Number(valorRecebido || 0) - taxa);
+
+      // 4. Insere no fluxo de caixa: registra bruto, taxa e líquido (líquido é que entra na conta)
+      await supabase.from('fluxo_caixa').insert({
         clinica_id: clinicaId,
         conta_id: contaSelecionada,
-        tipo: "entrada",
-        valor: row.valor_parcela,
-        descricao: `Receb. ${row.numero_parcela}ª Parcela - ${paciente?.nome_completo}`,
-        origem: "crediario",
-        localidade: localidade,
+        tipo: 'entrada',
+        valor: valorLiquido,
+        valor_bruto: Number(valorRecebido || 0),
+        taxa_cartao: taxa,
+        descricao: `Receb. Parc ${parcelaSelecionada.numero_parcela} - ${paciente?.nome_completo}${osNum ? ` • OS ${osNum}` : ''}`,
+        origem: 'crediario',
+        metodo_pagamento: metodoRecebimento,
+        localidade: vendasRel?.localidade_venda || paciente?.cidade_atendimento,
+        observacao: observacao,
+        status_conciliado: false,
         data_movimento: hoje,
       });
 
-      // 3. Atualiza saldo da conta
+      // 5. Atualiza saldo da conta com o valor líquido
       const conta = contas.find((c) => c.id === contaSelecionada);
-      const novoSaldo = (conta?.saldo_atual || 0) + row.valor_parcela;
-      await supabase.from("conta_corrente").update({ saldo_atual: novoSaldo }).eq("id", contaSelecionada);
+      const novoSaldo = (conta?.saldo_atual || 0) + Number(valorLiquido || 0);
+      await supabase.from('conta_corrente').update({ saldo_atual: novoSaldo }).eq('id', contaSelecionada);
 
       // prepara recibo
-      setDadosRecibo({ parcela: row, cliente: paciente, clinica: clinicaData });
+      setDadosRecibo({ parcela: { ...parcelaSelecionada, valor_parcela: valorRecebido }, cliente: paciente, clinica: clinicaData });
       setShowModalRecibo(true);
-
-      setRows((prev) => prev.filter((p) => p.id !== row.id));
-      toast.success("Baixa realizada com sucesso!");
-    } catch (err) {
-      toast.error("Erro ao processar pagamento.");
+      setShowModalBaixa(false);
+      setRows((prev) => prev.filter((p) => p.id !== parcelaSelecionada.id));
+      toast.success('Baixa realizada!');
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao processar.');
     } finally {
       setBaixandoId(null);
     }
@@ -255,7 +309,7 @@ export default function ReceberPage() {
                 <div className="flex items-center gap-4 w-full md:w-auto">
                   <div className="text-right mr-4"><p className={`text-xl font-black ${atrasada ? 'text-rose-600' : 'text-slate-900'}`}>{p.valor_parcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
 
-                  <button onClick={() => confirmarPagamento(p)} disabled={!!baixandoId} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all disabled:opacity-50">
+                  <button onClick={() => prepararBaixa(p)} disabled={!!baixandoId} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all disabled:opacity-50">
                     {baixandoId === p.id ? <Loader2 className="animate-spin" size={16} /> : <CheckCircle2 size={16} />} Baixar
                   </button>
                 </div>
@@ -265,7 +319,106 @@ export default function ReceberPage() {
         )}
       </div>
 
-      {/* Modal de Recibo */}
+        {/* Modal de confirmação de baixa */}
+        {showModalBaixa && parcelaSelecionada && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md">
+            <div className="w-full max-w-lg rounded-[40px] bg-white p-8 shadow-2xl animate-in zoom-in-95">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black text-slate-900">Confirmar Recebimento</h3>
+                <button onClick={() => setShowModalBaixa(false)} className="p-2 bg-slate-100 rounded-full text-slate-500"><X size={20} /></button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Valor Pago pelo Cliente</label>
+                  <NumericFormat
+                    value={valorRecebido}
+                    onValueChange={(v) => setValorRecebido(v.floatValue || 0)}
+                    prefix="R$ "
+                    className="w-full bg-transparent border-none text-4xl font-black text-slate-800 focus:ring-0"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Forma</label>
+                    <select
+                      value={metodoRecebimento}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setMetodoRecebimento(v);
+                        // se não for cartão, zera a taxa
+                        if (!String(v).toLowerCase().includes('cart')) setValorTaxa(0);
+                      }}
+                      className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500"
+                    >
+                      <option value="dinheiro">Dinheiro 💵</option>
+                      <option value="pix">PIX ⚡</option>
+                      <option value="cartao_debito">Débito 💳</option>
+                      <option value="cartao_credito">Crédito 💳</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Destino (Conta)</label>
+                    <select
+                      value={contaSelecionada}
+                      onChange={(e) => setContaSelecionada(e.target.value)}
+                      className="w-full p-4 bg-slate-900 text-white border-none rounded-2xl font-bold text-xs uppercase"
+                    >
+                      {contas.map((c) => (
+                        <option key={c.id} value={c.id}>{c.descricao}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Observação</label>
+                  <textarea
+                    value={observacao}
+                    onChange={(e) => setObservacao(e.target.value)}
+                    placeholder="Ex: Pagamento feito pelo filho..."
+                    className="w-full p-4 bg-slate-50 border-none rounded-2xl text-sm font-medium"
+                  />
+                </div>
+
+                {/* Taxa / Valor Líquido (apenas para cartão) */}
+                {String(metodoRecebimento || '').toLowerCase().includes('cart') && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Taxa/Desconto (R$)</label>
+                      <NumericFormat
+                        value={valorTaxa}
+                        onValueChange={(v) => setValorTaxa(v.floatValue || 0)}
+                        prefix="R$ "
+                        className="w-full p-4 bg-rose-50 border-none rounded-2xl font-bold text-rose-700 focus:ring-2 focus:ring-rose-500"
+                      />
+                      <p className="text-[9px] font-bold text-rose-400 mt-1">Informe o valor descontado pela operadora.</p>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Valor Líquido (Banco)</label>
+                      <div className="w-full p-4 bg-emerald-50 rounded-2xl font-black text-emerald-700 text-lg">
+                        {(Math.max(0, valorRecebido - (String(metodoRecebimento || '').toLowerCase().includes('cart') ? valorTaxa : 0))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  disabled={baixandoId === parcelaSelecionada.id}
+                  onClick={() => void confirmarPagamento()}
+                  className="w-full py-6 bg-emerald-600 text-white rounded-[28px] font-black text-lg shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3"
+                >
+                  {baixandoId ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+                  Confirmar e Gerar Recibo
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de Recibo */}
       {showModalRecibo && dadosRecibo && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[40px] bg-white p-8 shadow-2xl text-center">

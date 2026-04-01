@@ -5,13 +5,13 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
 const styles = StyleSheet.create({
   page: { padding: 30, fontSize: 10, fontFamily: "Helvetica" },
-  header: { borderBottom: 1, borderColor: "#EEE", paddingBottom: 10, marginBottom: 20, flexDirection: 'row', justifyContent: 'space-between' },
+  header: { borderBottomWidth: 1, borderColor: "#EEE", paddingBottom: 10, marginBottom: 20, flexDirection: 'row', justifyContent: 'space-between' },
   title: { fontSize: 18, fontWeight: "bold", color: "#059669" },
-  box: { border: 1, borderColor: "#EEE", padding: 15, borderRadius: 8, backgroundColor: "#F9FAFB" },
+  box: { borderWidth: 1, borderColor: "#EEE", padding: 15, borderRadius: 8, backgroundColor: "#F9FAFB" },
   row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
   label: { fontSize: 8, color: "#6B7280", textTransform: "uppercase", fontWeight: "bold" },
   value: { fontSize: 12, fontWeight: "bold", color: "#111827" },
-  footer: { marginTop: 40, textAlign: "center", borderTop: 1, borderColor: "#EEE", paddingTop: 10, fontSize: 8, color: "#9CA3AF" }
+  footer: { marginTop: 40, textAlign: "center", borderTopWidth: 1, borderColor: "#EEE", paddingTop: 10, fontSize: 8, color: "#9CA3AF" }
 });
 
 export default function ReciboPagamentoPdf({ parcela, cliente, clinica }: any) {
@@ -54,7 +54,7 @@ export default function ReciboPagamentoPdf({ parcela, cliente, clinica }: any) {
         </View>
 
         <View style={{ marginTop: 60, alignItems: 'center' }}>
-          <View style={{ borderTop: 1, width: 200, paddingTop: 5 }}>
+          <View style={{ borderTopWidth: 1, width: 200, paddingTop: 5 }}>
             <Text style={{ fontSize: 8, textAlign: 'center' }}>Assinatura do Responsável</Text>
             <Text style={{ fontSize: 7, textAlign: 'center', color: '#999' }}>{clinica?.nome_fantasia}</Text>
           </View>

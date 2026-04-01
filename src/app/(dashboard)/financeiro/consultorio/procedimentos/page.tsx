@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 type Procedimento = {
   id: string;
@@ -34,6 +35,8 @@ export default function ProcedimentosConsultorioPage() {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>({ nome: "", valorBase: "", duracaoEstimada: "" });
   const [clinicaId, setClinicaId] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<Procedimento | null>(null);
 
   async function carregar() {
     setLoading(true);
@@ -128,7 +131,15 @@ export default function ProcedimentosConsultorioPage() {
   }
 
   async function remover(item: Procedimento) {
-    if (!confirm(`Deseja remover o procedimento ${item.nome}?`)) return;
+    setConfirmTarget(item);
+    setConfirmOpen(true);
+  }
+
+  async function removerConfirmado() {
+    const item = confirmTarget;
+    setConfirmOpen(false);
+    setConfirmTarget(null);
+    if (!item) return;
 
     setSalvando(true);
     try {
@@ -269,6 +280,7 @@ export default function ProcedimentosConsultorioPage() {
           </table>
         )}
       </section>
+      <ConfirmDialog open={confirmOpen} title="Remover procedimento" message={`Deseja remover o procedimento ${confirmTarget?.nome}?`} onConfirm={removerConfirmado} onCancel={() => setConfirmOpen(false)} />
     </div>
   );
 }

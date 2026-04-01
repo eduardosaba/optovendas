@@ -10,6 +10,7 @@ import {
   ChevronRight,
   History,
   MapPin,
+  FileText,
   Receipt,
   Stethoscope,
   Target,
@@ -59,23 +60,34 @@ export default function FinanceiroPage() {
         const hoje = new Date();
         // Formata sem milissegundos para compatibilidade com PostgREST
         const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('.')[0] + 'Z';
+        async function countSince(tableName: string) {
+          // tenta `criado_em` e faz fallback para `created_at` caso a coluna não exista no esquema remoto
+          // build a fresh query for each attempt to avoid stacking filters
+          let res = await supabase.from(tableName).select('id', { count: 'exact' }).eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes);
+          if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
+            // rebuild the query and try the standard `created_at` column
+            res = await supabase.from(tableName).select('id', { count: 'exact' }).eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes);
+          }
+          return res;
+        }
 
-        const [instRes, pagarRes, vendasRes, consultasRes, fluxoRes] = await Promise.all([
+        const [instRes, pagarRes, fluxoRes] = await Promise.all([
           supabase.from("installments").select("*").eq("clinica_id", ctx.clinicaId),
           supabase.from("contas_a_pagar").select("*").eq("clinica_id", ctx.clinicaId),
-          // Algumas instalações usam `criado_em` em vez de `created_at` — preferir criado_em
-          supabase.from("vendas").select("id", { count: "exact" }).eq("clinica_id", ctx.clinicaId).gte("criado_em", primeiroDiaMes),
-          supabase.from("consultorio_receitas").select("id", { count: "exact" }).eq("clinica_id", ctx.clinicaId).gte("criado_em", primeiroDiaMes),
-          supabase.from("fluxo_caixa").select("valor, tipo, localidade").eq("clinica_id", ctx.clinicaId)
+          supabase.from("fluxo_caixa").select("valor, tipo, localidade").eq("clinica_id", ctx.clinicaId),
         ]);
+
+        // vendas e consultas (consultorio_receitas) precisam de contagem com filtro de data; use fallback se necessário
+        const vendasRes = await countSince('vendas');
+        const consultasRes = await countSince('consultorio_receitas');
 
         setInstallments(instRes.data || []);
         setContasPagar(pagarRes.data || []);
-        setVendasCount(vendasRes.count || 0);
-        setConsultasCount(consultasRes.count || 0);
+        setVendasCount(vendasRes?.count || 0);
+        setConsultasCount(consultasRes?.count || 0);
         setFluxoCaixa(fluxoRes.data || []);
 
-      } catch (err) {
+      } catch {
         toast.error("Erro ao carregar inteligência financeira.");
       } finally {
         setLoading(false);
@@ -179,6 +191,7 @@ export default function FinanceiroPage() {
           trend={loading ? "Carregando" : `${indicadores.qtdReceberMes} parcelas no mes`}
           icon={<ArrowUpRight size={20} className="text-emerald-500" />}
           color="emerald"
+          empty={!loading && indicadores.aReceberMes === 0 && installments.length === 0}
         />
         <StatCard
           label="Contas a Pagar"
@@ -186,6 +199,7 @@ export default function FinanceiroPage() {
           trend={loading ? "Carregando" : `${indicadores.qtdContasPagar} lancamentos pendentes`}
           icon={<ArrowDownRight size={20} className="text-rose-500" />}
           color="rose"
+          empty={!loading && indicadores.contasPagar === 0 && contasPagar.length === 0}
         />
         <StatCard
           label="Inadimplencia"
@@ -193,6 +207,7 @@ export default function FinanceiroPage() {
           trend={loading ? "Carregando" : `${indicadores.qtdInadimplentes} parcelas em atraso`}
           icon={<AlertCircle size={20} className="text-amber-500" />}
           color="amber"
+          empty={!loading && indicadores.inadimplencia === 0 && installments.length === 0}
         />
       </div>
 
@@ -208,27 +223,28 @@ export default function FinanceiroPage() {
               icon={<BarChart3 size={24} />}
               colorClass="bg-blue-600"
             />
-
+            
             <MenuCard
-              href="/financeiro/receber"
-              title="Baixa Rapida"
-              desc="Receber parcelas e emitir recibos na hora."
+              href="/financeiro/contas"
+              title="Conta Corrente"
+              desc="Gerencie suas contas correntes e saldos."
               icon={<Wallet size={24} />}
               colorClass="bg-emerald-600"
             />
 
             <MenuCard
-              href="/financeiro/parcelas"
-              title="Gestao de Parcelas"
-              desc="Lista completa de crediario e historico de pagamentos."
+              href="/financeiro/receber"
+              title="Gestão de Parcelas"
+              desc="Receber parcelas e emitir recibos na hora."
               icon={<Receipt size={24} />}
-              colorClass="bg-slate-800"
+              colorClass="bg-emerald-600"
             />
+
 
             <MenuCard
               href="/financeiro/inadimplencia"
-              title="Inadimplencia por Rota"
-              desc="Filtrar devedores por cidade e organizar cobrancas."
+              title="Inadimplência por Rota"
+              desc="Filtrar devedores por cidade e organizar cobranças."
               icon={<MapPin size={24} />}
               colorClass="bg-rose-600"
             />
@@ -236,15 +252,23 @@ export default function FinanceiroPage() {
             <MenuCard
               href="/financeiro/fluxo"
               title="Fluxo de Caixa"
-              desc="Linha do tempo de entradas e saidas com saldo consolidado."
+              desc="Linha do tempo de entradas e saídas com saldo consolidado."
               icon={<History size={24} />}
               colorClass="bg-emerald-700"
             />
 
             <MenuCard
+              href="/otica/relatorios/fechamento"
+              title="Fechamento de Caixa"
+              desc="Consolide recebimentos do dia por rota e método de pagamento."
+              icon={<FileText size={24} />}
+              colorClass="bg-cyan-600"
+            />
+
+            <MenuCard
               href="/financeiro/lucratividade"
               title="Mapa da Mina"
-              desc="Resumo mensal por cidade com ranking de lucro liquido."
+              desc="Resumo mensal por cidade com ranking de lucro líquido."
               icon={<Target size={24} />}
               colorClass="bg-emerald-800"
             />
@@ -259,8 +283,8 @@ export default function FinanceiroPage() {
 
             <MenuCard
               href="/financeiro/consultorio"
-              title="Financeiro Consultorio"
-              desc="Ticket medio de consulta e conversao Exame para Otica."
+              title="Financeiro Consultório"
+              desc="Ticket médio de consulta e conversão Exame para Ótica."
               icon={<Stethoscope size={24} />}
               colorClass="bg-green-500"
             />
@@ -307,12 +331,29 @@ function brl(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function StatCard({ label, value, trend, icon, color }: any) {
+function StatCard({ label, value, trend, icon, color, empty = false }: any) {
   const colors: any = {
     emerald: "bg-emerald-50 text-emerald-600",
     rose: "bg-rose-50 text-rose-600",
     amber: "bg-amber-50 text-amber-600",
   };
+  if (empty) {
+    return (
+      <div className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{label}</p>
+        <div className="flex items-center justify-between">
+          <div className="text-sm italic text-slate-400">Sem dados no período</div>
+          <div className="flex items-center gap-2">
+            <div className={`p-1.5 rounded-lg ${colors[color]}`}>{icon}</div>
+          </div>
+        </div>
+        <div className="mt-4">
+          <span className="text-[10px] font-bold text-slate-400 uppercase">{trend}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all">
       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>

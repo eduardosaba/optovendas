@@ -48,7 +48,7 @@ export default function ConciliacaoPage() {
 
       if (error) throw error;
       setLancamentos(data || []);
-    } catch (err) {
+    } catch {
       toast.error("Erro ao carregar pendências de cartão.");
     } finally {
       setLoading(false);
@@ -82,7 +82,7 @@ export default function ConciliacaoPage() {
       toast.success(`Conciliado! Taxa de ${brl(taxa)} registrada.`);
       setItemSelecionado(null);
       carregarPendencias();
-    } catch (err) {
+    } catch {
       toast.error("Erro ao processar conciliação.");
     }
   }

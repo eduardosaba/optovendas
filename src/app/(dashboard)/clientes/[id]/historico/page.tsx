@@ -40,7 +40,7 @@ export default function ClientesHistoricoPage() {
           .from("vendas")
           .select("*, ordens_servico(*), receitas_optometricas(*)")
           .eq("paciente_id", id)
-          .order("created_at", { ascending: false });
+          .order("criado_em", { ascending: false });
         setVendas(v || []);
 
         // 4. Financeiro (Parcelas do Crediário) - incluir dados de venda/paciente/metodo
@@ -59,7 +59,7 @@ export default function ClientesHistoricoPage() {
 
         setParcelas(inst || []);
 
-      } catch (e) {
+      } catch {
         toast.error("Erro ao carregar histórico completo.");
       } finally {
         setLoading(false);

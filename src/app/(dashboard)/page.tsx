@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useConfig } from "@/context/ConfigContext";
 import { useEffect, useState } from "react";
+import { useRouter } from 'next/navigation';
 import { resolveClinicaContext } from "@/lib/clinica";
 import { supabase } from "@/lib/supabase";
 
@@ -66,8 +67,31 @@ function PatientRow({ name, time, status }: PatientRowProps) {
 
 export default function DashboardPrincipalPage() {
   const { nomeSistema } = useConfig();
+  const router = useRouter();
   const [kpis, setKpis] = useState({ atendimentosHoje: "-", pacientesFila: "-" });
   const [externalKpis, setExternalKpis] = useState({ cidadesAtendidas: "-", pacientesTotais: "-", porCidade: {} as Record<string, number> });
+
+  // se usuário master, redireciona para /admin
+  useEffect(() => {
+    let mounted = true;
+    async function checkMaster() {
+      try {
+        const sessionRes: any = await supabase.auth.getUser();
+        const user = sessionRes?.data?.user;
+        const userId = user?.id;
+        if (!userId) return;
+        const perfilRes = await supabase.from('perfis').select('funcao').eq('id', userId).maybeSingle();
+        const funcao = (perfilRes?.data?.funcao || '').toString().toLowerCase();
+        if (mounted && funcao === 'master') {
+          router.push('/admin');
+        }
+      } catch {
+        // ignore failures — mantém dashboard como fallback
+      }
+    }
+    void checkMaster();
+    return () => { mounted = false; };
+  }, [router]);
 
   useEffect(() => {
     let active = true;

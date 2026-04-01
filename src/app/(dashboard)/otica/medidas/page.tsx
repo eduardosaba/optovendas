@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ClipboardCheck, Ruler } from "lucide-react";
 import { resolveClinicaContext } from "@/lib/clinica";
-import Step3Medidas from "../vendas/nova/steps/Step3Medidas";
+import dynamic from 'next/dynamic';
+const Step3Medidas = dynamic(() => import("../vendas/nova/steps/Step3Medidas"), {
+  ssr: false,
+  loading: () => <div className="p-10 text-center font-bold">Carregando Pupilômetro...</div>,
+});
 import type { VendaData } from "../vendas/nova/steps/types";
 
 const BASE_MEDIDAS: VendaData = {

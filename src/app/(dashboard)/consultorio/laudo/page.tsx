@@ -28,7 +28,7 @@ export default function LaudoPage() {
         
         if (error) throw error;
         if (active) setPacientes((data as any[]) || []);
-      } catch (err) {
+      } catch {
         toast.error("Erro ao carregar lista de pacientes.");
         if (active) setPacientes([]);
       } finally {

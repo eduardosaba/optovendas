@@ -64,7 +64,7 @@ export default function BotaoWhatsAppVenda({ venda, cliente, parcelas, clinica }
       const encoded = encodeURIComponent(texto);
       window.open(`https://wa.me/55${telefone}?text=${encoded}`, "_blank");
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error("Falha ao gerar/enviar WhatsApp:", err);
       alert("Falha ao enviar WhatsApp. Verifique o console para mais detalhes.");
     } finally {

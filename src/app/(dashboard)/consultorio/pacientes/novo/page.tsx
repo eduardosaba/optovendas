@@ -230,7 +230,7 @@ export default function CadastroPacientePage() {
         setFotoUrl(null);
         setRemoverFoto(false);
       }
-    } catch (err) {
+    } catch {
       toast.error("Ocorreu um erro inesperado.");
     } finally {
       setLoading(false);

@@ -78,10 +78,10 @@ export default function LoginPage() {
 
       // Lógica de Redirecionamento: para evitar loop causado por cookies
       // de sessão ainda não refletidos no servidor, navegamos para uma
-      // rota pública segura (`/vendas`) por padrão. Perfis `master` vão
+      // rota pública segura (`/dashboard`) por padrão. Perfis `master` vão
       // para `/admin`.
       const userId = data.user?.id;
-      let destino = "/vendas";
+      let destino = "/dashboard";
 
       if (userId) {
         try {

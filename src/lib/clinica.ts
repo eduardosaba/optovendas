@@ -56,13 +56,13 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
   // Fallback: se `perfis` não possui clinica_id, tentar ler da tabela legada `profiles` (user_id)
   if (!perfil?.clinica_id && !metadataClinicaId) {
     const profilesRes = await supabase
-      .from("profiles")
+      .from("perfis")
       .select("clinica_id, otica_id")
-      .eq("user_id", userId)
+      .eq("id", userId)
       .maybeSingle();
 
     if (profilesRes.error) {
-      throw new Error(`Falha ao ler fallback de clinica em profiles: ${profilesRes.error.message}`);
+      throw new Error(`Falha ao ler fallback de clinica em perfis: ${profilesRes.error.message}`);
     }
 
     profile = (profilesRes.data ?? null) as { clinica_id?: string } | null;

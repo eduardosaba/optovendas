@@ -41,7 +41,7 @@ export default function AtestadoPage() {
           .eq("clinica_id", ctx.clinicaId)
           .order("nome_completo");
         setPacientes(data || []);
-      } catch (err) {
+      } catch {
         toast.error("Erro ao carregar pacientes.");
       } finally {
         setLoading(false);

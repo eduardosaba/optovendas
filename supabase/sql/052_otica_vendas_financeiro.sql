@@ -1,5 +1,5 @@
 -- Migration: adicionar campos financeiros para negociação de vendas (entrada, forma, tipo e assinatura)
-ALTER TABLE public.otica_vendas
+ALTER TABLE public.vendas
   ADD COLUMN IF NOT EXISTS forma_entrada text,
   ADD COLUMN IF NOT EXISTS valor_entrada numeric DEFAULT 0,
   ADD COLUMN IF NOT EXISTS tipo_fechamento text,

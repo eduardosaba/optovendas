@@ -34,18 +34,18 @@ export async function processVendasOffline() {
         // Garantir compatibilidade: se cliente enviou status_financeiro, propagar para status_pagamento
         vendaFinal.status_pagamento = vendaFinal.status_pagamento ?? vendaFinal.status_financeiro ?? null;
 
-        const insertRes = await supabase.from("otica_vendas").insert(vendaFinal);
+        const insertRes = await supabase.from("vendas").insert(vendaFinal);
         if (!insertRes.error) {
           await db.vendas_offline.delete(item.id!);
         }
       } catch (err) {
         // se falhar, continuar com o próximo
-        // eslint-disable-next-line no-console
+         
         console.error("processVendasOffline: erro ao processar item", err);
       }
     }
   } catch (e) {
-    // eslint-disable-next-line no-console
+     
     console.error("processVendasOffline: falha geral", e);
   }
 }

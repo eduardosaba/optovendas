@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useContext } from "react";
 import type { ChangeEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, Minus, MousePointer2, Plus, RefreshCw, Ruler, Target } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/ToastProvider";
+import { FocusContext } from "@/context/FocusContext";
 import type { VendaData } from "./types";
 
 type Props = {
   data: VendaData;
   onChange: (next: VendaData) => void;
   clinicaId?: string;
+  onBack?: () => void;
 };
 
 type MarkerId =
@@ -112,6 +115,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
 
+  const toast = useToast();
+
   const [image, setImage] = useState<string | null>(data.pupilometroFoto || null);
   const [imageReady, setImageReady] = useState(false);
   const [mmPorPixel, setMmPorPixel] = useState(0);
@@ -172,6 +177,158 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [showDNP, setShowDNP] = useState(true);
   const [showAltura, setShowAltura] = useState(true);
   const [showPonte, setShowPonte] = useState(true);
+  const [brilho, setBrilho] = useState(100);
+  const [contraste, setContraste] = useState(100);
+  const [selecionarRegiao, setSelecionarRegiao] = useState(false);
+  const [regionRect, setRegionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const regionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [regionDrawing, setRegionDrawing] = useState(false);
+  // Anotações / Laudo (configurações do menu lateral)
+  const [fontSize, setFontSize] = useState(20);
+  const [lineWidth, setLineWidth] = useState(2);
+  const [textoCustom, setTextoCustom] = useState("");
+  const [showLabelsNoCanvas, setShowLabelsNoCanvas] = useState(true);
+  const [corLinhaDNP, setCorLinhaDNP] = useState("#00f2ff");
+  const [corLinhaAltura, setCorLinhaAltura] = useState("#10b981");
+  const [showDNPnoCanvas, setShowDNPnoCanvas] = useState(true);
+  const [showAlturanoCanvas, setShowAlturanoCanvas] = useState(true);
+  const [panMode, setPanMode] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ clientX: number; clientY: number; viewX: number; viewY: number } | null>(null);
+
+  // Preview thumbnail data URL
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+
+  async function generatePreview() {
+    try {
+      if (!image || !imageNatural.width || !sceneRect.width) {
+        setPreviewDataUrl(null);
+        return;
+      }
+
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.crossOrigin = 'anonymous';
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = image;
+      });
+
+      const naturalW = img.naturalWidth;
+      const naturalH = img.naturalHeight;
+      const scaleX = naturalW / sceneRect.width;
+      const scaleY = naturalH / sceneRect.height;
+
+      let cropX: number, cropY: number, cropW: number, cropH: number;
+      if (regionRect) {
+        cropX = regionRect.x * scaleX;
+        cropY = regionRect.y * scaleY;
+        cropW = regionRect.width * scaleX;
+        cropH = regionRect.height * scaleY;
+      } else {
+        const points = [
+          { x: pupilaDir.x * scaleX, y: pupilaDir.y * scaleY },
+          { x: pupilaEsq.x * scaleX, y: pupilaEsq.y * scaleY },
+          { x: bordaOD.x * scaleX, y: bordaOD.y * scaleY },
+          { x: bordaOE.x * scaleX, y: bordaOE.y * scaleY },
+        ];
+        const minX = Math.min(...points.map((p) => p.x));
+        const maxX = Math.max(...points.map((p) => p.x));
+        const minY = Math.min(...points.map((p) => p.y));
+        const maxY = Math.max(...points.map((p) => p.y));
+        const padding = (maxX - minX) * 0.5;
+        cropX = Math.max(0, minX - padding);
+        cropY = Math.max(0, minY - padding);
+        cropW = Math.min(naturalW - cropX, (maxX - minX) + padding * 2);
+        cropH = Math.min(naturalH - cropY, (maxY - minY) + padding * 2);
+      }
+
+      const w = 300;
+      const h = Math.max(1, Math.round((cropH / Math.max(1, cropW)) * w));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Draw base image with brightness/contrast
+      ctx.filter = `brightness(${brilho}%) contrast(${contraste}%)`;
+      ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+      ctx.filter = 'none';
+
+      const drawScale = canvas.width / cropW;
+      const toCanvas = (p: { x: number; y: number }) => ({
+        x: (p.x * scaleX - cropX) * drawScale,
+        y: (p.y * scaleY - cropY) * drawScale,
+      });
+
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1, lineWidth * (canvas.width / 1000));
+
+      const drawLine = (p1: any, p2: any, color: string, isDashed = false) => {
+        const c1 = toCanvas(p1);
+        const c2 = toCanvas(p2);
+        ctx.strokeStyle = color;
+        ctx.setLineDash(isDashed ? [8, 6] : []);
+        ctx.beginPath();
+        ctx.moveTo(c1.x, c1.y);
+        ctx.lineTo(c2.x, c2.y);
+        ctx.stroke();
+      };
+
+      if (showDNP && showDNPnoCanvas) {
+        drawLine(pupilaDir, { x: centroNasal, y: pupilaDir.y }, corLinhaDNP, true);
+        drawLine(pupilaEsq, { x: centroNasal, y: pupilaEsq.y }, corLinhaDNP, true);
+      }
+      if (showAltura && showAlturanoCanvas) {
+        drawLine(pupilaDir, bordaOD, corLinhaAltura);
+        drawLine(pupilaEsq, bordaOE, corLinhaAltura);
+      }
+
+      if (textoCustom) {
+        ctx.fillStyle = 'white';
+        ctx.font = `bold ${Math.max(10, fontSize * (canvas.width / 1000))}px Inter, sans-serif`;
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 6;
+        ctx.fillText(textoCustom, 10, 26);
+        ctx.shadowBlur = 0;
+      }
+
+      if (showLabelsNoCanvas) {
+        const boxW = Math.min(220, canvas.width - 24);
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(canvas.width - boxW - 12, canvas.height - 74, boxW, 64);
+        ctx.fillStyle = 'white';
+        ctx.font = `bold ${12 * (canvas.width / 300)}px Inter`;
+        ctx.fillText(`DP: ${dpBinocularMm || '--'} mm`, canvas.width - boxW, canvas.height - 46);
+        ctx.fillText(`ALT: ${alturaOdMm || '--'} / ${alturaOeMm || '--'} mm`, canvas.width - boxW, canvas.height - 24);
+      }
+
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      setPreviewDataUrl(dataUrl);
+      // cleanup canvas memory
+      try {
+        canvas.width = 0;
+        canvas.height = 0;
+      } catch (e) {
+        // noop
+      }
+    } catch (e) {
+      setPreviewDataUrl(null);
+    }
+  }
+
+  useEffect(() => {
+    // regenerate preview when visual params change
+    const deb = setTimeout(() => {
+      if (image) void generatePreview();
+    }, 160);
+    return () => clearTimeout(deb);
+  }, [image, pupilaDir.x, pupilaDir.y, pupilaEsq.x, pupilaEsq.y, bordaOD.x, bordaOD.y, bordaOE.x, bordaOE.y, avDA?.x, avDA?.y, avEA?.x, avEA?.y, pontoArmacaoA?.x, pontoArmacaoB?.x, showDNP, showAltura, showLabelsNoCanvas, corLinhaDNP, corLinhaAltura, lineWidth, fontSize, brilho, contraste, regionRect]);
+
+  // Global focus mode (from layout) combined with local full-screen flag
+  const focus = useContext(FocusContext);
+  const isFocusMode = !!focus?.isFocusMode || focoTelaCheia;
 
   useEffect(() => {
     setImage(data.pupilometroFoto || null);
@@ -269,7 +426,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
         const deltaW = Math.abs(nextWidth - prev.width);
         const deltaH = Math.abs(nextHeight - prev.height);
-        if (deltaW < 1 && deltaH < 1) return;
+        // evitar recalcular para pequenas variações (ruído de layout)
+        if (deltaW < 2 && deltaH < 2) return;
 
         const scaleX = nextWidth / prev.width;
         const scaleY = nextHeight / prev.height;
@@ -413,8 +571,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       },
     });
   }, [
-    image,
     imageReady,
+    // marcadores principais (só coordenadas que afetam cálculos)
     pupilaDir.x,
     pupilaDir.y,
     pupilaEsq.x,
@@ -422,37 +580,18 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     centroNasal,
     ponteEsqX,
     ponteDirX,
-    bordaOD.x,
     bordaOD.y,
-    bordaOE.x,
     bordaOE.y,
-    avDA?.x,
+    // pontos adicionais que afetam altura/CO
     avDA?.y,
-    avDB?.x,
-    avDB?.y,
-    avEA?.x,
     avEA?.y,
-    avEB?.x,
-    avEB?.y,
-    coODA?.x,
-    coODA?.y,
-    coODB?.x,
-    coODB?.y,
-    coOEA?.x,
-    coOEA?.y,
-    coOEB?.x,
-    coOEB?.y,
-    pontoArmacaoA?.x,
-    pontoArmacaoA?.y,
-    pontoArmacaoB?.x,
-    pontoArmacaoB?.y,
+    pontoArmacaoA,
+    pontoArmacaoB,
+    // configurações que alteram o resultado
     modo,
     ponteManual,
     showDNP,
     showAltura,
-    bloquearSemConferenciaPT,
-    onChange,
-    data,
   ]);
 
   // Upload annotated image (with markers) when measurements or image change.
@@ -469,160 +608,113 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       i.crossOrigin = 'anonymous';
     });
 
-    const cw = img.naturalWidth || imageNatural.width;
-    const ch = img.naturalHeight || imageNatural.height;
+    const naturalW = img.naturalWidth;
+    const naturalH = img.naturalHeight;
+    const scaleX = naturalW / sceneRect.width;
+    const scaleY = naturalH / sceneRect.height;
+
+    // LÓGICA DE RECORTE CORRIGIDA
+    let cropX: number, cropY: number, cropW: number, cropH: number;
+
+    if (regionRect) {
+      // Se o usuário marcou uma região, usamos ela exatamente (independente do zoom da tela)
+      cropX = regionRect.x * scaleX;
+      cropY = regionRect.y * scaleY;
+      cropW = regionRect.width * scaleX;
+      cropH = regionRect.height * scaleY;
+    } else {
+      // Caso contrário, pega os pontos técnicos com um respiro generoso (evita o zoom excessivo)
+      const points = [
+        { x: pupilaDir.x * scaleX, y: pupilaDir.y * scaleY },
+        { x: pupilaEsq.x * scaleX, y: pupilaEsq.y * scaleY },
+        { x: bordaOD.x * scaleX, y: bordaOD.y * scaleY },
+        { x: bordaOE.x * scaleX, y: bordaOE.y * scaleY },
+      ];
+      const minX = Math.min(...points.map(p => p.x));
+      const maxX = Math.max(...points.map(p => p.x));
+      const minY = Math.min(...points.map(p => p.y));
+      const maxY = Math.max(...points.map(p => p.y));
+
+      const padding = (maxX - minX) * 0.5; // Respiro de 50% para não ficar "colado"
+      cropX = Math.max(0, minX - padding);
+      cropY = Math.max(0, minY - padding);
+      cropW = Math.min(naturalW - cropX, (maxX - minX) + (padding * 2));
+      cropH = Math.min(naturalH - cropY, (maxY - minY) + (padding * 2));
+    }
 
     const canvas = document.createElement('canvas');
-    canvas.width = cw;
-    canvas.height = ch;
+    // Mantemos uma resolução alta para impressão (2000px de largura)
+    canvas.width = 2000;
+    canvas.height = Math.max(1, (cropH / Math.max(1, cropW)) * 2000);
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    // Draw original image as background
-    ctx.drawImage(img, 0, 0, cw, ch);
+    const drawScale = canvas.width / cropW;
+    const toCanvas = (p: { x: number, y: number }) => ({
+      x: (p.x * scaleX - cropX) * drawScale,
+      y: (p.y * scaleY - cropY) * drawScale
+    });
 
-    const scaleX = cw / Math.max(1, sceneRect.width);
-    const scaleY = ch / Math.max(1, sceneRect.height);
-    const avgScale = (scaleX + scaleY) / 2;
+    // Desenhar Imagem
+    ctx.filter = `brightness(${brilho}%) contrast(${contraste}%)`;
+    ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+    ctx.filter = 'none';
 
-    const toNatural = (p: MarkerPoint | null) => (p ? { x: p.x * scaleX, y: p.y * scaleY } : null);
+    // Configuração de Estilo baseada no Menu Lateral
+    ctx.lineWidth = lineWidth * (canvas.width / 1000); // Escala a espessura conforme o canvas
+    ctx.lineCap = 'round';
 
-    try {
-      ctx.lineWidth = Math.max(2, Math.round(2 * avgScale));
-      ctx.textBaseline = 'top';
-
-      const drawMarkerWithText = (p: MarkerPoint | null, label: string, color: string, value: string | number | undefined | null) => {
-        if (!p) return;
-        const nx = p.x * scaleX;
-        const ny = p.y * scaleY;
-
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
-
-        // cross
-        ctx.beginPath();
-        ctx.moveTo(nx - 15 * avgScale, ny);
-        ctx.lineTo(nx + 15 * avgScale, ny);
-        ctx.moveTo(nx, ny - 15 * avgScale);
-        ctx.lineTo(nx, ny + 15 * avgScale);
-        ctx.stroke();
-
-        // text background
-        const text = `${label}: ${value ?? ''}mm`;
-        const fontSize = Math.max(12, Math.round(14 * avgScale));
-        ctx.font = `bold ${fontSize}px sans-serif`;
-        const metrics = ctx.measureText(text);
-        const padding = 8 * (avgScale / 2);
-        const rectW = metrics.width + padding * 2;
-        const rectH = fontSize + padding;
-
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(nx + 10 * avgScale, ny - rectH - 6 * avgScale, rectW, rectH);
-
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(text, nx + 10 * avgScale + padding, ny - rectH - 6 * avgScale + padding / 2);
-      };
-
-      // Draw axis rulers crossing at each pupil center (high contrast)
-      const drawAxis = (p: MarkerPoint | null) => {
-        if (!p) return;
-        const cx = p.x * scaleX;
-        const cy = p.y * scaleY;
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-        ctx.lineWidth = Math.max(1, Math.round(1 * avgScale));
-        ctx.setLineDash([6 * avgScale, 4 * avgScale]);
-        // horizontal full width
-        ctx.beginPath();
-        ctx.moveTo(0, cy);
-        ctx.lineTo(cw, cy);
-        ctx.stroke();
-        // vertical full height
-        ctx.beginPath();
-        ctx.moveTo(cx, 0);
-        ctx.lineTo(cx, ch);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-      };
-
-      // Draw pupilas (DNP)
-      drawMarkerWithText(pupilaDir, 'DNP OD', '#06b6d4', data.medidas.od_dnp);
-      drawMarkerWithText(pupilaEsq, 'DNP OE', '#06b6d4', data.medidas.oe_dnp);
-
-      // Draw axis rulers for readability
-      drawAxis(pupilaDir);
-      drawAxis(pupilaEsq);
-
-      // CO / Altura (bordas)
-      drawMarkerWithText(bordaOD, 'CO OD', '#10b981', coOdMm);
-      drawMarkerWithText(bordaOE, 'CO OE', '#10b981', coOeMm);
-
-      // Alturas Verticais (AV)
-      if (avDA) drawMarkerWithText(avDA, 'AV OD', '#f472b6', alturaVerticalOdMm);
-      if (avEA) drawMarkerWithText(avEA, 'AV OE', '#a78bfa', alturaVerticalOeMm);
-
-      // Draw fucsia vertical lines (AV) spanning from top of lens to bottom (use av* as top, borda* as bottom)
-      const drawVerticalAV = (pTop: MarkerPoint | null, pBottom: MarkerPoint | null, color: string) => {
-        const top = pTop ? pTop.y * scaleY : null;
-        const bottom = pBottom ? pBottom.y * scaleY : null;
-        const x = pTop ? pTop.x * scaleX : pBottom ? pBottom.x * scaleX : null;
-        if (top == null || bottom == null || x == null) return;
-        ctx.save();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = Math.max(2, Math.round(2 * avgScale));
-        ctx.beginPath();
-        ctx.moveTo(x, top);
-        ctx.lineTo(x, bottom);
-        ctx.stroke();
-        ctx.restore();
-      };
-
-      drawVerticalAV(avDA, bordaOD, '#f472b6');
-      drawVerticalAV(avEA, bordaOE, '#f472b6');
-
-      // Ponte (scale reference) - dashed yellow
-      ctx.strokeStyle = '#f59e0b';
-      ctx.setLineDash([6 * avgScale, 4 * avgScale]);
-      ctx.lineWidth = Math.max(2, Math.round(2 * avgScale));
-      const ponteY = ((pupilaDir.y + pupilaEsq.y) / 2) * scaleY;
+    // Desenho das guias (DNP e Altura)
+    const drawLine = (p1: any, p2: any, color: string, isDashed = false) => {
+      const c1 = toCanvas(p1);
+      const c2 = toCanvas(p2);
+      ctx.strokeStyle = color;
+      ctx.setLineDash(isDashed ? [15, 10] : []);
       ctx.beginPath();
-      ctx.moveTo(ponteEsqX * scaleX, ponteY);
-      ctx.lineTo(ponteDirX * scaleX, ponteY);
+      ctx.moveTo(c1.x, c1.y);
+      ctx.lineTo(c2.x, c2.y);
       ctx.stroke();
-      ctx.setLineDash([]);
+    };
 
-      // Draw small labels for PT (yellow solid block)
-      try {
-        const ptText = `PT REF: ${ponteMedidaMm} mm`;
-        const fontSizePt = Math.max(12, Math.round(12 * avgScale));
-        ctx.font = `bold ${fontSizePt}px sans-serif`;
-        const metricsPt = ctx.measureText(ptText);
-        const px = ((ponteEsqX + ponteDirX) / 2) * scaleX + 10 * avgScale;
-        const py = ponteY - fontSizePt - 8 * avgScale;
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(px, py, metricsPt.width + 12 * avgScale, fontSizePt + 8 * avgScale);
-        ctx.fillStyle = '#fff';
-        ctx.fillText(ptText, px + 6 * avgScale, py + 4 * avgScale);
-      } catch (e) {
-        // ignore
-      }
-
-      // DP Binocular text near midpoint
-      ctx.fillStyle = '#001f3f';
-      const dpText = `${dpBinocularMm} mm`;
-      ctx.font = `bold ${Math.max(12, Math.round(14 * avgScale))}px sans-serif`;
-      const midX = ((pupilaDir.x + pupilaEsq.x) / 2) * scaleX;
-      const midY = ((pupilaDir.y + pupilaEsq.y) / 2) * scaleY;
-      ctx.fillText(dpText, midX + 10 * avgScale, midY);
-    } catch (err) {
-      // fail gracefully but continue
-      // eslint-disable-next-line no-console
-      console.error('error drawing annotations', err);
+    if (showDNP && showDNPnoCanvas) {
+      drawLine(pupilaDir, { x: centroNasal, y: pupilaDir.y }, corLinhaDNP, true);
+      drawLine(pupilaEsq, { x: centroNasal, y: pupilaEsq.y }, corLinhaDNP, true);
+    }
+    if (showAltura && showAlturanoCanvas) {
+      drawLine(pupilaDir, bordaOD, corLinhaAltura);
+      drawLine(pupilaEsq, bordaOE, corLinhaAltura);
     }
 
-    return await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9);
+    // Adicionar Título Customizado (Se houver)
+    if (textoCustom) {
+      ctx.fillStyle = "white";
+      ctx.font = `bold ${fontSize * (canvas.width / 1000)}px Inter, sans-serif`;
+      ctx.shadowColor = "black";
+      ctx.shadowBlur = 7;
+      ctx.fillText(textoCustom, 50, 80);
+      ctx.shadowBlur = 0;
+    }
+
+    // Legenda de Medidas no Canto (Se ativo)
+    if (showLabelsNoCanvas) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(canvas.width - 450, canvas.height - 150, 420, 120);
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 30px Inter';
+      ctx.fillText(`DNP: ${data.medidas.od_dnp} / ${data.medidas.oe_dnp} mm`, canvas.width - 430, canvas.height - 100);
+      ctx.fillText(`ALT: ${alturaVerticalOdMm} / ${alturaVerticalOeMm} mm`, canvas.width - 430, canvas.height - 50);
+    }
+
+    return new Promise((resolve) => {
+      canvas.toBlob((b) => {
+        try {
+          canvas.width = 0;
+          canvas.height = 0;
+        } catch (e) {
+          // noop
+        }
+        resolve(b);
+      }, 'image/jpeg', 0.95);
     });
   }
 
@@ -630,43 +722,99 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     if (!blob || !clinicaId) return null;
     const file = new File([blob], `pupilometro-medida-${Date.now()}.jpg`, { type: 'image/jpeg' });
     try {
+      // Caminho organizado por clínica
       const path = `clinicas/${clinicaId}/medidas/${file.name}`;
+      
       const up = await supabase.storage.from('branding-assets').upload(path, file, {
         upsert: true,
         contentType: file.type,
       });
-      if (up.error) return null;
-      const pub = supabase.storage.from('branding-assets').getPublicUrl(path).data.publicUrl;
-      return pub || null;
+
+      if (up.error) throw up.error;
+
+      const { data: urlData } = supabase.storage.from('branding-assets').getPublicUrl(path);
+      return urlData?.publicUrl || null;
     } catch (e) {
       console.error('uploadAnnotatedFile error', e);
       return null;
     }
   }
 
-  useEffect(() => {
-    if (!image || !imageReady || !clinicaId) return;
-    const key = image + '|' + JSON.stringify(data.medidas || {});
-    if (lastAnnotatedKeyRef.current === key) return;
-    let mounted = true;
+  async function salvarMedidas() {
+    if (!image || !clinicaId) {
+      toast.info('Tire uma foto antes de salvar as medidas.');
+      return;
+    }
 
-    (async () => {
-      lastAnnotatedKeyRef.current = key;
-      const blob = await generateAnnotatedBlob();
-      if (!mounted) return;
-      const url = await uploadAnnotatedFile(blob);
-      if (!mounted) return;
-      if (url) {
-        const anexos = Array.isArray(data.anexos_urls) ? [...data.anexos_urls] : [];
-        if (!anexos.includes(url)) anexos.unshift(url);
-        onChange({ ...data, pupilometroFotoMedidaStorageUrl: url, anexos_urls: anexos });
+    setSalvandoStorage(true);
+    try {
+      let blob: Blob | null = null;
+
+      // Gera a imagem com Zoom e Linhas Finas (usando a lógica que já temos no generateAnnotatedBlob)
+      if (imageReady) {
+        blob = await generateAnnotatedBlob();
+      } else {
+        const response = await fetch(image);
+        blob = await response.blob();
       }
-    })();
 
-    return () => {
-      mounted = false;
-    };
-  }, [image, imageReady, JSON.stringify(data.medidas), sceneRect.x, sceneRect.y, sceneRect.width, sceneRect.height, clinicaId]);
+      const url = await uploadAnnotatedFile(blob);
+
+      if (url) {
+        // liberar memory de URL local caso seja blob
+        try {
+          if (image && image.startsWith('blob:')) URL.revokeObjectURL(image);
+        } catch (e) {
+          // noop
+        }
+
+        // 1. ATUALIZAÇÃO DO ESTADO LOCAL (Para o Stepper) — persiste URL leve
+        const anexos = Array.isArray(data.anexos_urls) ? [...data.anexos_urls] : [];
+        const prev = data.pupilometroFotoMedidaStorageUrl;
+        const filtered = anexos.filter((a) => a !== prev);
+        filtered.unshift(url);
+
+        // atualiza estado local para referenciar URL no storage (não base64 nem blob)
+        setImage(url);
+
+        onChange({
+          ...data,
+          pupilometroFoto: url,
+          pupilometroFotoMedidaStorageUrl: url,
+          anexos_urls: filtered,
+          status_medida: imageReady ? 'concluido' : 'pendente',
+        });
+
+        // 2. LÓGICA DE EDIÇÃO/REVISÃO (Persistência imediata no Banco)
+        // Se a venda já tem ID (venda pendente ou em revisão), atualizamos a OS agora
+        if (data.id) {
+          const { error: osError } = await supabase
+            .from('ordens_servico')
+            .update({
+              pupilometro_foto_url: url,
+              od_dnp: parseMm(data.medidas.od_dnp?.toString() || "0"),
+              oe_dnp: parseMm(data.medidas.oe_dnp?.toString() || "0"),
+              altura_vertical_od: parseMm(data.medidas.altura_vertical_od?.toString() || "0"),
+              altura_vertical_oe: parseMm(data.medidas.altura_vertical_oe?.toString() || "0"),
+              status_os: 'Aguardando', // Ao refazer a medida, volta para análise
+              atualizado_em: new Date().toISOString()
+            })
+            .eq('venda_id', data.id);
+
+          if (osError) console.warn("Erro ao atualizar OS na revisão:", osError);
+        }
+
+        toast.success(data.id ? 'Medida revisada e atualizada na OS!' : 'Medidas e Zoom salvos nos anexos.');
+      } else {
+        toast.error('Erro ao subir arquivo.');
+      }
+    } catch (err) {
+      console.error('Erro ao salvar:', err);
+      toast.error('Erro ao processar imagem.');
+    } finally {
+      setSalvandoStorage(false);
+    }
+  }
 
   function resetMarkers(width: number, height: number) {
     const midY = Math.round(height * 0.55);
@@ -798,19 +946,15 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
   async function handleCameraCapture(base64: string) {
     setCameraOpen(false);
-    setImage(base64);
     setImageReady(false);
 
     try {
       const file = dataURLtoFile(base64, `pupil_${Date.now()}.jpg`);
-      const storageUrl = await uploadFotoStorage(file);
-      onChange({
-        ...data,
-        pupilometroFoto: base64,
-        pupilometroFotoStorageUrl: storageUrl || data.pupilometroFotoStorageUrl || "",
-      });
+      // Reuse processFotoFile which creates/revokes object URLs and uploads
+      await processFotoFile(file);
     } catch (err) {
       console.error("Erro ao salvar foto capturada:", err);
+      // fallback: keep base64 briefly but avoid persisting it in data
       onChange({ ...data, pupilometroFoto: base64 });
     }
   }
@@ -916,6 +1060,34 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     setMedindoArmacaoTotal(false);
     setMedindoCoD(false);
     setMedindoCoE(false);
+  }
+
+  async function downloadAnnotatedImage() {
+    if (!image || !imageReady) {
+      toast.info('Nenhuma foto disponível para download.');
+      return;
+    }
+
+    try {
+      const blob = await generateAnnotatedBlob();
+      if (!blob) {
+        toast.error('Falha ao gerar a imagem anotada.');
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `medida-${Date.now()}.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Download iniciado.');
+    } catch (err) {
+      console.error('downloadAnnotatedImage error', err);
+      toast.error('Erro ao gerar download da imagem.');
+    }
   }
 
   function startDrag(id: MarkerId) {
@@ -1116,6 +1288,32 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       return;
     }
 
+    // enquanto desenha a regiao, atualizar o retangulo dinamicamente
+    if (regionDrawing && regionStartRef.current && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const rawX = e.clientX - rect.left - sceneRect.x;
+      const rawY = e.clientY - rect.top - sceneRect.y;
+      const offsetX = (sceneRect.width - sceneRect.width * zoomLevel) / 2 + viewPan.x;
+      const offsetY = (sceneRect.height - sceneRect.height * zoomLevel) / 2 + viewPan.y;
+      const x = clamp((rawX - offsetX) / zoomLevel, 0, sceneRect.width);
+      const y = clamp((rawY - offsetY) / zoomLevel, 0, sceneRect.height);
+      const sx = Math.min(regionStartRef.current.x, x);
+      const sy = Math.min(regionStartRef.current.y, y);
+      const sw = Math.max(1, Math.abs(x - regionStartRef.current.x));
+      const sh = Math.max(1, Math.abs(y - regionStartRef.current.y));
+      setRegionRect({ x: sx, y: sy, width: sw, height: sh });
+      e.preventDefault();
+      return;
+    }
+
+    if (isPanning && panStartRef.current) {
+      const start = panStartRef.current;
+      const dx = (e.clientX - start.clientX) / (zoomLevel || 1);
+      const dy = (e.clientY - start.clientY) / (zoomLevel || 1);
+      setViewPan({ x: start.viewX + dx, y: start.viewY + dy });
+      return;
+    }
+
     if (!isPointerActive) return;
     const ponto = coordenadaBase(e.clientX, e.clientY);
     if (ponto) setPointerPos(ponto);
@@ -1123,6 +1321,30 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
   function onPointerDownContainer(e: ReactPointerEvent<HTMLDivElement>) {
     if (dragId) return;
+    // Se estiver em modo selecionar regiao, iniciar desenho do retângulo (prioritário sobre pan)
+    if (selecionarRegiao && containerRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      setPanMode(false);
+      const rect = containerRef.current.getBoundingClientRect();
+      const rawX = e.clientX - rect.left - sceneRect.x;
+      const rawY = e.clientY - rect.top - sceneRect.y;
+      const offsetX = (sceneRect.width - sceneRect.width * zoomLevel) / 2 + viewPan.x;
+      const offsetY = (sceneRect.height - sceneRect.height * zoomLevel) / 2 + viewPan.y;
+      const x = clamp((rawX - offsetX) / zoomLevel, 0, sceneRect.width);
+      const y = clamp((rawY - offsetY) / zoomLevel, 0, sceneRect.height);
+      regionStartRef.current = { x, y };
+      setRegionRect({ x, y, width: 1, height: 1 });
+      setRegionDrawing(true);
+      return;
+    }
+    // Se estiver em modo pan, iniciar arraste da cena
+    if (panMode && containerRef.current) {
+      panStartRef.current = { clientX: e.clientX, clientY: e.clientY, viewX: viewPan.x, viewY: viewPan.y };
+      setIsPanning(true);
+      return;
+    }
+
     const modoClique = medindoCoD || medindoCoE || medindoArmacaoTotal;
     if (!modoClique) return;
 
@@ -1140,6 +1362,34 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       return;
     }
 
+    // finalizar desenho de regiao
+    if (regionDrawing && regionStartRef.current && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const rawX = e.clientX - rect.left - sceneRect.x;
+      const rawY = e.clientY - rect.top - sceneRect.y;
+      const offsetX = (sceneRect.width - sceneRect.width * zoomLevel) / 2 + viewPan.x;
+      const offsetY = (sceneRect.height - sceneRect.height * zoomLevel) / 2 + viewPan.y;
+      const x = clamp((rawX - offsetX) / zoomLevel, 0, sceneRect.width);
+      const y = clamp((rawY - offsetY) / zoomLevel, 0, sceneRect.height);
+      const sx = Math.min(regionStartRef.current.x, x);
+      const sy = Math.min(regionStartRef.current.y, y);
+      const sw = Math.max(1, Math.abs(x - regionStartRef.current.x));
+      const sh = Math.max(1, Math.abs(y - regionStartRef.current.y));
+      setRegionRect({ x: sx, y: sy, width: sw, height: sh });
+      setRegionDrawing(false);
+      regionStartRef.current = null;
+      setSelecionarRegiao(false);
+      return;
+    }
+
+    // finalizar panning
+    if (isPanning) {
+      setIsPanning(false);
+      panStartRef.current = null;
+      setPanMode(false); // desligar modo pan ao soltar
+      return;
+    }
+
     if (!isPointerActive || !pointerPos) return;
     confirmarPonto(pointerPos);
     setIsPointerActive(false);
@@ -1150,14 +1400,43 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     endDrag();
     setIsPointerActive(false);
     setPointerPos(null);
+    // cancelar desenho de regiao se sair da area
+    if (regionDrawing) {
+      setRegionDrawing(false);
+      regionStartRef.current = null;
+      setRegionRect(null);
+      setSelecionarRegiao(false);
+    }
+    if (isPanning) {
+      setIsPanning(false);
+      panStartRef.current = null;
+      setPanMode(false);
+    }
   }
 
   function zoomIn() {
-    setZoomLevel((prev) => Math.min(5, Number((prev + 0.25).toFixed(2))));
+    setZoomLevel((prev) => {
+      const next = Math.min(5, Number((prev + 0.25).toFixed(2)));
+      // recentralizar viewPan para manter o centro da cena no mesmo ponto da tela
+      const W = sceneRect.width || 0;
+      const H = sceneRect.height || 0;
+      const centerX = W / 2;
+      const centerY = H / 2;
+      setViewPan((vp) => ({ x: vp.x + (prev - next) * (centerX - W / 2), y: vp.y + (prev - next) * (centerY - H / 2) }));
+      return next;
+    });
   }
 
   function zoomOut() {
-    setZoomLevel((prev) => Math.max(1, Number((prev - 0.25).toFixed(2))));
+    setZoomLevel((prev) => {
+      const next = Math.max(1, Number((prev - 0.25).toFixed(2)));
+      const W = sceneRect.width || 0;
+      const H = sceneRect.height || 0;
+      const centerX = W / 2;
+      const centerY = H / 2;
+      setViewPan((vp) => ({ x: vp.x + (prev - next) * (centerX - W / 2), y: vp.y + (prev - next) * (centerY - H / 2) }));
+      return next;
+    });
   }
 
   function resetZoomRecenter() {
@@ -1230,23 +1509,28 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
   const viewWidth = sceneRect.width;
   const viewHeight = sceneRect.height;
+  const labelFontSize = Math.max(9, Math.round(fontSize * 0.6));
   const zoomOffsetX = (viewWidth - viewWidth * zoomLevel) / 2 + viewPan.x;
   const zoomOffsetY = (viewHeight - viewHeight * zoomLevel) / 2 + viewPan.y;
   const bloqueioNivel = sensorDisponivel && inclinacao !== null && !isReto;
 
   useEffect(() => {
-    if (!focoTelaCheia) return;
+    if (!isFocusMode) return;
     const onKeyDown = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") setFocoTelaCheia(false);
+      if (ev.key === "Escape") {
+        // prefer global control when available
+        if (focus?.setIsFocusMode) focus.setIsFocusMode(false);
+        setFocoTelaCheia(false);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focoTelaCheia]);
+  }, [isFocusMode, focus]);
 
   return (
     <div
       className={`space-y-8 animate-in fade-in duration-500 ${
-        focoTelaCheia ? "fixed inset-0 z-[90] overflow-auto bg-white p-4 md:p-6" : ""
+        isFocusMode ? "fixed inset-0 z-[90] overflow-auto bg-white p-0" : ""
       }`}
     >
       <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
@@ -1263,47 +1547,17 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               Modo Armacao
             </div>
 
+            {/* controles de zoom/pan movidos para Ajuste fino (barra lateral) */}
+
             {image && (
-              <div className="flex items-center gap-1 rounded-2xl bg-slate-100 p-1">
-                <button
-                  type="button"
-                  onClick={zoomOut}
-                  disabled={zoomLevel <= 1}
-                  className="rounded-xl p-2 text-slate-500 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                  title="Zoom out"
-                >
-                  <Minus size={14} />
-                </button>
-                <div className="min-w-[58px] text-center text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  {(zoomLevel * 100).toFixed(0)}%
-                </div>
-                <button
-                  type="button"
-                  onClick={zoomIn}
-                  disabled={zoomLevel >= 5}
-                  className="rounded-xl p-2 text-slate-500 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                  title="Zoom in"
-                >
-                  <Plus size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={resetZoomRecenter}
-                  disabled={zoomLevel === 1}
-                  className="rounded-xl px-2 py-2 text-[9px] font-black uppercase tracking-wider text-slate-500 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-                  title="Resetar zoom e recentrar"
-                >
-                  Reset
-                </button>
-                <button
-                  type="button"
-                  onClick={recenterKeepingZoom}
-                  className="rounded-xl px-2 py-2 text-[9px] font-black uppercase tracking-wider text-slate-500 transition hover:bg-white"
-                  title="Recentralizar mantendo zoom"
-                >
-                  Recentrar
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => void salvarMedidas()}
+                disabled={salvandoStorage}
+                className="ml-2 rounded-2xl bg-emerald-600 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-white transition hover:bg-emerald-500"
+              >
+                {salvandoStorage ? 'Salvando...' : 'Salvar medidas'}
+              </button>
             )}
 
             {/* Removido botão duplicado de tela cheia — já existe no header da página */}
@@ -1336,13 +1590,24 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
           </div>
 
           {image && (
-            <button
-              type="button"
-              onClick={clearImage}
-              className="flex items-center gap-2 text-xs font-bold text-rose-500 uppercase hover:bg-rose-50 px-4 py-2 rounded-xl transition-all shrink-0 mt-2 md:mt-0"
-            >
-              <RefreshCw size={14} /> Limpar Foto
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={downloadAnnotatedImage}
+                className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase hover:bg-slate-100 px-4 py-2 rounded-xl transition-all shrink-0 mt-2 md:mt-0"
+                title="Baixar foto com medidas"
+              >
+                <ArrowDown size={14} /> Baixar foto com medidas
+              </button>
+
+              <button
+                type="button"
+                onClick={clearImage}
+                className="flex items-center gap-2 text-xs font-bold text-rose-500 uppercase hover:bg-rose-50 px-4 py-2 rounded-xl transition-all shrink-0 mt-2 md:mt-0"
+              >
+                <RefreshCw size={14} /> Limpar Foto
+              </button>
+            </>
           )}
         </div>
 
@@ -1439,7 +1704,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
             <div className="lg:col-span-3 -mb-3 flex flex-wrap items-center gap-2 rounded-3xl border border-slate-100 bg-white/90 p-2 shadow-sm backdrop-blur">
               <ToggleButton active={showPonte} onClick={() => setShowPonte((prev) => !prev)} label="Ponte" icon={<Ruler size={14} />} />
               <ToggleButton active={showDNP} onClick={() => setShowDNP((prev) => !prev)} label="DNP" icon={<Target size={14} />} />
-              <ToggleButton active={showAltura} onClick={() => setShowAltura((prev) => !prev)} label="Altura (H)" icon={<ArrowDown size={14} />} />
+              <ToggleButton active={showAltura} onClick={() => setShowAltura((prev) => !prev)} label="Altura (AV)" icon={<ArrowDown size={14} />} />
             </div>
 
             <div
@@ -1448,7 +1713,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               onPointerMove={onMove}
               onPointerUp={onPointerUpContainer}
               onPointerLeave={onPointerLeaveContainer}
-              className="lg:col-span-2 relative bg-slate-900 rounded-[32px] overflow-hidden shadow-2xl min-h-[420px] touch-none"
+              className={`lg:col-span-2 relative bg-slate-900 rounded-[32px] overflow-hidden shadow-2xl touch-none ${isFocusMode ? 'min-h-screen h-screen' : 'min-h-[420px]'}`}
             >
               <div
                 className={`absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full border-2 px-5 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
@@ -1472,6 +1737,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   width: sceneRect.width,
                   height: sceneRect.height,
                   transform: `translate(${zoomOffsetX}px, ${zoomOffsetY}px) scale(${zoomLevel})`,
+                  cursor: panMode ? (isPanning ? 'grabbing' : 'grab') : undefined,
                   transformOrigin: "top left",
                 }}
               >
@@ -1481,6 +1747,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   alt="Medição"
                   onLoad={handleImageLoad}
                   draggable={false}
+                  style={{ filter: `brightness(${brilho}%) contrast(${contraste}%)` }}
                 />
 
                 {(showDNP || showAltura) && (
@@ -1493,6 +1760,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                       active={markerSelecionado === "od"}
                       dimmed={marcadorDimmed("od")}
                       onPointerDown={() => startDrag("od")}
+                      zoomLevel={zoomLevel}
                     />
                     <Marcador
                       label="OE"
@@ -1502,6 +1770,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                       active={markerSelecionado === "oe"}
                       dimmed={marcadorDimmed("oe")}
                       onPointerDown={() => startDrag("oe")}
+                      zoomLevel={zoomLevel}
                     />
                   </>
                 )}
@@ -1515,6 +1784,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                       active={markerSelecionado === "bordaOD"}
                       dimmed={marcadorDimmed("bordaOD")}
                       onPointerDown={() => startDrag("bordaOD")}
+                      zoomLevel={zoomLevel}
                     />
 
                     <HorizontalGuide
@@ -1524,6 +1794,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                       active={markerSelecionado === "bordaOE"}
                       dimmed={marcadorDimmed("bordaOE")}
                       onPointerDown={() => startDrag("bordaOE")}
+                      zoomLevel={zoomLevel}
                     />
                   </>
                 )}
@@ -1537,6 +1808,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                     active={markerSelecionado === "avDA"}
                     dimmed={marcadorDimmed("avDA")}
                     onPointerDown={() => startDrag("avDA")}
+                    zoomLevel={zoomLevel}
                   />
                 )}
                 {showAltura && avDB && (
@@ -1548,6 +1820,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                     active={markerSelecionado === "avDB"}
                     dimmed={marcadorDimmed("avDB")}
                     onPointerDown={() => startDrag("avDB")}
+                    zoomLevel={zoomLevel}
                   />
                 )}
                 {showAltura && avEA && (
@@ -1559,7 +1832,55 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                     active={markerSelecionado === "avEA"}
                     dimmed={marcadorDimmed("avEA")}
                     onPointerDown={() => startDrag("avEA")}
+                    zoomLevel={zoomLevel}
                   />
+                )}
+
+                {/* Overlay: título e legenda com cores configuráveis */}
+                {showLabelsNoCanvas && (
+                  <div className="pointer-events-none absolute right-4 bottom-4 z-30 rounded-xl bg-white/90 p-3 shadow-lg text-slate-900" style={{ minWidth: 180 }}>
+                    {textoCustom ? (
+                      <div className="mb-2 text-sm font-black" style={{ fontSize: `${fontSize}px` }}>{textoCustom}</div>
+                    ) : null}
+                    <div className="flex flex-col gap-1" style={{ fontSize: `${labelFontSize}px` }}>
+                      <div className="flex items-center justify-between gap-2 text-[12px] font-black">
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} />
+                          <span className="text-xs">DNP Direita</span>
+                        </div>
+                        <div className="text-xs">{data.medidas.od_dnp || "--"} mm</div>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-[12px] font-black">
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} />
+                          <span className="text-xs">DNP Esquerda</span>
+                        </div>
+                        <div className="text-xs">{data.medidas.oe_dnp || "--"} mm</div>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-2 text-[12px] font-black">
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} />
+                          <span className="text-xs">DP Binocular</span>
+                        </div>
+                        <div className="text-xs">{dpBinocularMm || "--"} mm</div>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-2 text-[12px] font-black">
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaAltura }} />
+                          <span className="text-xs">CO (Centro ótico) OD</span>
+                        </div>
+                        <div className="text-xs">{coOdMm || "--"} mm</div>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-2 text-[12px] font-black">
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaAltura }} />
+                          <span className="text-xs">CO (Centro ótico) OE</span>
+                        </div>
+                        <div className="text-xs">{coOeMm || "--"} mm</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[10px] text-slate-500">PT: {ponteMedidaMm || "--"} mm</div>
+                  </div>
                 )}
                 {showAltura && avEB && (
                   <Marcador
@@ -1570,19 +1891,20 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                     active={markerSelecionado === "avEB"}
                     dimmed={marcadorDimmed("avEB")}
                     onPointerDown={() => startDrag("avEB")}
+                    zoomLevel={zoomLevel}
                   />
                 )}
 
                 {showAltura && avDA && (
                   <>
                     <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["avDA", "bordaOD", "od"]) }}>
-                      <line x1={avDA.x} y1={bordaOD.y} x2={avDA.x} y2={avDA.y} stroke="#E879F9" strokeWidth="2" strokeDasharray="6 4" />
-                      <line x1={avDA.x - 5} y1={bordaOD.y} x2={avDA.x + 5} y2={bordaOD.y} stroke="#E879F9" strokeWidth="2" />
-                      <line x1={avDA.x - 5} y1={avDA.y} x2={avDA.x + 5} y2={avDA.y} stroke="#E879F9" strokeWidth="2" />
+                      <line x1={avDA.x} y1={bordaOD.y} x2={avDA.x} y2={avDA.y} stroke="#E879F9" strokeWidth={Math.max(1, lineWidth)} strokeDasharray="6 4" />
+                      <line x1={avDA.x - 5} y1={bordaOD.y} x2={avDA.x + 5} y2={bordaOD.y} stroke="#E879F9" strokeWidth={Math.max(1, lineWidth)} />
+                      <line x1={avDA.x - 5} y1={avDA.y} x2={avDA.x + 5} y2={avDA.y} stroke="#E879F9" strokeWidth={Math.max(1, lineWidth)} />
                     </svg>
                     <div
-                      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-fuchsia-400 px-2 py-1 text-[9px] font-black uppercase text-slate-900 shadow"
-                      style={{ left: avDA.x + 28, top: (bordaOD.y + avDA.y) / 2, opacity: guiaOpacity(["avDA", "bordaOD", "od"]) }}
+                      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-fuchsia-400 px-2 py-1 font-black uppercase text-slate-900 shadow"
+                      style={{ left: avDA.x + 28, top: (bordaOD.y + avDA.y) / 2, opacity: guiaOpacity(["avDA", "bordaOD", "od"]), fontSize: `${labelFontSize}px` }}
                     >
                       {alturaVerticalOdMm} mm
                     </div>
@@ -1592,13 +1914,13 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 {showAltura && avEA && (
                   <>
                     <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["avEA", "bordaOE", "oe"]) }}>
-                      <line x1={avEA.x} y1={bordaOE.y} x2={avEA.x} y2={avEA.y} stroke="#A78BFA" strokeWidth="2" strokeDasharray="6 4" />
-                      <line x1={avEA.x - 5} y1={bordaOE.y} x2={avEA.x + 5} y2={bordaOE.y} stroke="#A78BFA" strokeWidth="2" />
-                      <line x1={avEA.x - 5} y1={avEA.y} x2={avEA.x + 5} y2={avEA.y} stroke="#A78BFA" strokeWidth="2" />
+                      <line x1={avEA.x} y1={bordaOE.y} x2={avEA.x} y2={avEA.y} stroke="#A78BFA" strokeWidth={Math.max(1, lineWidth)} strokeDasharray="6 4" />
+                      <line x1={avEA.x - 5} y1={bordaOE.y} x2={avEA.x + 5} y2={bordaOE.y} stroke="#A78BFA" strokeWidth={Math.max(1, lineWidth)} />
+                      <line x1={avEA.x - 5} y1={avEA.y} x2={avEA.x + 5} y2={avEA.y} stroke="#A78BFA" strokeWidth={Math.max(1, lineWidth)} />
                     </svg>
                     <div
-                      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-400 px-2 py-1 text-[9px] font-black uppercase text-slate-900 shadow"
-                      style={{ left: avEA.x + 28, top: (bordaOE.y + avEA.y) / 2, opacity: guiaOpacity(["avEA", "bordaOE", "oe"]) }}
+                      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-400 px-2 py-1 font-black uppercase text-slate-900 shadow"
+                      style={{ left: avEA.x + 28, top: (bordaOE.y + avEA.y) / 2, opacity: guiaOpacity(["avEA", "bordaOE", "oe"]), fontSize: `${labelFontSize}px` }}
                     >
                       {alturaVerticalOeMm} mm
                     </div>
@@ -1606,34 +1928,40 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 )}
 
                 {showAltura && (
-                  <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["od", "oe", "bordaOD", "bordaOE"]) }}>
-                    <line x1={pupilaDir.x} y1={pupilaDir.y} x2={bordaOD.x} y2={bordaOD.y} stroke="#34D399" strokeWidth="2" strokeDasharray="5 4" />
-                    <line x1={pupilaEsq.x} y1={pupilaEsq.y} x2={bordaOE.x} y2={bordaOE.y} stroke="#34D399" strokeWidth="2" strokeDasharray="5 4" />
+                    <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["od", "oe", "bordaOD", "bordaOE"]) }}>
+                    <line x1={pupilaDir.x} y1={pupilaDir.y} x2={bordaOD.x} y2={bordaOD.y} stroke={corLinhaAltura} strokeWidth={Math.max(1, lineWidth)} strokeDasharray="5 4" />
+                    <line x1={pupilaEsq.x} y1={pupilaEsq.y} x2={bordaOE.x} y2={bordaOE.y} stroke={corLinhaAltura} strokeWidth={Math.max(1, lineWidth)} strokeDasharray="5 4" />
                   </svg>
                 )}
 
                 {showPonte && (
                   <>
                   <div
-                    className={`absolute inset-y-0 w-[2px] cursor-ew-resize ${
+                    className={`absolute inset-y-0 w-px cursor-ew-resize ${
                       markerSelecionado === "ponteEsq" ? "bg-fuchsia-300" : "bg-fuchsia-100/90"
                     }`}
                     style={{ left: ponteEsqX, opacity: guiaOpacity(["ponteEsq", "ponteDir"]) }}
                     onPointerDown={() => startDrag("ponteEsq")}
                   />
                   <div
-                    className={`absolute inset-y-0 w-[2px] cursor-ew-resize ${
+                    className={`absolute inset-y-0 w-px cursor-ew-resize ${
                       markerSelecionado === "ponteDir" ? "bg-fuchsia-300" : "bg-fuchsia-100/90"
                     }`}
                     style={{ left: ponteDirX, opacity: guiaOpacity(["ponteEsq", "ponteDir"]) }}
                     onPointerDown={() => startDrag("ponteDir")}
                   />
-                  <div className="absolute inset-y-0 w-[1px] bg-white/60" style={{ left: centroNasal }} />
+                  {showDNP && showDNPnoCanvas && (
+                    <svg className="pointer-events-none absolute inset-0 h-full w-full">
+                      <line x1={pupilaDir.x} y1={pupilaDir.y} x2={centroNasal} y2={pupilaDir.y} stroke={corLinhaDNP} strokeWidth={Math.max(1, lineWidth)} strokeDasharray="5 4" />
+                      <line x1={pupilaEsq.x} y1={pupilaEsq.y} x2={centroNasal} y2={pupilaEsq.y} stroke={corLinhaDNP} strokeWidth={Math.max(1, lineWidth)} strokeDasharray="5 4" />
+                    </svg>
+                  )}
+                  <div className="absolute inset-y-0 w-px bg-white/60" style={{ left: centroNasal }} />
                   <div
                     className="pointer-events-none absolute rounded-full bg-fuchsia-300 px-2 py-1 text-[8px] font-black uppercase text-slate-900 shadow"
                     style={{ left: (ponteEsqX + ponteDirX) / 2 - 26, top: 12 }}
                   >
-                    PT {ponteMedidaMm} mm
+                    Ponte {ponteMedidaMm} mm
                   </div>
                   </>
                 )}
@@ -1649,6 +1977,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                       setPontoArmacaoA(null);
                       setPontoArmacaoB(null);
                     }}
+                    zoomLevel={zoomLevel}
                   />
                 )}
 
@@ -1662,6 +1991,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                       setPontoArmacaoA(null);
                       setPontoArmacaoB(null);
                     }}
+                    zoomLevel={zoomLevel}
                   />
                 )}
 
@@ -1674,17 +2004,29 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                         x2={pontoArmacaoB.x}
                         y2={pontoArmacaoB.y}
                         stroke="#FCD34D"
-                        strokeWidth="2"
+                        strokeWidth={Math.max(1, lineWidth)}
                         strokeDasharray="6 4"
                       />
                     </svg>
                     <div
-                      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 px-2 py-1 text-[9px] font-black uppercase text-slate-900 shadow"
-                      style={{ left: (pontoArmacaoA.x + pontoArmacaoB.x) / 2, top: (pontoArmacaoA.y + pontoArmacaoB.y) / 2 }}
+                      className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 px-2 py-1 font-black uppercase text-slate-900 shadow"
+                      style={{ left: (pontoArmacaoA.x + pontoArmacaoB.x) / 2, top: (pontoArmacaoA.y + pontoArmacaoB.y) / 2, fontSize: `${labelFontSize}px` }}
                     >
                       {armacaoTotalMm} mm
                     </div>
                   </>
+                )}
+                {/* Overlay de seleção de região (quando presente) */}
+                {regionRect && (
+                  <div
+                    className="pointer-events-none absolute border-2 border-dashed border-white/80 bg-white/10"
+                    style={{
+                      left: regionRect.x,
+                      top: regionRect.y,
+                      width: regionRect.width,
+                      height: regionRect.height,
+                    }}
+                  />
                 )}
               </div>
 
@@ -1713,6 +2055,17 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
             </div>
 
             <div className="space-y-6">
+              {/* Pré-visualização rápida */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Pré-visualização</p>
+                <div className="w-full h-40 bg-slate-50 rounded-md flex items-center justify-center overflow-hidden">
+                  {previewDataUrl ? (
+                    <img src={previewDataUrl} alt="Prévia anotada" className="h-full w-auto object-contain" />
+                  ) : (
+                    <div className="text-xs text-slate-400">Sem pré-visualização</div>
+                  )}
+                </div>
+              </div>
               <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100">
                 <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3">
                   <div className="flex items-center justify-between gap-2">
@@ -1734,6 +2087,37 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
                   {ajusteFinoAtivo && (
                     <div className="mt-3">
+                      <div className="mb-3 rounded-2xl border border-slate-100 bg-white p-3">
+                        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Ajuste de Imagem</p>
+                        <div className="grid grid-cols-1 gap-3">
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 flex justify-between">
+                              Brilho <span className="text-xs">{brilho}%</span>
+                            </label>
+                            <input
+                              type="range"
+                              min={50}
+                              max={200}
+                              value={brilho}
+                              onChange={(e) => setBrilho(Number(e.target.value))}
+                              className="w-full mt-2"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 flex justify-between">
+                              Contraste <span className="text-xs">{contraste}%</span>
+                            </label>
+                            <input
+                              type="range"
+                              min={50}
+                              max={200}
+                              value={contraste}
+                              onChange={(e) => setContraste(Number(e.target.value))}
+                              className="w-full mt-2"
+                            />
+                          </div>
+                        </div>
+                      </div>
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Passo</p>
                         <div className="flex items-center gap-1">
@@ -1792,6 +2176,160 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                       </div>
                     </div>
                   )}
+                  <div className="mt-2 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelecionarRegiao((s) => !s)}
+                      className={`rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider transition ${selecionarRegiao ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                    >
+                      {selecionarRegiao ? 'Selecionando região...' : 'Marcar região'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setRegionRect(null); setSelecionarRegiao(false); }}
+                      className="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200"
+                    >
+                      Limpar região
+                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={zoomOut}
+                        disabled={zoomLevel <= 1}
+                        className="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+                        title="Zoom out"
+                      >
+                        <Minus size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={zoomIn}
+                        disabled={zoomLevel >= 5}
+                        className="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+                        title="Zoom in"
+                      >
+                        <Plus size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetZoomRecenter}
+                        disabled={zoomLevel === 1 && viewPan.x === 0 && viewPan.y === 0}
+                        className="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+                        title="Resetar zoom e recentrar"
+                      >
+                        <RefreshCw size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={recenterKeepingZoom}
+                        disabled={viewPan.x === 0 && viewPan.y === 0}
+                        className="rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+                        title="Recentralizar mantendo zoom"
+                      >
+                        <Target size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPanMode((p) => !p)}
+                        className={`rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-wider transition ${panMode ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                        title="Pan / Mover imagem"
+                      >
+                        <MousePointer2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* NOVO BLOCO DE CONFIGURAÇÃO DE MARCAÇÃO NO MENU LATERAL */}
+                <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b pb-2">Personalização do Laudo</h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase">Título da Foto</label>
+                        <input 
+                          type="text" 
+                          value={textoCustom}
+                          onChange={(e) => setTextoCustom(e.target.value)}
+                          placeholder="Ex: Visão de Perto"
+                          className="w-full mt-1 p-3 bg-slate-50 rounded-xl border-none text-xs font-bold focus:ring-2 focus:ring-cyan-500"
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase">Cor DNP</label>
+                          <input 
+                            type="color" 
+                            value={corLinhaDNP}
+                            onChange={(e) => setCorLinhaDNP(e.target.value)}
+                            className="w-full h-10 rounded-lg cursor-pointer bg-transparent border-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-black text-slate-400 uppercase">Cor Altura</label>
+                          <input 
+                            type="color" 
+                            value={corLinhaAltura}
+                            onChange={(e) => setCorLinhaAltura(e.target.value)}
+                            className="w-full h-10 rounded-lg cursor-pointer bg-transparent border-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase">Espessura Linha</label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <input 
+                            type="range" min="1" max="8" 
+                            value={lineWidth} 
+                            onChange={(e) => setLineWidth(Number(e.target.value))}
+                            className="flex-1" 
+                          />
+                          <span className="text-xs font-bold">{lineWidth}px</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-slate-400 uppercase">Tamanho Texto</label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <input 
+                            type="range" min="12" max="60" 
+                            value={fontSize} 
+                            onChange={(e) => setFontSize(Number(e.target.value))}
+                            className="flex-1" 
+                          />
+                          <span className="text-xs font-bold">{fontSize}px</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 py-3 border-y border-slate-50">
+                      <p className="text-[9px] font-black text-slate-300 uppercase mb-2">O que salvar na imagem?</p>
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={showDNPnoCanvas} onChange={e => setShowDNPnoCanvas(e.target.checked)} className="rounded text-cyan-600" />
+                        <span className="text-[10px] font-bold text-slate-600 group-hover:text-cyan-600 transition-colors">LINHAS DE DNP</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={showAlturanoCanvas} onChange={e => setShowAlturanoCanvas(e.target.checked)} className="rounded text-emerald-600" />
+                        <span className="text-[10px] font-bold text-slate-600 group-hover:text-emerald-600 transition-colors">LINHAS DE ALTURA</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input type="checkbox" checked={showLabelsNoCanvas} onChange={e => setShowLabelsNoCanvas(e.target.checked)} className="rounded text-slate-900" />
+                        <span className="text-[10px] font-bold text-slate-600 group-hover:text-slate-900 transition-colors">TABELA DE RESULTADOS</span>
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void salvarMedidas()}
+                      disabled={salvandoStorage}
+                      className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-cyan-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-200"
+                    >
+                      {salvandoStorage ? "Processando..." : "Gerar e Salvar Laudo Técnico"}
+                    </button>
+                  </div>
                 </div>
 
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Resultados Calculados</h3>
@@ -1838,12 +2376,12 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 <div className="mt-3 rounded-2xl bg-white border border-slate-100 p-3">
                   <p className="text-[9px] font-black uppercase text-slate-400">Modo de calibracao</p>
                   <p className="text-xs font-bold text-slate-700">
-                    {`Armacao (PT informada ${ponteManual || "--"} mm x PT marcada)`}
+                    {`Armacao (Ponte informada ${ponteManual || "--"} mm x Ponte marcada)`}
                   </p>
                   {modo === "armacao" && (
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <p className="text-[10px] font-black uppercase tracking-wider text-fuchsia-600">
-                        PT informada: {parseMm(ponteManual).toFixed(1)} mm • PT foto: {ponteMedidaMm} mm
+                        Ponte informada: {parseMm(ponteManual).toFixed(1)} mm • Ponte foto: {ponteMedidaMm} mm
                       </p>
                       {diffPT !== null && (
                         <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wider ${classeTolerancia(Math.abs(diffPT))}`}>
@@ -1861,7 +2399,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                         onChange={(e) => setBloquearSemConferenciaPT(e.target.checked)}
                         className="h-3.5 w-3.5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                       />
-                      Bloquear medidas se PT nao conferir (±0.5 mm)
+                      Bloquear medidas se Ponte nao conferir (±0.5 mm)
                     </label>
                   )}
                 </div>
@@ -1888,7 +2426,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
                 {modo === "armacao" && diffPT !== null && (
                   <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3">
-                    <p className="text-[9px] font-black uppercase text-slate-400">Conferencia Tecnica PT</p>
+                    <p className="text-[9px] font-black uppercase text-slate-400">Conferência Técnica Ponte</p>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-xs font-black text-slate-700">Delta: {formatDiffMm(diffPT)}</span>
                       <span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wider ${classeTolerancia(Math.abs(diffPT))}`}>
@@ -1923,7 +2461,7 @@ type MarcadorProps = {
   onPointerDown: () => void;
 };
 
-function Marcador({ label, color, x, y, active = false, dimmed = false, onPointerDown }: MarcadorProps) {
+function Marcador({ label, color, x, y, active = false, dimmed = false, onPointerDown, zoomLevel = 1 }: MarcadorProps & { zoomLevel?: number }) {
   return (
     <button
       type="button"
@@ -1932,14 +2470,23 @@ function Marcador({ label, color, x, y, active = false, dimmed = false, onPointe
         e.stopPropagation();
         onPointerDown();
       }}
-      className={`absolute -translate-x-1/2 -translate-y-1/2 h-7 w-7 rounded-full border-2 ${color} bg-transparent shadow-xl cursor-move ${
+      className={`absolute h-7 w-7 rounded-full border-2 ${color} bg-transparent shadow-xl cursor-move transition-opacity ${
         active ? "ring-2 ring-white/90" : ""
       } ${dimmed ? "opacity-35" : "opacity-100"}`}
-      style={{ left: x, top: y }}
+      style={{ 
+        left: x, 
+        top: y,
+        // compensa o zoom do pai para manter o tamanho visual fixo
+        transform: `translate(-50%, -50%) scale(${1 / zoomLevel})`,
+        borderWidth: `${2 / zoomLevel}px`
+      }}
     >
-      <span className="absolute left-1/2 top-1/2 h-4 w-[1px] -translate-x-1/2 -translate-y-1/2 bg-white" />
-      <span className="absolute left-1/2 top-1/2 h-[1px] w-4 -translate-x-1/2 -translate-y-1/2 bg-white" />
-      <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/45 px-2 py-0.5 text-[8px] font-black uppercase text-white backdrop-blur">
+      <span className="absolute left-1/2 top-1/2 h-4 w-[1px] -translate-x-1/2 -translate-y-1/2 bg-white" style={{ height: `${16 / zoomLevel}px` }} />
+      <span className="absolute left-1/2 top-1/2 h-[1px] w-4 -translate-x-1/2 -translate-y-1/2 bg-white" style={{ width: `${16 / zoomLevel}px` }} />
+      <span 
+        className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/60 px-2 py-0.5 text-[8px] font-black uppercase text-white backdrop-blur"
+        style={{ fontSize: `${8 / zoomLevel}px`, padding: `${2/zoomLevel}px ${4/zoomLevel}px` }}
+      >
         {label}
       </span>
     </button>
@@ -1955,15 +2502,19 @@ type HorizontalGuideProps = {
   onPointerDown: () => void;
 };
 
-function HorizontalGuide({ label, x, y, active = false, dimmed = false, onPointerDown }: HorizontalGuideProps) {
-  const segmentoPx = 220;
-
+function HorizontalGuide({ label, x, y, active = false, dimmed = false, onPointerDown, zoomLevel = 1 }: HorizontalGuideProps & { zoomLevel?: number }) {
+  const larguraBase = 220;
   return (
     <div
       className={`absolute -translate-x-1/2 -translate-y-1/2 ${dimmed ? "opacity-25" : "opacity-100"}`}
-      style={{ left: x, top: y, width: segmentoPx }}
+      style={{ 
+        left: x, 
+        top: y, 
+        width: larguraBase / zoomLevel, // Ajusta largura da guia
+        transform: 'translate(-50%, -50%)'
+      }}
     >
-      <div className="h-[2px] w-full rounded-full bg-emerald-300/90 shadow" />
+      <div className="w-full rounded-full bg-emerald-300/90 shadow" style={{ height: `${2 / zoomLevel}px` }} />
       <button
         type="button"
         onPointerDown={(e) => {
@@ -1972,10 +2523,9 @@ function HorizontalGuide({ label, x, y, active = false, dimmed = false, onPointe
           onPointerDown();
         }}
         className={`absolute top-1/2 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-emerald-300 bg-slate-900/80 ${active ? "ring-2 ring-white/90" : ""}`}
-        style={{ left: "50%" }}
+        style={{ left: "50%", transform: `translate(-50%, -50%) scale(${1 / zoomLevel})` }}
       >
         <span className="absolute left-1/2 top-1/2 h-3 w-[1px] -translate-x-1/2 -translate-y-1/2 bg-emerald-100" />
-        <span className="absolute left-1/2 top-1/2 h-[1px] w-3 -translate-x-1/2 -translate-y-1/2 bg-emerald-100" />
       </button>
       <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/45 px-2 py-0.5 text-[8px] font-black uppercase text-white backdrop-blur">
         {label}

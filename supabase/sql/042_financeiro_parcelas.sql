@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS public.financeiro_parcelas (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     clinica_id UUID REFERENCES public.clinicas(id),
-    venda_id UUID, -- referência para vendas (pode ser otica_vendas/vendas dependendo do fluxo)
+    venda_id UUID, -- referência para vendas (pode ser vendas/vendas dependendo do fluxo)
     paciente_id UUID REFERENCES public.pacientes(id),
     numero_parcela INTEGER NOT NULL,
     valor_parcela NUMERIC(10,2) NOT NULL,
