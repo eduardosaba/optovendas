@@ -17,13 +17,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 1º Passo: Instalar o pnpm primeiro
+      # 1. INSTALAR O PNPM PRIMEIRO (Sem cache aqui)
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      # 2º Passo: Instalar o Node.js e SÓ AGORA configurar o cache
+      # 2. INSTALAR O NODE E HABILITAR O CACHE (Agora o pnpm já existe)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
