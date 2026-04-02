@@ -10,9 +10,10 @@ type Props = {
   cancelText?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  children?: React.ReactNode;
 };
 
-export default function ConfirmDialog({ open, title = 'Confirmação', message = 'Deseja continuar?', confirmText = 'Confirmar', cancelText = 'Cancelar', onConfirm, onCancel }: Props) {
+export default function ConfirmDialog({ open, title = 'Confirmação', message = 'Deseja continuar?', confirmText = 'Confirmar', cancelText = 'Cancelar', onConfirm, onCancel, children }: Props) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -24,6 +25,8 @@ export default function ConfirmDialog({ open, title = 'Confirmação', message =
           </div>
           <button onClick={onCancel} className="text-slate-500">Fechar</button>
         </div>
+
+        {children && <div className="mt-4">{children}</div>}
 
         <div className="mt-6 flex justify-end gap-2">
           <button onClick={onCancel} className="px-4 py-2 rounded-md">{cancelText}</button>

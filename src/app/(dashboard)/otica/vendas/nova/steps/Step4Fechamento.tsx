@@ -49,6 +49,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   const [senhaAutorizador, setSenhaAutorizador] = useState("");
   const [autorizadorId, setAutorizadorId] = useState<string | null>(null);
   const [justificativaDesconto, setJustificativaDesconto] = useState<string>('');
+  const [comboInfo, setComboInfo] = useState<any | null>(null);
 
   const totalGeral = Number(data.financeiro?.total || 0);
   const valorEntrada = Number(data.financeiro?.valorEntrada || 0);
@@ -71,6 +72,26 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
     }
     return { parcelas: [] };
   }, [totalComDesconto, valorEntrada, data.financeiro?.qtdParcelas, data.financeiro?.primeiroVencimento, data.financeiro?.formaSaldo]);
+
+  // Carrega informações do combo aplicado (nome, preco_fechado) para exibição
+  useEffect(() => {
+    let active = true;
+    async function loadCombo() {
+      try {
+        const id = (data as any).combo_aplicado_id || (data as any).comboId || null;
+        if (!id) {
+          if (active) setComboInfo(null);
+          return;
+        }
+        const { data: c } = await supabase.from('configuracao_combos').select('id,nome_combo,preco_fechado').eq('id', id).maybeSingle();
+        if (active) setComboInfo(c || null);
+      } catch (e) {
+        if (active) setComboInfo(null);
+      }
+    }
+    void loadCombo();
+    return () => { active = false; };
+  }, [data.comboId, data.combo_aplicado_id]);
 
   // --- LÓGICA DE UPLOAD DE ANEXOS ---
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -263,22 +284,61 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
-      // prepara payload incluindo desconto manual e autorizador quando aplicados
-      // Enviar estrutura `financeiro_detalhe` para que o backend saiba exatamente
-      // onde depositar a entrada e como tratar o saldo (crediário / cartão / pix)
+      // prepara payload com mapeamento exato para colunas da tabela `vendas`
+      const statusFinanceiroCalculado = (() => {
+        if (tipo === 'pendente') return 'pendente';
+        if (saldoRestante <= 0) return 'pago';
+        if (valorEntrada > 0) return 'pago_parcial';
+        return data.financeiro?.formaSaldo === 'crediario' ? 'pendente' : 'pendente';
+      })();
+
+      const qtdParcelas = Number(data.financeiro?.qtdParcelas || 1);
+      const valorParcela = qtdParcelas > 0 ? Number((saldoRestante / qtdParcelas).toFixed(2)) : 0;
+
       const payload = {
-        ...data,
+        id: (data as any).id || undefined,
         clinica_id: ctx.clinicaId,
         paciente_id: data.pacienteId || null,
-        status_os: 'Aguardando',
-        status_financeiro: tipo === 'pendente' ? 'pendente' : 'pago',
+        receita_id: (data as any).receitaId || null,
 
-        // VALORES FINANCEIROS TOTAIS
-        valor_bruto: subtotal,
-        valor_desconto: Number(descontoManual || 0),
+        // Totais
+        valor_total: subtotal,
+        desconto: Number(descontoManual || 0) + Number((data as any).valor_desconto_combo || 0),
         valor_final: totalComDesconto,
 
-        // DETALHAMENTO PARA O BACKEND PROCESSAR
+        // Regras de Armação e Termos
+        armacao_propria: !!data.armacaoPropria,
+        termo_quebra_aceito: !!data.termoQuebraAceito,
+        assinatura_arma_responsabilidade: (data as any).assinaturaArmacaoCliente || null,
+
+        // Financeiro Detalhado (colunas da tabela vendas)
+        valor_entrada: Number(valorEntrada || 0),
+        forma_entrada: data.financeiro?.formaEntrada || null,
+        saldo_restante: saldoRestante,
+        metodo_pagamento: data.financeiro?.formaSaldo || null,
+
+        // Parcelamento
+        qtd_parcelas_venda: qtdParcelas,
+        valor_parcela_venda: valorParcela,
+        primeiro_vencimento_venda: data.financeiro?.primeiroVencimento || null,
+
+        // Combos e Autorizações
+        combo_aplicado_id: (data as any).comboId || (data as any).combo_aplicado_id || null,
+        valor_desconto_combo: (data as any).valor_desconto_combo || 0,
+        valor_desconto_manual: Number(descontoManual || 0),
+        autorizado_por_id: autorizadorId || null,
+        justificativa_desconto: justificativaDesconto || null,
+
+        // Assinaturas e Fotos
+        assinatura: (data as any).assinaturaFinal || data.assinatura || null,
+        pupilometro_foto_url: (data as any).pupilometroFotoMedidaStorageUrl || (data as any).pupilometro_foto_url || null,
+
+        // Ao finalizar a venda, colocar a OS em 'Aguardando' para permitir
+        // preencher dados e escolher laboratório antes de enviar para produção.
+        status_os: 'Aguardando',
+        status_financeiro: statusFinanceiroCalculado,
+
+        // Mantém estruturas legadas para compatibilidade com o backend
         financeiro_detalhe: {
           entrada: {
             valor: Number(valorEntrada || 0),
@@ -288,25 +348,39 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
           saldo: {
             valor: saldoRestante,
             forma: data.financeiro?.formaSaldo || null,
-            qtd_parcelas: Number(data.financeiro?.qtdParcelas || 0),
+            qtd_parcelas: qtdParcelas,
             primeiro_vencimento: data.financeiro?.primeiroVencimento || null
           }
         },
-
-        // Dados auxiliares para auditoria e para o "maestro" do backend
-        tem_entrada: Boolean(valorEntrada > 0),
-        valor_entrada: Number(valorEntrada || 0),
-        forma_entrada: data.financeiro?.formaEntrada || 'dinheiro',
-        forma_saldo: data.financeiro?.formaSaldo || null,
-        valor_saldo: saldoRestante,
         parcelas: parcelas || [],
-
-        autorizado_por: autorizadorId,
-        justificativa_desconto: justificativaDesconto || null,
       };
 
+      // Incluir detalhes da OS para que o endpointFinalize os persista em ordens_servico
+      const armacaoIdPayload = (data as any).armacaoId || (data as any).armacao_id || null;
+      const lenteIdPayload = (data as any).lenteId || (data as any).lente_id || null;
+      const osDetalhe: any = {
+        receita_id: (data as any).receitaId || (data as any).receita_id || null,
+        armacao_id: armacaoIdPayload,
+        armacao_modelo: armacaoLabel || (data as any).armacao_modelo || (data as any).armacaoModelo || null,
+        armacao_tipo: (data as any).armacaoTipo || (data as any).armacao_tipo || null,
+        material_lente: lenteIdPayload || lenteLabel || (data as any).material_lente || null,
+        previsao_entrega: (data as any).previsao_entrega || (data.financeiro?.primeiroVencimento) || null,
+        pupilometro_foto_url: (data as any).pupilometroFotoMedidaStorageUrl || (data as any).pupilometro_foto_url || null,
+      };
+
+      // anexar também os ids simples no payload principal (a API usa esses keys ao buscar precos)
+      (payload as any).armacaoId = armacaoIdPayload;
+      (payload as any).lenteId = lenteIdPayload;
+      (payload as any).os_detalhe = osDetalhe;
+
       // If discount exceeds 10% of subtotal and no autorizador set, block and open modal
-      const LIMITE_DESCONTO_SEM_SENHA = 0.10;
+      const LIMITE_DESCONTO_SEM_SENHA = (() => {
+        const cfgVal = (config as any)?.limite_desconto_vendedor;
+        const num = cfgVal !== undefined && cfgVal !== null ? Number(cfgVal) : NaN;
+        if (!Number.isFinite(num)) return 0.10;
+        return Math.max(0, Math.min(1, num / 100));
+      })();
+
       if (descontoManual > (subtotal * LIMITE_DESCONTO_SEM_SENHA) && !autorizadorId) {
         setModalSenha(true);
         setLoading(false);
@@ -361,6 +435,10 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
       setAutorizadorId(json.perfil.id);
       setModalSenha(false);
       toast.success(`Desconto autorizado por ${json.perfil.nome}`);
+      // Após autorização, prosseguir com a finalização automaticamente
+      setTimeout(() => {
+        try { finalizar('normal'); } catch (e) { /* ignore */ }
+      }, 500);
     } catch (e) {
       toast.error('Erro na conexão com servidor.');
     }
@@ -417,7 +495,10 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
               { (data.comboId || data.combo_aplicado_id) && (
                 <div className="flex justify-between p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
                   <span className="text-xs font-bold text-emerald-600 uppercase">Combo Aplicado</span>
-                  <span className="text-sm font-black text-emerald-700">{(data as any).combo_aplicado_id || (data as any).comboId}</span>
+                  <div className="text-right">
+                    <div className="text-sm font-black text-emerald-700">{comboInfo?.nome_combo || (data as any).combo_aplicado_id || (data as any).comboId}</div>
+                    <div className="text-xs font-bold text-emerald-600">{formatBRL(Number(comboInfo?.preco_fechado ?? data.financeiro?.total ?? 0))}</div>
+                  </div>
                 </div>
               )}
           </div>

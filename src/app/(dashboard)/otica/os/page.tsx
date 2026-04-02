@@ -11,7 +11,7 @@ import PDFRomaneioLab from "@/components/otica/PDFRomaneioLab";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 
-type StatusOS = "Laboratorio" | "Em Producao" | "Pronto" | "Entrega";
+type StatusOS = "Aguardando" | "Laboratorio" | "Em Producao" | "Pronto" | "Entrega";
 
 type PacienteRel = {
   nome_completo?: string | null;
@@ -19,10 +19,11 @@ type PacienteRel = {
 };
 
 type VendaRel = {
+  id?: string | null;
   status_financeiro?: string | null;
   tipo_fechamento?: string | null;
   saldo_restante?: number | null;
-  pacientes?: PacienteRel | PacienteRel[] | null;
+  pacientes?: (PacienteRel & { id?: string | null }) | (PacienteRel & { id?: string | null })[] | null;
 };
 
 type OSRow = {
@@ -36,9 +37,10 @@ type OSRow = {
   armacao_modelo?: string | null;
   armacao_tipo?: string | null;
   material_lente?: string | null;
+  observacoes?: string | null;
   pupilometro_foto_url?: string | null;
   vendas?: VendaRel | VendaRel[] | null;
-  estoque_armacoes?: { foto_url?: string | null } | null;
+  estoque_armacoes?: { foto_url?: string | null; grife?: string | null; modelo?: string | null } | null;
 };
 
 const STATUS_OS: Array<{
@@ -48,6 +50,13 @@ const STATUS_OS: Array<{
   icon: ReactNode;
   badge: string;
 }> = [
+  {
+    value: "Aguardando",
+    label: "Aguardando",
+    gradient: "from-slate-600 via-slate-500 to-slate-400",
+    badge: "bg-slate-100 text-slate-700",
+    icon: <Layers size={15} />,
+  },
   {
     value: "Laboratorio",
     label: "Laboratorio",
@@ -80,6 +89,7 @@ const STATUS_OS: Array<{
 
 function normalizarStatus(s: string | null | undefined): StatusOS {
   const valor = (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (valor.includes("aguard")) return "Aguardando";
   if (valor === "laboratorio") return "Laboratorio";
   if (valor === "conferencia" || valor === "em producao" || valor === "producao") return "Em Producao";
   if (valor === "pronto") return "Pronto";
@@ -125,6 +135,7 @@ export default function DashboardOS() {
   const [cidadePronto, setCidadePronto] = useState("");
 
   const [selectedOS, setSelectedOS] = useState<OSRow | null>(null);
+  const [pendingAdvanceTo, setPendingAdvanceTo] = useState<StatusOS | null>(null);
   const [conferindoOS, setConferindoOS] = useState<OSRow | null>(null);
   const [checklist, setChecklist] = useState({
     grauOk: false,
@@ -146,16 +157,42 @@ export default function DashboardOS() {
 
         const [ordensRes, clinicaRes] = await Promise.all([
           supabase
-            .from("ordens_servico")
-            .select(
-              "id, numero_os, status_os, previsao_entrega, data_encomenda, data_entrega_real, laboratorio_nome, armacao_modelo, armacao_tipo, material_lente, pupilometro_foto_url, vendas(status_financeiro, tipo_fechamento, saldo_restante, pacientes(nome_completo, cidade_atendimento)), estoque_armacoes(foto_url)"
-            )
+              .from("ordens_servico")
+              .select(
+                "id, numero_os, status_os, previsao_entrega, data_encomenda, data_entrega_real, laboratorio_nome, armacao_modelo, armacao_tipo, material_lente, pupilometro_foto_url, vendas(id, status_financeiro, tipo_fechamento, saldo_restante, pacientes(id, nome_completo, cidade_atendimento)), estoque_armacoes(grife, modelo, foto_url)"
+              )
             .eq("clinica_id", ctx.clinicaId)
             .order("previsao_entrega", { ascending: true }),
           supabase.from("clinicas").select("*").eq("id", ctx.clinicaId).maybeSingle(),
         ]);
 
-        setOrdens((ordensRes.data as OSRow[]) ?? []);
+        // Normalize material_lente: if it's an UUID referencing otica_lentes, replace by its nome
+        const ordensData = (ordensRes.data as OSRow[]) ?? [];
+        const possibleIds = Array.from(
+          new Set(
+            ordensData
+              .map((o) => (o.material_lente ?? "").toString().trim())
+              .filter(Boolean)
+              .filter((v) => /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(v)) as string[]
+          )
+        );
+
+        let lentesMap: Record<string, string> = {};
+        if (possibleIds.length > 0) {
+          const lentesRes = await supabase.from("otica_lentes").select("id, nome").in("id", possibleIds);
+          if (!lentesRes.error && Array.isArray(lentesRes.data)) {
+            lentesMap = (lentesRes.data as any[]).reduce((acc, cur) => ({ ...acc, [String(cur.id).toLowerCase()]: cur.nome }), {} as Record<string, string>);
+          }
+        }
+
+        const ordensMapped = ordensData.map((o) => {
+          const raw = (o.material_lente ?? "").toString().trim();
+          const key = raw.toLowerCase();
+          if (raw && lentesMap[key]) return { ...o, material_lente: lentesMap[key] };
+          return { ...o, material_lente: raw };
+        });
+
+        setOrdens(ordensMapped);
         setClinica((clinicaRes.data as any) ?? null);
       } finally {
         setLoading(false);
@@ -204,10 +241,57 @@ export default function DashboardOS() {
     }
   }
 
+  async function confirmarEntrega(os: OSRow) {
+    const venda = getVendaFromOS(os) as any;
+    if ((venda?.status_financeiro || "").toLowerCase() === "pendente") {
+      toast.error("OS bloqueada: pagamento pendente. Regularize o financeiro antes de confirmar entrega.");
+      return;
+    }
+
+    setMovendoId(os.id);
+    try {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const res = await supabase.from("ordens_servico").update({ data_entrega_real: hoje }).eq("id", os.id);
+      if (res.error) throw new Error(res.error.message);
+
+      setOrdens((prev) => prev.map((item) => (item.id === os.id ? { ...item, data_entrega_real: hoje } : item)));
+      if (selectedOS?.id === os.id) setSelectedOS((prev) => (prev ? { ...prev, data_entrega_real: hoje } : prev));
+
+      // Tentar registrar no prontuario/paciente_arquivos quando tivermos ids
+      const paciente = getPacienteFromOS(os) as any;
+      const insertRow: any = {
+        criado_em: new Date().toISOString(),
+        descricao: "Entrega confirmada",
+        tipo_arquivo: "entrega",
+      };
+      if ((venda as any)?.id) insertRow.venda_id = (venda as any).id;
+      if (paciente?.id) insertRow.paciente_id = paciente.id;
+
+      if (insertRow.venda_id || insertRow.paciente_id) {
+        const ins = await supabase.from("paciente_arquivos").insert(insertRow);
+        if (ins.error) console.warn("Falha ao salvar entrega em paciente_arquivos:", ins.error.message);
+      }
+
+      toast.success("Entrega confirmada e registrada.");
+    } catch (err) {
+      const e = err as Error;
+      toast.error(`Falha ao confirmar entrega: ${e.message}`);
+    } finally {
+      setMovendoId(null);
+    }
+  }
+
   async function moverColuna(os: OSRow, direcao: -1 | 1) {
     const atual = normalizarStatus(os.status_os);
     const next = proximoStatus(atual, direcao);
     if (!next) return;
+    // If OS is in 'Aguardando', open modal to fill OS details before moving to next (e.g., Laboratorio)
+    if (atual === "Aguardando") {
+      setSelectedOS(os);
+      setPendingAdvanceTo(next);
+      return;
+    }
+
     await atualizarStatus(os, next);
   }
 
@@ -247,6 +331,13 @@ export default function DashboardOS() {
     }
 
     if (normalizarStatus(os.status_os) !== status) {
+      // If coming from 'Aguardando', prompt to fill details before moving
+      if (normalizarStatus(os.status_os) === "Aguardando") {
+        setSelectedOS(os);
+        setPendingAdvanceTo(status);
+        setDraggingId(null);
+        return;
+      }
       await atualizarStatus(os, status);
     }
 
@@ -259,39 +350,65 @@ export default function DashboardOS() {
     setSalvandoDetalhes(true);
     try {
       const status = normalizarStatus(selectedOS.status_os);
-      const res = await supabase
-        .from("ordens_servico")
-        .update({
-          numero_os: selectedOS.numero_os || null,
-          status_os: status,
-          previsao_entrega: selectedOS.previsao_entrega || null,
-          data_encomenda: selectedOS.data_encomenda || null,
-          data_entrega_real: selectedOS.data_entrega_real || null,
-          laboratorio_nome: selectedOS.laboratorio_nome || null,
-          armacao_modelo: selectedOS.armacao_modelo || null,
-          armacao_tipo: selectedOS.armacao_tipo || null,
-          material_lente: selectedOS.material_lente || null,
-        })
-        .eq("id", selectedOS.id);
 
+      const payload: any = {
+        numero_os: selectedOS.numero_os || null,
+        status_os: status,
+        previsao_entrega: selectedOS.previsao_entrega || null,
+        data_encomenda: selectedOS.data_encomenda || null,
+        data_entrega_real: selectedOS.data_entrega_real || null,
+        laboratorio_nome: selectedOS.laboratorio_nome || null,
+        armacao_modelo: selectedOS.armacao_modelo || null,
+        armacao_tipo: selectedOS.armacao_tipo || null,
+        material_lente: selectedOS.material_lente || null,
+      };
+
+      if (selectedOS.observacoes !== undefined) payload.observacoes = selectedOS.observacoes || null;
+
+      // Tenta salvar no ordens_servico; se a coluna `observacoes` nao existir, faremos fallback
+      let res = await supabase.from("ordens_servico").update(payload).eq("id", selectedOS.id);
       if (res.error) throw new Error(res.error.message);
 
-      setOrdens((prev) =>
-        prev.map((item) =>
-          item.id === selectedOS.id
-            ? {
-                ...item,
-                ...selectedOS,
-                status_os: status,
-              }
-            : item,
-        ),
-      );
+      const savedOS = { ...selectedOS, status_os: status } as OSRow;
+
+      setOrdens((prev) => prev.map((item) => (item.id === selectedOS.id ? { ...item, ...savedOS } : item)));
+
+      // If an advance action was requested (e.g., from 'Aguardando'), perform it after saving details
+      if (pendingAdvanceTo) {
+        try {
+          await atualizarStatus(savedOS, pendingAdvanceTo);
+        } finally {
+          setPendingAdvanceTo(null);
+        }
+      }
 
       setSelectedOS(null);
       toast.success("Detalhes da OS atualizados com sucesso.");
     } catch (err) {
       const e = err as Error;
+      // Se o erro for por coluna inexistente, persistir observacao em paciente_arquivos
+      if (e.message && /column .* does not exist/i.test(e.message) && selectedOS?.observacoes) {
+        try {
+          const paciente = getPacienteFromOS(selectedOS as OSRow) as any;
+          const venda = getVendaFromOS(selectedOS as OSRow) as any;
+          const insertRow: any = {
+            criado_em: new Date().toISOString(),
+            descricao: selectedOS.observacoes,
+            tipo_arquivo: "observacao_os",
+          };
+          if (venda?.id) insertRow.venda_id = venda.id;
+          if (paciente?.id) insertRow.paciente_id = paciente.id;
+          const ins = await supabase.from("paciente_arquivos").insert(insertRow);
+          if (ins.error) console.warn("Falha ao salvar observacao em paciente_arquivos:", ins.error.message);
+          toast.success("Detalhes salvos; observação persistida em anexo do paciente.");
+          setSelectedOS(null);
+          setSalvandoDetalhes(false);
+          return;
+        } catch (inner) {
+          console.warn(inner);
+        }
+      }
+
       toast.error(`Erro ao salvar detalhes: ${e.message}`);
     } finally {
       setSalvandoDetalhes(false);
@@ -552,6 +669,19 @@ export default function DashboardOS() {
                           </PDFDownloadLink>
                         </div>
 
+                        {status.value === "Entrega" && (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              disabled={bloqueadaFinanceiro}
+                              onClick={() => void confirmarEntrega(os)}
+                              className="w-full rounded-lg bg-amber-600 px-2 py-2 text-[11px] font-black uppercase tracking-wider text-white shadow-lg shadow-amber-100 transition hover:bg-amber-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                            >
+                              Confirmar Entrega
+                            </button>
+                          </div>
+                        )}
+
                         {status.value === "Laboratorio" && (
                           <button
                             type="button"
@@ -658,6 +788,16 @@ export default function DashboardOS() {
                     placeholder="Descreva tratamentos e indice..."
                   />
                 </div>
+                
+                <div className="space-y-2">
+                  <label className="ml-2 text-[9px] font-black uppercase tracking-tight text-slate-400">Observação</label>
+                  <textarea
+                    value={selectedOS.observacoes ?? ""}
+                    onChange={(e) => setSelectedOS((prev) => (prev ? { ...prev, observacoes: e.target.value } : prev))}
+                    className="h-20 w-full rounded-2xl border-none bg-slate-50 p-4 font-bold text-slate-700 shadow-inner focus:ring-2 focus:ring-cyan-500"
+                    placeholder="Observações internas ou instruções ao laboratório"
+                  />
+                </div>
               </div>
 
               <div className="space-y-6">
@@ -671,6 +811,14 @@ export default function DashboardOS() {
                   value={selectedOS.armacao_modelo}
                   onChange={(v) => setSelectedOS((prev) => (prev ? { ...prev, armacao_modelo: v } : prev))}
                 />
+
+                <p className="mt-2 text-[12px] text-slate-600">
+                  {selectedOS.estoque_armacoes?.grife || selectedOS.estoque_armacoes?.modelo
+                    ? `${selectedOS.estoque_armacoes?.grife ?? ""} ${selectedOS.estoque_armacoes?.modelo ?? ""}`.trim()
+                    : selectedOS.armacao_modelo
+                    ? selectedOS.armacao_modelo
+                    : "Armação do cliente"}
+                </p>
 
                 <ModalInput
                   label="Tipo Aro"

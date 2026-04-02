@@ -116,6 +116,7 @@ function NovaVendaStepperContent() {
   const searchParams = useSearchParams();
   const pacienteIdFromUrl = searchParams.get("pacienteId") ?? "";
   const vendaIdFromUrl = searchParams.get("vendaId") ?? "";
+  const osIdFromUrl = searchParams.get("osId") ?? "";
   const toast = useToast();
   const [step, setStep] = useState(1);
   const [salvando, setSalvando] = useState(false);
@@ -272,57 +273,100 @@ function NovaVendaStepperContent() {
 
   useEffect(() => {
     async function carregarVendaPendente() {
-      if (!vendaIdFromUrl) return;
       try {
-        const { data: venda, error } = await supabase
-          .from("vendas")
-          .select(`*, pacientes (*), ordens_servico (*)`)
-          .eq("id", vendaIdFromUrl)
-          .single();
+        if (vendaIdFromUrl) {
+          const { data: venda, error } = await supabase
+            .from("vendas")
+            .select(`*, pacientes (*), ordens_servico (*)`)
+            .eq("id", vendaIdFromUrl)
+            .single();
 
-        if (error) throw error;
+          if (error) throw error;
 
-        const os = Array.isArray((venda as any).ordens_servico) ? (venda as any).ordens_servico[0] : undefined;
+          const os = Array.isArray((venda as any).ordens_servico) ? (venda as any).ordens_servico[0] : undefined;
 
-        setVendaData((prev) => ({
-          ...prev,
-          id: venda.id || prev.id,
-          pacienteId: venda.paciente_id || prev.pacienteId,
-          cliente: venda.pacientes || prev.cliente,
-          vendaManual: !venda.paciente_id,
-          localidadeVenda: venda.localidade_venda || prev.localidadeVenda,
-          armacaoPropria: Boolean(venda.armacao_propria),
-          anexos_urls: venda.anexos_urls || prev.anexos_urls,
-          lenteId: os?.material_lente || prev.lenteId,
-          armacaoId: os?.armacao_modelo || prev.armacaoId,
-          laboratorioNome: os?.laboratorio_nome || prev.laboratorioNome,
-          previsaoEntrega: os?.previsao_entrega || prev.previsaoEntrega,
-          financeiro: {
-            ...prev.financeiro,
-            total: Number(venda.valor_total || prev.financeiro.total || 0),
-            valorEntrada: Number(venda.valor_entrada || prev.financeiro.valorEntrada || 0),
-            saldoRestante: Number(venda.saldo_restante || venda.valor_total || prev.financeiro.saldoRestante || 0),
-            metodo: venda.metodo_pagamento || prev.financeiro.metodo,
-          },
-          medidas: {
-            ...prev.medidas,
-            od_dnp: os?.od_dnp?.toString() || prev.medidas.od_dnp,
-            oe_dnp: os?.oe_dnp?.toString() || prev.medidas.oe_dnp,
-            altura: os?.altura_vertical_od?.toString() || prev.medidas.altura,
-            pupilometroFoto: os?.pupilometro_foto_url || prev.pupilometroFoto,
-          },
-        }));
+          setVendaData((prev) => ({
+            ...prev,
+            id: venda.id || prev.id,
+            pacienteId: venda.paciente_id || prev.pacienteId,
+            cliente: venda.pacientes || prev.cliente,
+            vendaManual: !venda.paciente_id,
+            localidadeVenda: venda.localidade_venda || prev.localidadeVenda,
+            armacaoPropria: Boolean(venda.armacao_propria),
+            anexos_urls: venda.anexos_urls || prev.anexos_urls,
+            lenteId: os?.material_lente || prev.lenteId,
+            armacaoId: os?.armacao_modelo || prev.armacaoId,
+            laboratorioNome: os?.laboratorio_nome || prev.laboratorioNome,
+            previsaoEntrega: os?.previsao_entrega || prev.previsaoEntrega,
+            financeiro: {
+              ...prev.financeiro,
+              total: Number(venda.valor_total || prev.financeiro.total || 0),
+              valorEntrada: Number(venda.valor_entrada || prev.financeiro.valorEntrada || 0),
+              saldoRestante: Number(venda.saldo_restante || venda.valor_total || prev.financeiro.saldoRestante || 0),
+              metodo: venda.metodo_pagamento || prev.financeiro.metodo,
+            },
+            medidas: {
+              ...prev.medidas,
+              od_dnp: os?.od_dnp?.toString() || prev.medidas.od_dnp,
+              oe_dnp: os?.oe_dnp?.toString() || prev.medidas.oe_dnp,
+              altura: os?.altura_vertical_od?.toString() || prev.medidas.altura,
+              pupilometroFoto: os?.pupilometro_foto_url || prev.pupilometroFoto,
+            },
+          }));
 
-        setStep(4);
-        toast.success("Venda carregada. Defina a forma de pagamento.");
+          setStep(4);
+          toast.success("Venda carregada. Defina a forma de pagamento.");
+          return;
+        }
+
+        if (osIdFromUrl) {
+          const { data: osRow, error: osError } = await supabase
+            .from('ordens_servico')
+            .select('*, vendas(id, paciente_id, pacientes(*))')
+            .eq('id', osIdFromUrl)
+            .single();
+
+          if (osError) throw osError;
+
+          const vendaId = (osRow as any)?.venda_id || (osRow as any)?.vendas?.id || null;
+
+          setVendaData((prev) => ({
+            ...prev,
+            id: vendaId || prev.id,
+            pacienteId: (osRow as any)?.vendas?.paciente_id || (osRow as any)?.venda_id || prev.pacienteId,
+            cliente: (osRow as any)?.vendas || prev.cliente,
+            vendaManual: false,
+            localidadeVenda: prev.localidadeVenda,
+            armacaoPropria: prev.armacaoPropria,
+            anexos_urls: prev.anexos_urls,
+            lenteId: (osRow as any)?.material_lente || prev.lenteId,
+            armacaoId: (osRow as any)?.armacao_modelo || prev.armacaoId,
+            laboratorioNome: (osRow as any)?.laboratorio_nome || prev.laboratorioNome,
+            previsaoEntrega: (osRow as any)?.previsao_entrega || prev.previsaoEntrega,
+            financeiro: {
+              ...prev.financeiro,
+            },
+            medidas: {
+              ...prev.medidas,
+              od_dnp: (osRow as any)?.od_dnp?.toString() || prev.medidas.od_dnp,
+              oe_dnp: (osRow as any)?.oe_dnp?.toString() || prev.medidas.oe_dnp,
+              altura: (osRow as any)?.altura_vertical_od?.toString() || prev.medidas.altura,
+              pupilometroFoto: (osRow as any)?.pupilometro_foto_url || prev.pupilometroFoto,
+            },
+          }));
+
+          setStep(3);
+          toast.success("OS carregada para revisão de medidas.");
+          return;
+        }
       } catch (err) {
-        console.error("Erro ao carregar venda pendente:", err);
-        toast.error("Não foi possível carregar os dados desta venda.");
+        console.error("Erro ao carregar venda/OS pendente:", err);
+        toast.error("Não foi possível carregar os dados desta venda/OS.");
       }
     }
 
     void carregarVendaPendente();
-  }, [vendaIdFromUrl, toast]);
+  }, [vendaIdFromUrl, osIdFromUrl, toast]);
 
   // Cálculo de totais
   useEffect(() => {

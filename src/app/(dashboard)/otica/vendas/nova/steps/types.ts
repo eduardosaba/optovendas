@@ -126,6 +126,7 @@ export type VendaData = {
   comboId?: string | null;
   combo_aplicado_id?: string | null;
   valor_desconto_combo?: number;
+  laudo_pdf_url?: string | null;
 };
 
 export const VALOR_CARTAO_MM = 85.6;

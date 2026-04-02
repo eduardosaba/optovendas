@@ -145,10 +145,12 @@ export default function ConfiguracoesOticaPage() {
   async function salvarConfiguracoes() {
     setSalvando(true);
     try {
-      // Use server-side upsert to avoid RLS issues
       const ctx = await resolveClinicaContext();
-      const session = await supabase.auth.getSession();
-      const token = (session as any)?.data?.session?.access_token;
+      // Pegar sessão de forma confiável
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = (sessionData as any)?.session?.access_token;
+      if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+
       const payload: any = {
         ...config,
         clinica_id: ctx.clinicaId,
@@ -162,7 +164,7 @@ export default function ConfiguracoesOticaPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(payload)
       });

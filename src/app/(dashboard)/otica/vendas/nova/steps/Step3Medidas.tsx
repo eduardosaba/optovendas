@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useContext } from "react";
 import type { ChangeEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Camera, Minus, MousePointer2, Plus, RefreshCw, Ruler, Target } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { generateLaudoPdfBlob } from "@/components/consultorio/PDFLaudoTecnico";
 import { useToast } from "@/components/ui/ToastProvider";
 import { FocusContext } from "@/context/FocusContext";
 import type { VendaData } from "./types";
@@ -785,7 +786,49 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
           status_medida: imageReady ? 'concluido' : 'pendente',
         });
 
-        // 2. LÓGICA DE EDIÇÃO/REVISÃO (Persistência imediata no Banco)
+        // 2. Gerar e subir PDF técnico do laudo (timbrado da clínica + imagem anotada)
+        try {
+          const { data: clinicaData } = await supabase
+            .from('clinicas')
+            .select('nome_fantasia,logomarca_url,endereco_completo,cnpj')
+            .eq('id', clinicaId)
+            .maybeSingle();
+
+          const pdfBlob = await generateLaudoPdfBlob({
+            clinica: clinicaData || undefined,
+            pacienteNome: (data.cliente as any)?.nome_completo || data.clienteManualNome || null,
+            medidas: {
+              od_dnp: data.medidas.od_dnp,
+              oe_dnp: data.medidas.oe_dnp,
+              altura_vertical_od: data.medidas.altura_vertical_od,
+              altura_vertical_oe: data.medidas.altura_vertical_oe,
+            },
+            conclusao: textoCustom || null,
+            imageUrl: url,
+          });
+
+          if (pdfBlob && clinicaId) {
+            const pdfFile = new File([pdfBlob], `laudo-${Date.now()}.pdf`, { type: 'application/pdf' });
+            const pdfPath = `clinicas/${clinicaId}/laudos/${pdfFile.name}`;
+            const upPdf = await supabase.storage.from('branding-assets').upload(pdfPath, pdfFile, { upsert: true, contentType: 'application/pdf' });
+            if (!upPdf.error) {
+              const { data: pdfUrlData } = supabase.storage.from('branding-assets').getPublicUrl(pdfPath);
+              const pdfUrl = pdfUrlData?.publicUrl || null;
+              if (pdfUrl) {
+                const anexos2 = Array.isArray(data.anexos_urls) ? [...data.anexos_urls] : [];
+                anexos2.unshift(pdfUrl);
+                // atualiza estado local com link do PDF do laudo
+                onChange({ ...data, anexos_urls: anexos2, laudo_pdf_url: pdfUrl });
+              }
+            } else {
+              console.warn('Erro ao subir PDF do laudo:', upPdf.error);
+            }
+          }
+        } catch (e) {
+          console.warn('Erro gerando/uploading PDF do laudo:', e);
+        }
+
+        // 3. LÓGICA DE EDIÇÃO/REVISÃO (Persistência imediata no Banco)
         // Se a venda já tem ID (venda pendente ou em revisão), atualizamos a OS agora
         if (data.id) {
           const { error: osError } = await supabase
@@ -1837,51 +1880,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                 )}
 
                 {/* Overlay: título e legenda com cores configuráveis */}
-                {showLabelsNoCanvas && (
-                  <div className="pointer-events-none absolute right-4 bottom-4 z-30 rounded-xl bg-white/90 p-3 shadow-lg text-slate-900" style={{ minWidth: 180 }}>
-                    {textoCustom ? (
-                      <div className="mb-2 text-sm font-black" style={{ fontSize: `${fontSize}px` }}>{textoCustom}</div>
-                    ) : null}
-                    <div className="flex flex-col gap-1" style={{ fontSize: `${labelFontSize}px` }}>
-                      <div className="flex items-center justify-between gap-2 text-[12px] font-black">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} />
-                          <span className="text-xs">DNP Direita</span>
-                        </div>
-                        <div className="text-xs">{data.medidas.od_dnp || "--"} mm</div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 text-[12px] font-black">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} />
-                          <span className="text-xs">DNP Esquerda</span>
-                        </div>
-                        <div className="text-xs">{data.medidas.oe_dnp || "--"} mm</div>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between gap-2 text-[12px] font-black">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} />
-                          <span className="text-xs">DP Binocular</span>
-                        </div>
-                        <div className="text-xs">{dpBinocularMm || "--"} mm</div>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between gap-2 text-[12px] font-black">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaAltura }} />
-                          <span className="text-xs">CO (Centro ótico) OD</span>
-                        </div>
-                        <div className="text-xs">{coOdMm || "--"} mm</div>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between gap-2 text-[12px] font-black">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-sm" style={{ background: corLinhaAltura }} />
-                          <span className="text-xs">CO (Centro ótico) OE</span>
-                        </div>
-                        <div className="text-xs">{coOeMm || "--"} mm</div>
-                      </div>
-                    </div>
-                    <div className="mt-2 text-[10px] text-slate-500">PT: {ponteMedidaMm || "--"} mm</div>
-                  </div>
-                )}
+                {/* legenda movida para a coluna direita para não sobrepor a imagem */}
                 {showAltura && avEB && (
                   <Marcador
                     label="AV E-B"
@@ -2056,7 +2055,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
             <div className="space-y-6">
               {/* Pré-visualização rápida */}
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm sticky top-24 max-h-[48vh] overflow-auto">
                 <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Pré-visualização</p>
                 <div className="w-full h-40 bg-slate-50 rounded-md flex items-center justify-center overflow-hidden">
                   {previewDataUrl ? (
@@ -2065,6 +2064,34 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                     <div className="text-xs text-slate-400">Sem pré-visualização</div>
                   )}
                 </div>
+              </div>
+              {/* Legenda das medidas: colocada na coluna direita para não sobrepor a imagem */}
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+                {textoCustom ? <div className="mb-2 text-sm font-black" style={{ fontSize: `${fontSize}px` }}>{textoCustom}</div> : null}
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Legenda de Medidas</p>
+                <div className="flex flex-col gap-2" style={{ fontSize: `${labelFontSize}px` }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} /> <span className="text-xs">DNP Direita</span></div>
+                    <div className="text-xs">{data.medidas.od_dnp || "--"} mm</div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} /> <span className="text-xs">DNP Esquerda</span></div>
+                    <div className="text-xs">{data.medidas.oe_dnp || "--"} mm</div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm" style={{ background: corLinhaDNP }} /> <span className="text-xs">DP Binocular</span></div>
+                    <div className="text-xs">{dpBinocularMm || "--"} mm</div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm" style={{ background: corLinhaAltura }} /> <span className="text-xs">CO (Centro ótico) OD</span></div>
+                    <div className="text-xs">{coOdMm || "--"} mm</div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm" style={{ background: corLinhaAltura }} /> <span className="text-xs">CO (Centro ótico) OE</span></div>
+                    <div className="text-xs">{coOeMm || "--"} mm</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-[10px] text-slate-500">PT: {ponteMedidaMm || "--"} mm</div>
               </div>
               <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100">
                 <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3">
@@ -2295,7 +2322,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                         <label className="text-[10px] font-black text-slate-400 uppercase">Tamanho Texto</label>
                         <div className="flex items-center gap-2 mt-1">
                           <input 
-                            type="range" min="12" max="60" 
+                            type="range" min="8" max="60" 
                             value={fontSize} 
                             onChange={(e) => setFontSize(Number(e.target.value))}
                             className="flex-1" 

@@ -26,7 +26,15 @@ export function v(input: unknown) {
 }
 
 export function maskAv(raw: string) {
-  const digits = String(raw || "").replace(/\D/g, "");
+  const s = String(raw || "").trim();
+  if (!s) return "";
+
+  // Suporte para visão de perto no formato J1..J6
+  const jMatch = s.match(/[Jj]\s*([1-6])/);
+  if (jMatch) return `J${jMatch[1]}`;
+
+  // Formatação padrão para visão de longe (20/20)
+  const digits = s.replace(/\D/g, "");
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;

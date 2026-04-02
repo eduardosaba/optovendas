@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useConfig } from "@/context/ConfigContext";
 import DashboardHeader from "@/components/dashboard/Header";
-import { TrendingUp, ShieldCheck, AlertCircle, Terminal } from "lucide-react";
+import { TrendingUp, ShieldCheck, AlertCircle, Terminal, Settings } from "lucide-react";
 import FocusProvider, { FocusContext } from "@/context/FocusContext";
 import { useRef } from "react";
 import ThemeProvider from "@/context/ThemeContext";
@@ -330,9 +330,9 @@ export default function DashboardLayout({
                         </Link>
 
                         <div className="mt-6 space-y-1">
-                          <Link href="/otica/gestao" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-cyan-400 transition-all rounded-2xl">
-                            <TrendingUp size={18} />
-                            <span className="text-sm font-bold">Dashboard BI</span>
+                          <Link href="/admin/configuracoes" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-cyan-400 transition-all rounded-2xl">
+                            <Settings size={18} />
+                            <span className="text-sm font-bold">Configurações Sistema</span>
                           </Link>
 
                           <Link href="/otica/gestao/aprovacoes" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-amber-400 transition-all rounded-2xl">

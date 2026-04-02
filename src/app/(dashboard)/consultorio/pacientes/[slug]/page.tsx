@@ -1,452 +1,504 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
-import { compressFileToDataUrl } from '@/lib/image';
-import { X } from 'lucide-react';
+import {
+  User, FileText, ShoppingBag, Wallet,
+  Calendar, MapPin, Phone, Fingerprint,
+  Plus, Eye, Printer, Download, Paperclip, X,
+  ExternalLink,
+  ChevronRight,
+  ClipboardList,
+  TrendingUp,
+} from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { PDFDownloadLink } from '@react-pdf/renderer';
 import PDFProntuario from '@/components/consultorio/PDFProntuario';
 
-type PacienteMin = {
-  id: string;
-  nome_completo: string;
-  foto_url?: string | null;
-};
-
-function toPacienteSlug(nome: string) {
-  return nome
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
-}
-
-export default function PacienteSlugRedirectPage() {
+export default function PacienteRichFichaPage() {
   const params = useParams<{ slug: string }>();
   const [loading, setLoading] = useState(true);
-  const [paciente, setPaciente] = useState<PacienteMin | null>(null);
+  const [paciente, setPaciente] = useState<any | null>(null);
+  const [historico, setHistorico] = useState<any>({ vendas: [], receitas: [], anexos: [], termos: [] });
   const [erro, setErro] = useState<string | null>(null);
-  const [lastAtendimento, setLastAtendimento] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'prontuario'>('overview');
-  const [historico, setHistorico] = useState<any | null>(null);
-  const [termos, setTermos] = useState<Array<any>>([]);
-  const [termPreviewOpen, setTermPreviewOpen] = useState(false);
-  const [selectedTerm, setSelectedTerm] = useState<any | null>(null);
-  const attachingRef = useRef(false);
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [attachFiles, setAttachFiles] = useState<Array<{ file: File; preview?: string; descricao?: string; tags?: string; categoria?: string }>>([]);
-  const [attachUploading, setAttachUploading] = useState(false);
-  const [clinicaInfo, setClinicaInfo] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState<'geral' | 'clinico' | 'vendas' | 'arquivos'>('geral');
+
+  const dadosGrafico = useMemo(() => {
+    return [...(historico.receitas || [])]
+      .reverse()
+      .map((r: any) => ({
+        data: new Date(r.data_exame).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+        OD: Number(r.longe_od_esferico || 0),
+        OE: Number(r.longe_oe_esferico || 0),
+        ADD: Number(r.perto_adicao || 0),
+        CIL_OD: Number(r.longe_od_cilindrico || 0),
+        CIL_OE: Number(r.longe_oe_cilindrico || 0),
+      }));
+  }, [historico.receitas]);
+
+  function formatSigned(val: any, opts?: { empty?: string, fixed?: number }) {
+    const empty = opts?.empty ?? '---';
+    const fixed = typeof opts?.fixed === 'number' ? opts.fixed : 2;
+    if (val === null || val === undefined || val === '') return empty;
+    const n = Number(String(val).replace(',', '.'));
+    if (Number.isNaN(n)) return empty;
+    const sign = n > 0 ? '+' : n < 0 ? '-' : '';
+    const abs = Math.abs(n).toFixed(fixed);
+    return `${sign}${abs}`;
+  }
 
   const slug = useMemo(() => String(params?.slug || ""), [params]);
 
   useEffect(() => {
-    async function resolvePaciente() {
+    async function loadFullData() {
       setLoading(true);
-      if (!slug) {
-        setErro("Slug do paciente inválido.");
-        setLoading(false);
-        return;
-      }
-
       try {
         const ctx = await resolveClinicaContext();
-        // resolveClinicaContext returns { clinicaId, ... } — store full context
-        setClinicaInfo(ctx);
-        const { data, error } = await supabase
+        
+        // 1. Buscar Dados Detalhados do Paciente
+        const { data: allPacientes } = await supabase
           .from("pacientes")
-          .select("id, nome_completo, foto_url")
-          .eq("clinica_id", ctx.clinicaId)
-          .order("nome_completo", { ascending: true });
+          .select("*")
+          .eq("clinica_id", ctx.clinicaId);
 
-        if (error) throw error;
+        // Helper para encontrar pelo slug (mesma lógica anterior)
+        const toSlug = (n: string) => n.normalize("NFD").replace(/[[\u0300-\u036f]]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-");
+        const currentPaciente = (allPacientes || []).find((p: any) => toSlug(p.nome_completo || "") === slug);
 
-        const lista = (data as PacienteMin[] | null) ?? [];
-        const match = lista.find((p) => toPacienteSlug(p.nome_completo || "") === slug);
-
-        if (!match) {
-          setErro("Paciente não encontrado para este link.");
-          setLoading(false);
+        if (!currentPaciente) {
+          setErro("Paciente não localizado.");
           return;
         }
 
-        setPaciente(match);
-        // buscar data do último atendimento (receita) para controle de exibição
-        if (match) {
-          try {
-            const lastRes = await supabase
-              .from("receitas_optometricas")
-              .select("data_exame")
-              .eq("paciente_id", match.id)
-              .order("data_exame", { ascending: false })
-              .limit(1)
-              .maybeSingle();
+        setPaciente(currentPaciente);
 
-            const lastDate = (lastRes.data as { data_exame?: string | null } | null)?.data_exame ?? null;
-            setLastAtendimento(lastDate ?? null);
-            // fetch minimal history in background
-              try {
-                // Fetch vendas with potential pupilometro and anexos, receitas, pagamentos and arquivos de paciente
-                const [vRes, rRes, payRes, arquRes] = await Promise.all([
-                  supabase.from('vendas').select('id, numero_os, valor_total, status_financeiro, created_at, anexos_urls, pupilometro_foto_url').eq('paciente_id', match.id).order('created_at', { ascending: false }).limit(50),
-                  supabase.from('receitas_optometricas').select('id, data_exame').eq('paciente_id', match.id).order('data_exame', { ascending: false }).limit(20),
-                  supabase.from('payments').select('id, valor_total, status').eq('paciente_id', match.id).order('id', { ascending: false }).limit(10),
-                  supabase.from('paciente_arquivos').select('id, url_arquivo, tipo_arquivo, criado_em').eq('paciente_id', match.id).order('criado_em', { ascending: false }).limit(200),
-                ]);
+        // 2. Buscar Todo o Ecossistema do Paciente (Receitas, Vendas, Arquivos, Termos)
+        const [rRes, vRes, aRes, tRes] = await Promise.all([
+          supabase.from('receitas_optometricas').select('*').eq('paciente_id', currentPaciente.id).order('data_exame', { ascending: false }),
+          supabase.from('vendas').select('*').eq('paciente_id', currentPaciente.id).order('created_at', { ascending: false }),
+          supabase.from('paciente_arquivos').select('*').eq('paciente_id', currentPaciente.id).order('criado_em', { ascending: false }),
+          supabase.from('termos_aceite').select('*').eq('paciente_id', currentPaciente.id).order('created_at', { ascending: false })
+        ]);
 
-                const vendas = (vRes.data as any[]) || [];
-                const receitas = (rRes.data as any[]) || [];
-                const pagamentos = (payRes.data as any[]) || [];
-                const arquivos = (arquRes.data as any[]) || [];
+        setHistorico({
+          receitas: rRes.data || [],
+          vendas: vRes.data || [],
+          anexos: aRes.data || [],
+          termos: tRes.data || []
+        });
 
-                // Compose anexos: paciente_arquivos first, then vendas.anexos_urls, then pupilometro photos as medidas
-                const anexosFromVendas = (vendas || []).flatMap((x: any) => Array.isArray(x.anexos_urls) ? x.anexos_urls : []).filter(Boolean);
-                const anexos = [
-                  ...arquivos.map(a => ({ url: a.url_arquivo, tipo: a.tipo_arquivo, id: a.id, created_at: a.criado_em })),
-                  ...anexosFromVendas.map((u: string) => ({ url: u, tipo: 'outros' })),
-                ];
-
-                // Build medidas array from vendas' pupilometro_foto_url and from paciente_arquivos tagged as medidas (if any)
-                const medidasFromVendas = (vendas || []).filter(v => v.pupilometro_foto_url).map(v => ({ url: v.pupilometro_foto_url, created_at: v.created_at, origem: 'venda', venda_id: v.id }));
-                const medidasFromArquivos = (arquivos || []).filter(a => ['medida','pupilometro','medidas'].includes((a.tipo_arquivo || '').toLowerCase())).map(a => ({ url: a.url_arquivo, created_at: a.criado_em, origem: 'arquivo', id: a.id }));
-                const medidasFromAnexos = (anexosFromVendas || []).filter((u: string) => /pupil|medid|dnp|pupilometro|medida/i.test(u)).map((u: string) => ({ url: u, created_at: null, origem: 'anexo_venda' }));
-                const medidas = [...medidasFromVendas, ...medidasFromArquivos, ...medidasFromAnexos];
-
-                setHistorico({ vendas, receitas, anexos, pagamentos, medidas, financeiroStatus: pagamentos.length > 0 ? `${pagamentos.length} registros` : 'Sem registros' });
-            } catch {
-              // ignore history load errors
-                setHistorico({ vendas: [], receitas: [], anexos: [], pagamentos: [], medidas: [], financeiroStatus: 'Erro ao carregar histórico' });
-            }
-            try {
-              const termosRes = await supabase.from('termos_aceite').select('id, tipo_termo, termo_texto, assinatura_base64, created_at, venda_id').eq('paciente_id', match.id).order('created_at', { ascending: false }).limit(50);
-              if (!termosRes.error && termosRes.data) setTermos(termosRes.data as any[]);
-            } catch {
-              // ignore
-            }
-          } catch {
-            setLastAtendimento(null);
-          }
-        }
-      } catch {
-        setErro("Não foi possível carregar a ficha do paciente agora.");
+      } catch (e) {
+        console.error(e);
+        setErro("Erro ao carregar informações.");
       } finally {
         setLoading(false);
       }
     }
-
-    void resolvePaciente();
+    loadFullData();
   }, [slug]);
 
-  function triggerAttach() {
-    if (!paciente) return;
-    setAttachOpen(true);
-  }
-
-  async function handleAttachConfirm() {
-    if (!paciente || attachFiles.length === 0) return;
-    if (attachUploading) return;
-    setAttachUploading(true);
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData?.user?.id || null;
-      const uploaded: any[] = [];
-
-        for (const af of attachFiles) {
-        const file = af.file;
-        const dataUrl = await compressFileToDataUrl(file, 1600, 0.75);
-        if (!dataUrl) {
-          console.warn('compressFileToDataUrl returned null for file', file.name);
-          continue;
-        }
-        const blob = await (await fetch(dataUrl)).blob();
-        const filename = `pacientes/${paciente.id}/documentos/${Date.now()}-${Math.floor(Math.random() * 100000)}-${file.name.replace(/[^a-z0-9.\-_]/gi,'')}`;
-        const { error: upErr } = await supabase.storage.from('branding-assets').upload(filename, blob, { upsert: true, contentType: blob.type });
-        if (upErr) throw upErr;
-        const publicUrl = supabase.storage.from('branding-assets').getPublicUrl(filename).data?.publicUrl || null;
-
-        const insertRow: any = {
-          paciente_id: paciente.id,
-          venda_id: null,
-          url_arquivo: publicUrl,
-          tipo_arquivo: af.categoria || 'outros',
-          descricao: af.descricao || '',
-          tags: af.tags ? af.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-          criado_por: userId,
-          criado_em: new Date().toISOString(),
-        };
-
-        const { error: insErr } = await supabase.from('paciente_arquivos').insert(insertRow);
-        if (insErr) throw insErr;
-        uploaded.push(insertRow);
-      }
-
-      setHistorico((prev: any) => ({ ...(prev || {}), anexos: uploaded.map(u => ({ url: u.url_arquivo, tipo: u.tipo_arquivo })).concat(prev?.anexos || []) }));
-      attachFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
-      setAttachFiles([]);
-      setAttachOpen(false);
-    } catch (err) {
-      console.error('Erro ao enviar anexos:', err);
-      // não extinguir o modal em caso de erro, permitir retry
-    } finally {
-      setAttachUploading(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-3xl p-8 md:p-12">
-        <div className="rounded-[32px] border border-slate-100 bg-white p-10 text-center shadow-sm">
-          <p className="text-xs font-black uppercase tracking-widest text-blue-600">Pacientes</p>
-          <h1 className="mt-2 text-2xl font-black text-slate-900">Abrindo ficha...</h1>
-          <p className="mt-2 text-sm font-medium text-slate-500">Estamos localizando o cadastro do paciente.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!erro && paciente) {
-    return (
-      <div className="mx-auto max-w-3xl p-8 md:p-12 space-y-6">
-        <div className="rounded-[32px] border border-slate-100 bg-white p-8 md:p-10 shadow-sm">
-          <p className="text-xs font-black uppercase tracking-widest text-blue-600">Ficha do Paciente</p>
-
-          <div className="mt-5 flex flex-col sm:flex-row sm:items-center gap-5">
-            <div className="h-24 w-24 rounded-[20px] overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center">
-              {paciente.foto_url ? (
-                <img src={paciente.foto_url} alt={paciente.nome_completo} className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-3xl">👤</span>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <h1 className="text-2xl font-black text-slate-900">{paciente.nome_completo}</h1>
-              <p className="text-sm font-medium text-slate-500">Foto e dados podem ser editados na tela de cadastro.</p>
-            </div>
-          </div>
-
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href={`/consultorio/pacientes/novo?pacienteId=${paciente.id}`}
-              className="inline-flex items-center rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-200 hover:bg-blue-700 transition-colors"
-            >
-              Editar dados e foto
-            </Link>
-            <Link
-              href={`/consultorio/atendimento/novo?pacienteId=${paciente.id}`}
-              className="inline-flex items-center rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 border border-slate-200 hover:bg-slate-50 transition-colors"
-            >
-              Iniciar atendimento
-            </Link>
-            {lastAtendimento ? (
-              <Link
-                href={`/consultorio/atendimento/${paciente.id}`}
-                className="inline-flex items-center rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 border border-slate-200 hover:bg-slate-50 transition-colors"
-              >
-                Abrir último atendimento • {new Date(lastAtendimento).toLocaleDateString('pt-BR')}
-              </Link>
-            ) : null}
-          <button
-            type="button"
-            onClick={() => setActiveTab('prontuario')}
-            className="inline-flex items-center rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 border border-slate-200 hover:bg-slate-50 transition-colors"
-          >
-            Ver Prontuário / Histórico
-          </button>
-          </div>
-        </div>
-        {activeTab === 'prontuario' && (
-          <div className="mt-6 bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm">
-            <h2 className="text-lg font-black text-slate-900 mb-4">Prontuário / Histórico do Paciente</h2>
-          <div className="flex gap-3 mb-4">
-            <button
-              type="button"
-              onClick={() => void triggerAttach()}
-              className="inline-flex items-center rounded-2xl bg-cyan-600 px-4 py-2 text-sm font-black text-white hover:bg-cyan-700 transition-colors"
-            >
-              + Anexar Documento
-            </button>
-            <PDFDownloadLink document={<PDFProntuario paciente={paciente} historico={historico} clinica={clinicaInfo} />} fileName={`prontuario-${paciente.id}.pdf`} className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-700 border border-slate-200 hover:bg-slate-50 transition-colors">Imprimir Prontuário Completo</PDFDownloadLink>
-            <div className="text-sm text-slate-500 self-center">Categorias: receita, exame, comprovante, documento, outros</div>
-          </div>
-          {attachOpen && (
-            <div className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-900/60 p-4">
-              <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl">
-                <h3 className="text-lg font-black mb-3">Anexar Documento</h3>
-                <p className="text-sm text-slate-500 mb-3">Selecione a foto (câmera) e a categoria do documento.</p>
-                <div className="space-y-3">
-                        <input type="file" accept="image/*" capture="environment" multiple onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          const mapped = files.map(f => ({ file: f, preview: URL.createObjectURL(f), descricao: '', tags: '', categoria: 'receita' }));
-                          setAttachFiles(mapped);
-                        }} />
-                        <div className="mt-3 space-y-2 max-h-64 overflow-auto">
-                          {attachFiles.map((af, idx) => (
-                            <div key={idx} className="flex gap-3 items-start p-2 border rounded">
-                              <img src={af.preview} className="w-20 h-16 object-cover rounded" alt="" />
-                              <div className="flex-1">
-                                <input type="text" placeholder="Descrição (ex: receita Dr. Silva)" value={af.descricao} onChange={(e) => setAttachFiles(prev => prev.map((p,i) => i===idx?{...p, descricao:e.target.value}:p))} className="w-full p-2 rounded border" />
-                                <input type="text" placeholder="Tags (separadas por vírgula)" value={af.tags} onChange={(e) => setAttachFiles(prev => prev.map((p,i) => i===idx?{...p, tags:e.target.value}:p))} className="w-full p-2 rounded border mt-2" />
-                                <select value={af.categoria} onChange={(e) => setAttachFiles(prev => prev.map((p,i) => i===idx?{...p, categoria:e.target.value}:p))} className="w-full p-2 rounded border mt-2">
-                                  <option value="receita">Receita</option>
-                                  <option value="exame">Exame</option>
-                                  <option value="comprovante">Comprovante</option>
-                                  <option value="documento">Documento</option>
-                                  <option value="medida">Medida (foto de medidas / pupilômetro)</option>
-                                  <option value="outros">Outros</option>
-                                </select>
-                              </div>
-                              <div>
-                                <button type="button" onClick={() => setAttachFiles(prev => { const n = [...prev]; const removed = n.splice(idx,1); if (removed[0]?.preview) URL.revokeObjectURL(removed[0].preview as string); return n; })} className="text-rose-600 font-black">Remover</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                </div>
-                <div className="mt-4 flex justify-end gap-3">
-                  <button type="button" onClick={() => { setAttachOpen(false); attachFiles.forEach(f=>f.preview && URL.revokeObjectURL(f.preview)); setAttachFiles([]); }} className="px-4 py-2 rounded-2xl border">Cancelar</button>
-                  <button type="button" disabled={attachUploading || attachFiles.length===0} onClick={() => void handleAttachConfirm()} className="px-4 py-2 rounded-2xl bg-cyan-600 text-white font-black">{attachUploading ? 'Enviando...' : `Anexar ${attachFiles.length} arquivo(s)`}</button>
-                </div>
-              </div>
-            </div>
-          )}
-            {!historico ? (
-              <div className="text-sm text-slate-500">Carregando histórico...</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-4">
-                  <div className="p-4 border rounded-lg">
-                    <div className="text-xs font-black uppercase text-slate-400">Vendas</div>
-                    {(historico.vendas || []).length === 0 ? (
-                      <div className="text-sm text-slate-500 mt-2">Nenhuma venda registrada.</div>
-                    ) : (
-                      (historico.vendas || []).map((v: any) => (
-                        <div key={v.id} className="mt-2 text-sm text-slate-700">
-                          <div className="font-bold">OS: {v.numero_os || v.id.slice(0,8)}</div>
-                          <div>Valor: R$ {Number(v.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — Status: {v.status_financeiro || v.status || '---'}</div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="p-4 border rounded-lg">
-                    <div className="text-xs font-black uppercase text-slate-400">Receitas / Exames</div>
-                    {(historico.receitas || []).length === 0 ? (
-                      <div className="text-sm text-slate-500 mt-2">Nenhuma receita registrada.</div>
-                    ) : (
-                      (historico.receitas || []).map((r: any) => (
-                        <div key={r.id} className="mt-2 text-sm text-slate-700">{r.data_exame}</div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="p-4 border rounded-lg">
-                    <div className="text-xs font-black uppercase text-slate-400">Fotos & Anexos</div>
-                    {(historico.anexos || []).length === 0 ? (
-                      <div className="text-sm text-slate-500 mt-2">Nenhuma foto registrada.</div>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-2 mt-2">{(historico.anexos || []).map((a: any, i: number) => (
-                        <a key={i} href={a.url || a} target="_blank" rel="noreferrer" className="block border rounded overflow-hidden">
-                          <img src={a.url || a} className="w-full h-20 object-cover" alt="" />
-                        </a>
-                      ))}</div>
-                    )}
-                  </div>
-
-                  <div className="p-4 border rounded-lg">
-                    <div className="text-xs font-black uppercase text-slate-400">Termos & Assinaturas</div>
-                    {(termos || []).length === 0 ? (
-                      <div className="text-sm text-slate-500 mt-2">Nenhum termo registrado.</div>
-                    ) : (
-                      <div className="mt-2 space-y-2">
-                        {termos.map((t: any) => (
-                          <div key={t.id} className="flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              {t.assinatura_base64 ? (
-                                <button type="button" onClick={() => { setSelectedTerm(t); setTermPreviewOpen(true); }} className="w-14 h-10 rounded overflow-hidden border bg-white flex items-center justify-center">
-                                  <img src={t.assinatura_base64} alt="assinatura" className="object-contain w-full h-full" />
-                                </button>
-                              ) : (
-                                <div className="w-14 h-10 rounded overflow-hidden border bg-slate-50 flex items-center justify-center text-xs text-slate-400">—</div>
-                              )}
-                              <div>
-                                <div className="text-sm font-bold text-slate-700">{t.tipo_termo}</div>
-                                <div className="text-xs text-slate-400">{new Date(t.created_at).toLocaleString('pt-BR')}</div>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              {t.termo_texto ? (
-                                <button type="button" onClick={() => { setSelectedTerm(t); setTermPreviewOpen(true); }} className="py-1 px-2 text-xs rounded bg-white border">Abrir termo</button>
-                              ) : null}
-                              {t.venda_id ? <a href={`/otica/vendas/${t.venda_id}`} className="text-xs text-cyan-600 font-bold">Ver Venda</a> : null}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-4 border rounded-lg">
-                    <div className="text-xs font-black uppercase text-slate-400">Status Financeiro</div>
-                    <div className="mt-2 text-sm text-slate-700">{(historico.financeiroStatus || 'Sem registros financeiros')}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {termPreviewOpen && selectedTerm && (
-          <div className="fixed inset-0 z-[260] flex items-center justify-center bg-slate-900/60 p-4">
-            <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl overflow-auto">
-              <header className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-black text-slate-900">Visualizar Termo</h3>
-                  <p className="mt-2 text-sm text-slate-600">{selectedTerm.tipo_termo}</p>
-                </div>
-                <button type="button" onClick={() => { setTermPreviewOpen(false); setSelectedTerm(null); }} className="text-slate-400 hover:text-rose-500"><X /></button>
-              </header>
-
-              <div className="mt-4">
-                {selectedTerm.assinatura_base64 ? (
-                  <img src={selectedTerm.assinatura_base64} alt="assinatura-term" className="w-full h-96 object-contain border rounded" />
-                ) : selectedTerm.termo_texto ? (
-                  <div className="prose max-w-none p-4 border rounded text-sm whitespace-pre-line">{selectedTerm.termo_texto}</div>
-                ) : (
-                  <div className="p-6 text-sm text-slate-500">Nenhum conteúdo disponível.</div>
-                )}
-              </div>
-
-              <div className="mt-4 flex justify-end">
-                <button type="button" onClick={() => { setTermPreviewOpen(false); setSelectedTerm(null); }} className="py-2 px-4 bg-cyan-500 text-white rounded-lg font-bold">Fechar</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+  if (loading) return <div className="p-20 text-center animate-pulse font-black text-slate-400 uppercase tracking-widest">Carregando Ficha Completa...</div>;
+  if (erro || !paciente) return <div className="p-20 text-center text-rose-500 font-bold">{erro}</div>;
 
   return (
-    <div className="mx-auto max-w-3xl p-8 md:p-12">
-      <div className="rounded-[32px] border border-red-100 bg-red-50 p-10 text-center">
-        <p className="text-sm font-bold text-red-700">{erro}</p>
-        <Link
-          href="/consultorio/pacientes"
-          className="mt-5 inline-flex rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm"
-        >
-          Voltar para lista
-        </Link>
+    <div className="mx-auto max-w-7xl p-4 md:p-8 space-y-8 pb-20">
+      
+      {/* HEADER DA FICHA: PERFIL E AÇÕES RÁPIDAS */}
+      <section className="bg-white rounded-[40px] p-8 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="flex items-center gap-6">
+          <div className="h-24 w-24 rounded-[30px] overflow-hidden bg-slate-100 border-4 border-slate-50 shadow-inner relative group">
+            {paciente.foto_url ? (
+              <img src={paciente.foto_url} className="h-full w-full object-cover" alt="" />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-slate-300"><User size={40} /></div>
+            )}
+            <Link href={`/consultorio/pacientes/novo?pacienteId=${paciente.id}`} className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-all">
+              <Plus size={20} />
+            </Link>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-3xl font-black text-slate-900 tracking-tighter">{paciente.nome_completo}</h1>
+              {paciente.apelido && <span className="bg-cyan-50 text-cyan-600 text-[10px] font-black px-2 py-1 rounded-lg uppercase tracking-widest">"{paciente.apelido}"</span>}
+            </div>
+            <div className="flex flex-wrap items-center gap-4 mt-2 text-slate-500 text-sm font-medium">
+              <span className="flex items-center gap-1"><Fingerprint size={14}/> {paciente.cpf || 'CPF não informado'}</span>
+              <span className="flex items-center gap-1"><Phone size={14}/> {paciente.celular || 'Sem telefone'}</span>
+              <span className="flex items-center gap-1"><MapPin size={14}/> {paciente.cidade_atendimento || 'Feira de Santana'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+           <Link href={`/consultorio/atendimento/novo?pacienteId=${paciente.id}`} className="bg-cyan-600 text-white px-6 py-4 rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-cyan-100 flex items-center gap-2">
+            <ClipboardList size={16} /> Iniciar Consulta
+           </Link>
+           <Link href={`/otica/vendas/nova?pacienteId=${paciente.id}`} className="bg-slate-100 text-slate-700 px-6 py-4 rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2">
+            <ShoppingBag size={16} /> Nova Venda
+           </Link>
+        </div>
+      </section>
+
+      {/* GRID PRINCIPAL: DADOS E HISTÓRICO */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* COLUNA LATERAL: DADOS CADASTRAIS */}
+        <div className="space-y-6">
+          <div className="bg-white rounded-[32px] p-6 border border-slate-100 space-y-4">
+             <h3 className="text-xs font-black uppercase text-slate-400 tracking-[0.2em] mb-4 flex items-center gap-2">
+               <User size={14} className="text-cyan-500" /> Detalhes Pessoais
+             </h3>
+             <InfoRow label="Nascimento" value={paciente.data_nascimento ? new Date(paciente.data_nascimento).toLocaleDateString('pt-BR') : '---'} />
+             <InfoRow label="Responsável" value={paciente.nome_responsavel || 'Próprio'} />
+             <InfoRow label="Endereço" value={paciente.endereco_completo || 'Não informado'} />
+             <InfoRow label="Trabalho" value={paciente.local_trabalho || '---'} />
+             <div className="pt-4 border-t border-slate-50">
+               <p className="text-[10px] font-black text-slate-300 uppercase mb-2">Observações Internas</p>
+               <div className="p-3 bg-amber-50 text-amber-700 rounded-xl text-xs font-medium italic">
+                 {paciente.observacoes || "Nenhuma observação clínica registrada para este paciente."}
+               </div>
+             </div>
+          </div>
+
+          <div className="bg-slate-900 rounded-[32px] p-6 text-white overflow-hidden relative">
+            <Wallet className="absolute -right-4 -bottom-4 text-white/5 w-32 h-32" />
+            <h3 className="text-[10px] font-black uppercase opacity-50 tracking-widest mb-4">Resumo Financeiro</h3>
+            <div className="space-y-4">
+              <div>
+                <p className="text-[10px] opacity-60 uppercase font-bold">Total em Compras</p>
+                <p className="text-2xl font-black text-cyan-400">R$ {historico.vendas.reduce((acc: number, v: any) => acc + Number(v.valor_total || 0), 0).toLocaleString('pt-BR')}</p>
+              </div>
+              <div className="flex justify-between items-end border-t border-white/10 pt-4">
+                <div>
+                  <p className="text-[10px] opacity-60 uppercase font-bold">Vendas Ativas</p>
+                  <p className="text-lg font-black">{historico.vendas.length}</p>
+                </div>
+                <Link href="/financeiro" className="text-[10px] font-black uppercase bg-white/10 px-3 py-1.5 rounded-lg hover:bg-white/20">Ver Extrato</Link>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* COLUNA PRINCIPAL: TABS DE CONTEÚDO */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* NAVEGAÇÃO DE TABS */}
+          <div className="flex gap-2 p-1 bg-white border border-slate-100 rounded-[24px] overflow-x-auto no-scrollbar">
+            <TabBtn active={activeTab === 'geral'} onClick={() => setActiveTab('geral')} label="Timeline" icon={<Calendar size={14}/>} />
+            <TabBtn active={activeTab === 'clinico'} onClick={() => setActiveTab('clinico')} label="Clínico" icon={<FileText size={14}/>} />
+            <TabBtn active={activeTab === 'vendas'} onClick={() => setActiveTab('vendas')} label="Vendas & OS" icon={<ShoppingBag size={14}/>} />
+            <TabBtn active={activeTab === 'arquivos'} onClick={() => setActiveTab('arquivos')} label="Documentos" icon={<Paperclip size={14}/>} />
+          </div>
+
+          {/* CONTEÚDO DA TIMELINE (VISÃO GERAL) */}
+          {activeTab === 'geral' && (
+            <div className="space-y-4">
+              {/* Timeline Items seriam mapeados aqui misturando vendas e receitas */}
+              <h2 className="text-xl font-black text-slate-800 px-2 tracking-tight">Atividades Recentes</h2>
+              
+              {historico.receitas.length === 0 && historicalEmpty(historico.vendas) && (
+                <div className="p-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+                  <p className="font-bold text-slate-400">Nenhum histórico disponível.</p>
+                </div>
+              )}
+
+              {historico.receitas.map((r: any) => (
+                <TimelineItem 
+                  key={r.id}
+                  title="Consulta Optométrica Realizada"
+                  date={new Date(r.data_exame).toLocaleDateString('pt-BR')}
+                  type="exame"
+                  icon={<Eye className="text-blue-500" />}
+                  link={`/consultorio/atendimento/${paciente.id}`}
+                />
+              ))}
+
+              {historico.vendas.map((v: any) => (
+                <TimelineItem 
+                  key={v.id}
+                  title={`Venda Realizada - OS #${v.numero_os || 'N/D'}`}
+                  date={new Date(v.created_at).toLocaleDateString('pt-BR')}
+                  type="venda"
+                  status={v.status_financeiro}
+                  icon={<ShoppingBag className="text-emerald-500" />}
+                  link={`/otica/vendas/${v.id}`}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* ABA CLÍNICA (RECEITAS COM DETALHAMENTO DE GRAU) */}
+          {activeTab === 'clinico' && (
+  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+    <div className="flex items-center justify-between px-2">
+      <h2 className="text-xl font-black text-slate-800 tracking-tight text-blue-600">Histórico de Refração</h2>
+      <span className="text-[10px] font-black text-slate-400 uppercase bg-slate-50 px-3 py-1 rounded-full">
+        {historico.receitas.length} Registros
+      </span>
+    </div>
+
+    {/* CARD DO GRÁFICO DE EVOLUÇÃO */}
+    {dadosGrafico.length > 1 && (
+      <div className="bg-slate-900 rounded-[40px] p-8 shadow-xl overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-8 opacity-10">
+            <TrendingUp size={120} className="text-white" />
+        </div>
+        
+        <div className="relative z-10">
+          <h3 className="text-white font-black text-lg tracking-tight mb-1">Evolução Dióptrica</h3>
+          <p className="text-cyan-400 text-[10px] font-black uppercase tracking-[0.2em] mb-8">Histórico de Esférico (Longe)</p>
+          
+          <div className="h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={dadosGrafico}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                <XAxis 
+                    dataKey="data" 
+                    stroke="#94a3b8" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    dy={10}
+                />
+                <YAxis 
+                    stroke="#94a3b8" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    domain={["dataMin - 1", "dataMax + 1"]}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)' }}
+                  itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                <Line 
+                    name="Olho Direito" 
+                    type="monotone" 
+                    dataKey="OD" 
+                    stroke="#22d3ee" 
+                    strokeWidth={4} 
+                    dot={{ r: 6, fill: '#22d3ee' }} 
+                    activeDot={{ r: 8 }} 
+                />
+                <Line 
+                    name="Olho Esquerdo" 
+                    type="monotone" 
+                    dataKey="OE" 
+                    stroke="#818cf8" 
+                    strokeWidth={4} 
+                    dot={{ r: 6, fill: '#818cf8' }} 
+                    activeDot={{ r: 8 }} 
+                />
+                <Line
+                  name="Adição"
+                  type="monotone"
+                  dataKey="ADD"
+                  stroke="#34d399"
+                  strokeWidth={3}
+                  dot={{ r: 5, fill: '#34d399' }}
+                  activeDot={{ r: 7 }}
+                />
+                <Line
+                  name="Cil. OD"
+                  type="monotone"
+                  dataKey="CIL_OD"
+                  stroke="#f472b6"
+                  strokeWidth={2}
+                  dot={{ r: 4, fill: '#f472b6' }}
+                  activeDot={{ r: 6 }}
+                  strokeDasharray="4 2"
+                />
+                <Line
+                  name="Cil. OE"
+                  type="monotone"
+                  dataKey="CIL_OE"
+                  stroke="#a78bfa"
+                  strokeWidth={2}
+                  dot={{ r: 4, fill: '#a78bfa' }}
+                  activeDot={{ r: 6 }}
+                  strokeDasharray="4 2"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {historico.receitas.map((r: any) => (
+      <div key={r.id} className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden group hover:border-blue-200 transition-all">
+        {/* Topo do Card */}
+        <div className="p-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/30">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-100">
+              <FileText size={20}/>
+            </div>
+            <div>
+              <p className="font-black text-slate-900 text-lg uppercase tracking-tighter">
+                {r.tipo_receita || 'Exame de Refração'}
+              </p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                <Calendar size={12}/> {new Date(r.data_exame).toLocaleDateString('pt-BR')} • Dr(a). {r.optometrista_nome || 'Consultor Técnico'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+             <button className="p-3 bg-white text-slate-400 rounded-xl hover:text-blue-600 border border-slate-100 transition-colors shadow-sm">
+               <Printer size={16}/>
+             </button>
+          </div>
+        </div>
+
+        {/* Tabela de Graus Rápida (A "mágica" do atendimento rápido) */}
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8 bg-white">
+          {/* Longe */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-400"></span> Visão de Longe
+            </p>
+            <div className="overflow-hidden rounded-2xl border border-slate-50">
+              <table className="w-full text-center text-xs">
+                <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase">
+                  <tr>
+                    <th className="py-2">Olho</th>
+                    <th>Esf.</th>
+                    <th>Cil.</th>
+                    <th>Eixo</th>
+                  </tr>
+                </thead>
+                <tbody className="font-bold text-slate-700">
+                  <tr className="border-t border-slate-50">
+                    <td className="py-3 text-blue-600 font-black">OD</td>
+                    <td>{formatSigned(r.longe_od_esferico, { empty: '0.00' })}</td>
+                    <td>{formatSigned(r.longe_od_cilindrico, { empty: '---' })}</td>
+                    <td>{r.longe_od_eixo ? `${r.longe_od_eixo}°` : '---'}</td>
+                  </tr>
+                  <tr className="border-t border-slate-50">
+                    <td className="py-3 text-blue-600 font-black">OE</td>
+                    <td>{formatSigned(r.longe_oe_esferico, { empty: '0.00' })}</td>
+                    <td>{formatSigned(r.longe_oe_cilindrico, { empty: '---' })}</td>
+                    <td>{r.longe_oe_eixo ? `${r.longe_oe_eixo}°` : '---'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Perto / Adição */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span> Complementar
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100/50 text-center">
+                <p className="text-[9px] font-black text-emerald-600 uppercase">Adição</p>
+                <p className="text-xl font-black text-emerald-700">{formatSigned(r.perto_adicao, { empty: '0.00' })}</p>
+              </div>
+              <div className="p-4 bg-cyan-50/50 rounded-2xl border border-cyan-100/50 text-center">
+                <p className="text-[9px] font-black text-cyan-600 uppercase">DNP (Ref.)</p>
+                <p className="text-xl font-black text-cyan-700">{r.dnp_od || '--'}/{r.dnp_oe || '--'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Rodapé do Card */}
+        {r.observacoes && (
+          <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-50">
+            <p className="text-[10px] font-black text-slate-300 uppercase mb-1">Observações do Especialista</p>
+            <p className="text-xs text-slate-600 font-medium italic">"{r.observacoes}"</p>
+          </div>
+        )}
+      </div>
+    ))}
+
+    {historico.receitas.length === 0 && (
+      <div className="p-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+        <FileText size={48} className="mx-auto text-slate-100 mb-4" />
+        <p className="font-bold text-slate-400 italic">Nenhum registro clínico encontrado para este paciente.</p>
+      </div>
+    )}
+  </div>
+)}
+
+          {/* ABA DE ARQUIVOS (GALERIA) */}
+          {activeTab === 'arquivos' && (
+            <div className="bg-white rounded-[40px] p-8 border border-slate-100">
+               <div className="flex justify-between items-center mb-8">
+                 <h3 className="font-black text-slate-800 text-xl tracking-tighter">Galeria de Documentos</h3>
+                 <button className="p-2 bg-cyan-50 text-cyan-600 rounded-xl hover:bg-cyan-100 transition-colors"><Plus size={20}/></button>
+               </div>
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                 {historico.anexos.map((arq: any) => (
+                   <div key={arq.id} className="group relative aspect-square rounded-3xl overflow-hidden border border-slate-100 bg-slate-50">
+                      <img src={arq.url_arquivo} className="h-full w-full object-cover" alt="" />
+                      <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center p-4 text-center">
+                        <p className="text-[9px] font-black text-white uppercase mb-2 line-clamp-2">{arq.descricao || 'Arquivo'}</p>
+                        <div className="flex gap-2">
+                          <button onClick={() => window.open(arq.url_arquivo, '_blank')} className="p-2 bg-white text-slate-900 rounded-lg"><Eye size={14}/></button>
+                          <a href={arq.url_arquivo} download className="p-2 bg-white text-slate-900 rounded-lg"><Download size={14}/></a>
+                        </div>
+                      </div>
+                   </div>
+                 ))}
+                 {historico.anexos.length === 0 && <p className="col-span-full text-center py-20 text-slate-400 font-bold italic">Nenhum documento anexado.</p>}
+               </div>
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );
 }
+
+// SUBCOMPONENTES AUXILIARES PARA LIMPEZA DO CÓDIGO
+function InfoRow({ label, value }: { label: string, value: string }) {
+  return (
+    <div className="flex justify-between items-center text-sm">
+      <span className="font-bold text-slate-400 uppercase text-[10px] tracking-widest">{label}</span>
+      <span className="font-black text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+function TabBtn({ active, onClick, label, icon }: { active: boolean, onClick: any, label: string, icon: any }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 px-6 py-3 rounded-[20px] text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+        active ? "bg-cyan-600 text-white shadow-lg shadow-cyan-100" : "text-slate-400 hover:text-slate-700 hover:bg-slate-50"
+      }`}
+    >
+      {icon} {label}
+    </button>
+  );
+}
+
+function TimelineItem({ title, date, type, icon, status, link }: any) {
+  return (
+    <div className="bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm flex items-center justify-between group hover:border-cyan-200 transition-all">
+      <div className="flex items-center gap-4">
+        <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center border border-slate-100 group-hover:scale-110 transition-transform">
+          {icon}
+        </div>
+        <div>
+          <p className="font-black text-slate-800 text-sm leading-tight">{title}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{date}</span>
+            {status && <span className="text-[9px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-500 uppercase">{status}</span>}
+          </div>
+        </div>
+      </div>
+      <Link href={link} className="h-10 w-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-cyan-50 group-hover:text-cyan-600 transition-all">
+        <ChevronRight size={18} />
+      </Link>
+    </div>
+  );
+}
+
+function historicalEmpty(vendas: any[]) { return (vendas || []).length === 0 }

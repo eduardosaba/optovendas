@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { maskAv } from "@/lib/refracaoFormat";
 import { useToast } from "@/components/ui/ToastProvider";
 import { ClipboardCheck, Eye, Activity, History, AlertTriangle, Save } from "lucide-react";
+import { generateLaudoPdfBlob } from '@/components/consultorio/PDFLaudoTecnico';
 
 type DadosLaudo = {
   av_sc_longe_od: string; av_sc_perto_od: string;
@@ -14,7 +15,7 @@ type DadosLaudo = {
   sensibilidade: string; motor_acomodativo: string;
   motor_vergencial: string; ishihara: string;
   profundidade: string; conclusao: string;
-  necessita_correcao: string;
+  necessita_correcao: string | boolean;
 };
 
 type Receita = {
@@ -97,10 +98,98 @@ export default function LaudoFuncional({ pacienteId }: { pacienteId: string }) {
     fetchHistorico();
   }, [pacienteId]);
 
-  const salvarLaudo = async () => {
-    const { error } = await supabase.from("laudos_funcionais").insert([{ paciente_id: pacienteId, ...dados }]);
-    if (!error) toast.success("Laudo clínico finalizado com sucesso!");
-    else toast.error("Erro ao salvar laudo.");
+  const salvarLaudo = async () : Promise<boolean> => {
+    try {
+      const toBool = (v: any) => {
+        if (v === true || v === 'true') return true;
+        if (v === 'com_alteracao') return true;
+        if (v === 'sem_alteracao') return false;
+        return null;
+      };
+      // Mapear campos do formulário para os nomes existentes no schema
+      const payload: any = {
+        paciente_id: pacienteId,
+
+        // Acuidade
+        av_sc_longe_od: dados.av_sc_longe_od || null,
+        av_sc_perto_od: dados.av_sc_perto_od || null,
+        av_sc_longe_oe: dados.av_sc_longe_oe || null,
+        av_sc_perto_oe: dados.av_sc_perto_oe || null,
+        av_cc_longe_od: dados.av_cc_longe_od || null,
+        av_cc_perto_od: dados.av_cc_perto_od || null,
+        av_cc_longe_oe: dados.av_cc_longe_oe || null,
+        av_cc_perto_oe: dados.av_cc_perto_oe || null,
+
+        // Testes de diagnóstico (mapear para colunas com sufixo OD/OE) — converter para boolean
+        sensibilidade_contraste_od: toBool(dados.sensibilidade),
+        sensibilidade_contraste_oe: toBool(dados.sensibilidade),
+        motor_acomodativo_od: toBool(dados.motor_acomodativo),
+        motor_acomodativo_oe: toBool(dados.motor_acomodativo),
+        motor_vergencial_od: toBool(dados.motor_vergencial),
+        motor_vergencial_oe: toBool(dados.motor_vergencial),
+        ishihara_od: toBool(dados.ishihara),
+        ishihara_oe: toBool(dados.ishihara),
+
+        // Profundidade
+        profundidade_teste_nome: null,
+        profundidade_od: toBool(dados.profundidade),
+        profundidade_oe: toBool(dados.profundidade),
+
+        // Conclusão / observações
+        observacoes_alteracoes: null,
+        conclusao_final: dados.conclusao || null,
+        conclusao: dados.conclusao || null,
+
+        // Necessita correção — converter 'sim'/'nao' para booleano
+        necessita_correcao: dados.necessita_correcao === "sim" || dados.necessita_correcao === true,
+      };
+
+      const { error } = await supabase.from("laudos_funcionais").insert([payload]);
+      if (!error) {
+        toast.success("Laudo clínico finalizado com sucesso!");
+        return true;
+      } else {
+        console.error('Erro salvar laudo:', error);
+        toast.error("Erro ao salvar laudo.");
+        return false;
+      }
+    } catch (e) {
+      console.error('salvarLaudo exception', e);
+      toast.error('Erro ao salvar laudo.');
+      return false;
+    }
+  };
+
+  const salvarEBaixarLaudo = async () => {
+    try {
+      const ok = await salvarLaudo();
+      if (!ok) return;
+
+      // buscar nome do paciente para título do arquivo
+      let pacienteNome = 'Paciente';
+      try {
+        const { data: p } = await supabase.from('pacientes').select('nome_completo').eq('id', pacienteId).maybeSingle();
+        if (p && (p as any).nome_completo) pacienteNome = (p as any).nome_completo as string;
+      } catch (e) {
+        // ignore — já temos fallback
+      }
+
+      const blob = await generateLaudoPdfBlob({ pacienteNome, conclusao: dados.conclusao });
+      const filename = `Laudo ${pacienteNome.replace(/\s+/g, ' ').trim()}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      toast.success('Laudo salvo e download iniciado.');
+    } catch (e) {
+      console.error('salvarEBaixarLaudo error', e);
+      toast.error('Erro ao salvar e baixar laudo.');
+    }
   };
 
   return (
@@ -172,10 +261,10 @@ export default function LaudoFuncional({ pacienteId }: { pacienteId: string }) {
       </div>
 
       <button 
-        onClick={salvarLaudo} 
+        onClick={salvarEBaixarLaudo} 
         className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-[28px] font-black text-xl shadow-xl shadow-blue-100 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
       >
-        <Save size={24} /> Finalizar Laudo Funcional
+        <Save size={24} /> Salvar e Baixar Laudo Funcional
       </button>
     </div>
   );

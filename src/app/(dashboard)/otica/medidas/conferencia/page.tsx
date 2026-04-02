@@ -281,7 +281,7 @@ export default function DashboardConferenciaMedidasPage() {
                   <div className="pt-1">
                     <div className="flex items-center gap-2">
                       <Link
-                        href={`/otica/vendas/nova?vendaId=${encodeURIComponent(String(venda?.id || ''))}&step=3&refazerMedida=true`}
+                        href={`/otica/vendas/nova?osId=${encodeURIComponent(String(os.id || ''))}&step=3&refazerMedida=true`}
                         className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-amber-700 transition hover:bg-amber-100"
                       >
                         <RefreshCcw size={14} /> Refazer Medida

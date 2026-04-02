@@ -1,8 +1,8 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
+import { Document, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
+import PDFTemplate from './PDFTemplate';
 
 const styles = StyleSheet.create({
-  page: { paddingTop: 36, paddingBottom: 48, paddingHorizontal: 40, fontFamily: 'Helvetica' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   clinicBlock: { flexDirection: 'column', alignItems: 'flex-end' },
   title: { fontSize: 16, fontWeight: 'bold' },
@@ -15,12 +15,11 @@ const styles = StyleSheet.create({
   imgContainer: { marginBottom: 10, textAlign: 'center' },
   imgLabel: { fontSize: 8, color: '#666', marginBottom: 4 },
   img: { width: 180, height: 120, marginBottom: 8, marginRight: 8 },
-  footer: { position: 'absolute', bottom: 24, left: 40, right: 40, flexDirection: 'row', justifyContent: 'space-between', fontSize: 8, color: '#94a3b8' }
 });
 
 const PDFProntuario = ({ paciente, historico, clinica }: any) => (
   <Document>
-    <Page size="A4" style={styles.page}>
+    <PDFTemplate clinica={clinica} title="Prontuário">
       <View style={styles.headerRow}>
         <View>
           <Text style={styles.title}>{clinica?.nome || 'Clínica / Ótica'}</Text>
@@ -55,7 +54,6 @@ const PDFProntuario = ({ paciente, historico, clinica }: any) => (
       <View style={styles.section}>
         <Text style={styles.label}>Fotos & Documentos</Text>
           <View style={styles.imgGrid}>
-              {/* Prioritize medidas (pupilômetro / fotos de medidas) */}
               {(historico?.medidas || []).map((m: any, i: number) => (
                 <View key={`med-${i}`} style={styles.imgContainer}>
                   <Image src={m.url} style={styles.img} />
@@ -63,7 +61,6 @@ const PDFProntuario = ({ paciente, historico, clinica }: any) => (
                 </View>
               ))}
 
-              {/* Then show other anexos/documents */}
               {(historico?.anexos || []).map((a: any, i: number) => (
                 <View key={`anexo-${i}`} style={styles.imgContainer}>
                   <Image src={a.url} style={styles.img} />
@@ -72,12 +69,7 @@ const PDFProntuario = ({ paciente, historico, clinica }: any) => (
               ))}
           </View>
       </View>
-
-      <View style={styles.footer} fixed>
-        <Text>Prontuário gerado por OptoVendas</Text>
-        <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} / ${totalPages}`} />
-      </View>
-    </Page>
+    </PDFTemplate>
   </Document>
 );
 

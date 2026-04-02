@@ -30,7 +30,11 @@ export function PDFHeader({ clinica }: { clinica: Clinica }) {
       {/** Mostrar logomarca (da tabela clinicas) se existir, senão exibir nome */}
       {((clinica as any)?.logomarca_url || clinica?.config_unidade?.logo_unidade_url) ? (
         <View style={{ alignItems: "center", marginBottom: 6 }}>
-          <Image src={{ uri: (clinica as any).logomarca_url || clinica?.config_unidade?.logo_unidade_url }} style={{ width: 160, height: 80, objectFit: "contain" }} />
+          {(() => {
+            const raw = (clinica as any).logomarca_url || clinica?.config_unidade?.logo_unidade_url || null;
+            const uri = raw ? encodeURI(raw) : raw;
+            return <Image src={{ uri }} style={{ width: 160, height: 80, objectFit: "contain" }} />;
+          })()}
         </View>
       ) : (
         <>

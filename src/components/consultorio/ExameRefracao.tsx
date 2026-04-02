@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Eye, Ruler, PlusCircle, ChevronUp, ChevronDown } from "lucide-react";
+import { maskAv } from "@/lib/refracaoFormat";
 
 const OPCOES_CONDICOES = [
   { label: "Miopia", key: "miopia" },
@@ -296,11 +297,7 @@ function InputMedicao({ label, value, onChange, isEixo, isAv, step }: any) {
 function InputWithFormatting({ value, onChange, isAv, isEixo }: any) {
   const [editing, setEditing] = useState(false);
 
-  function maskAv(raw: string) {
-    const digits = String(raw || "").replace(/\D/g, "");
-    if (digits.length <= 2) return digits;
-    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}`;
-  }
+  // usa a máscara compartilhada `maskAv` de `src/lib/refracaoFormat.ts`
 
   function formatDisplay(v: string | undefined | null) {
     if (!v || String(v).trim() === "") return "";

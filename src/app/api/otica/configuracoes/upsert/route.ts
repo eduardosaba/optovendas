@@ -6,45 +6,56 @@ const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export async function POST(req: Request) {
   if (!supabaseUrl || !serviceRole) return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
-
-  const supabaseAdmin = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
+  const supabaseAdmin = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false, autoRefreshToken: false } });
 
   try {
-    const token = req.headers.get('authorization')?.replace('Bearer ', '');
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Sessão inválida' }, { status: 401 });
+    }
+
     const body = await req.json();
 
-    // Basic auth check: ensure token owner belongs to same clinica
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const userRes: any = await (supabaseAdmin as any).auth.getUser({ access_token: token });
-    const user = (userRes as any)?.data?.user;
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const perfilRes: any = await supabaseAdmin.from('perfis').select('clinica_id').eq('id', user.id).maybeSingle();
-    const clinicaId = perfilRes?.data?.clinica_id;
-    if (!clinicaId) return NextResponse.json({ error: 'Perfil sem clínica' }, { status: 403 });
-
-    // Ensure payload clinica_id matches
-    if (body.clinica_id && String(body.clinica_id) !== String(clinicaId)) {
-      return NextResponse.json({ error: 'Clinica mismatch' }, { status: 403 });
+    // Require clinica_id in payload when called from client
+    const clinicaId = body?.clinica_id;
+    if (!clinicaId) {
+      return NextResponse.json({ error: 'ID da clínica não fornecido' }, { status: 400 });
     }
 
-    // Normalize cnpj: store only digits or null
-    if (body.cnpj !== undefined && body.cnpj !== null) {
-      body.cnpj = String(body.cnpj).replace(/\D/g, '') || null;
+    // Prepare payload with normalized fields
+    const payload: any = {
+      clinica_id: clinicaId,
+      nome_otica: body.nome_otica,
+      cnpj: body.cnpj ? String(body.cnpj).replace(/\D/g, '') : null,
+      telefone: body.telefone,
+      whatsapp: body.whatsapp,
+      email: body.email,
+      endereco: body.endereco,
+      cidade: body.cidade,
+      logo_url: body.logo_url,
+      mensagem_rodape: body.mensagem_rodape,
+      cobrar_comissao: !!body.cobrar_comissao,
+      comissao_padrao_porcentagem: Number(body.comissao_padrao_porcentagem || 0),
+      meta_mensal: Number(body.meta_mensal || 0),
+      limite_desconto_vendedor: Number(body.limite_desconto_vendedor || 5),
+      limite_desconto_gerente: Number(body.limite_desconto_gerente || 15),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabaseAdmin
+      .from('otica_configuracoes')
+      .upsert(payload as any, { onConflict: 'clinica_id' })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erro Supabase Admin:', error);
+      return NextResponse.json({ error: error.message || String(error) }, { status: 400 });
     }
 
-    body.clinica_id = clinicaId;
-
-    const up = await supabaseAdmin.from('otica_configuracoes').upsert(body);
-    if (up.error) {
-      console.error('upsert otica_configuracoes failed', up.error);
-      return NextResponse.json({ error: up.error.message || up.error }, { status: 400 });
-    }
-
-    return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    console.error('config upsert error', e);
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ success: true, data });
+  } catch (err: any) {
+    console.error('Erro Crítico API:', err);
+    return NextResponse.json({ error: 'Erro interno no servidor' }, { status: 500 });
   }
 }

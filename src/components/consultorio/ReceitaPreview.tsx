@@ -12,20 +12,25 @@ export default function ReceitaPreview({ dados, clinica }: { dados: Dados; clini
   const idade = dados.idade_paciente || null;
   const data = dados.data_exame || new Date().toISOString().slice(0,10);
 
-  const tratamentos = [dados.tratamento_lente, dados.tratamento_antirreflexo ? 'Anti Reflexo' : null, dados.tratamento_fotossensivel ? 'Fotossensível' : null].filter(Boolean).join(' • ');
+  const tratamentos = [
+    dados.tratamento_antirreflexo ? 'Anti Reflexo' : null,
+    dados.tratamento_fotossensivel ? 'Fotossensível' : null,
+  ].filter(Boolean).join(' • ');
 
   return (
     <div className="mx-auto max-w-3xl bg-white rounded-2xl shadow-md border border-slate-100 overflow-hidden">
-      <div className="p-6" style={{ borderBottom: `4px solid ${cor}` }}>
+      <div style={{ height: 10, background: cor }} />
+      <div className="p-6">
         <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-2xl font-black" style={{ color: cor }}>{clinica?.nome_fantasia || 'Clínica'}</h3>
-            <p className="text-sm text-slate-500">{clinica?.endereco_completo || ''}</p>
+          <div className="flex items-center gap-4">
+            {clinica?.logomarca_url ? (
+              <img src={clinica.logomarca_url} alt="logo" className="w-20 object-contain" />
+            ) : null}
+            <div>
+              <h3 className="text-2xl font-black" style={{ color: cor }}>{clinica?.nome_fantasia || 'Clínica'}</h3>
+              <p className="text-sm text-slate-500">{clinica?.endereco_completo || ''}</p>
+            </div>
           </div>
-          {clinica?.logomarca_url ? (
-             
-            <img src={clinica.logomarca_url} alt="logo" className="w-28 object-contain" />
-          ) : null}
         </div>
       </div>
 

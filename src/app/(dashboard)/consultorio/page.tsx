@@ -235,18 +235,28 @@ export default function ConsultorioPage() {
                 </IconBox>
               }
             />
-
-            <ActionTile
+            <Link
               href="/financeiro/consultorio"
-              title="Financeiro Consultorio"
-              description="Ticket medio de consulta."
-              icon={
+              className="group relative flex h-72 flex-col justify-between overflow-hidden rounded-[48px] bg-emerald-600 p-9 text-white shadow-[0_32px_90px_-45px_rgba(37,99,235,0.9)] transition-all hover:-translate-y-1 hover:bg-emerald-800"
+            >
+              <IconBox tone="emerald">
                 <IconBox tone="emerald">
                   <DollarSign size={20} />
                 </IconBox>
-              }
-              accent="bg-emerald-500"
-            />
+              </IconBox>
+
+              <div className="relative z-10 text-left">
+                <h2 className="text-3xl font-black leading-tight">Financeiro Consultório</h2>
+                <p className="mt-2 text-sm font-medium text-blue-100">Ticket medio de consulta.</p>
+              </div>
+
+              <div className="absolute -right-16 -top-14 h-44 w-44 rounded-full bg-white/15 blur-2xl" />
+              <div className="absolute bottom-8 right-8 text-white/40">
+                <IconStroke path="M5 12h14m-5-5 5 5-5 5" />
+                
+              </div>
+            </Link>
+            
           </div>
 
           <section className="space-y-4">

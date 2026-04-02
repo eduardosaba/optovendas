@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PDFDownloadLink } from "@react-pdf/renderer";
+import { PDFDownloadLink, pdf } from "@react-pdf/renderer";
 import FichaAnamnese from "@/components/consultorio/FichaAnamnese";
 import ExameRefracao, { type RefracaoValue } from "@/components/consultorio/ExameRefracao";
 import HistoricoEvolucao from "@/components/consultorio/HistoricoEvolucao";
@@ -312,6 +312,55 @@ export default function NovoAtendimentoPage() {
 
       toast.success("Atendimento e receita salvos com sucesso!");
       setEtapa(3);
+
+      // Gerar PDF da receita e iniciar download usando o mesmo componente ReceitaPdf (timbrado)
+      try {
+        const tratamentoLenteStr = [
+          refracao.tratamentoAntiReflexo ? 'Anti Reflexo' : null,
+          refracao.tratamentoFotossensivel ? 'Fotossível' : null,
+        ].filter(Boolean).join(' • ') || null;
+
+        const receitaPdfData: any = {
+          pacientes: { nome_completo: pacienteNomeExibicao || pacienteQuery || 'Paciente' },
+          idade_paciente: idadePaciente || null,
+          data_exame: new Date().toISOString(),
+          od_esferico: toNumberOrNull(refracao.odEsferico),
+          od_cilindrico: toNumberOrNull(refracao.odCilindrico),
+          od_eixo: toNumberOrNull(refracao.odEixo),
+          od_av: refracao.odAv || null,
+          oe_esferico: toNumberOrNull(refracao.oeEsferico),
+          oe_cilindrico: toNumberOrNull(refracao.oeCilindrico),
+          oe_eixo: toNumberOrNull(refracao.oeEixo),
+          oe_av: refracao.oeAv || null,
+          adicao: toNumberOrNull(refracao.adicao),
+          dp_dnp: refracao.dpDnp || null,
+          miopia: refracao.miopia,
+          astigmatismo: refracao.astigmatismo,
+          hipermetropia: refracao.hipermetropia,
+          presbiopia: refracao.presbiopia,
+          tipo_lente: refracao.tipoLente || null,
+          tratamento_lente: tratamentoLenteStr,
+          tratamento_antirreflexo: refracao.tratamentoAntiReflexo,
+          tratamento_fotossensivel: refracao.tratamentoFotossensivel,
+          retorno: refracao.retorno,
+          nota_rodape: notaRodapeReceita,
+        };
+
+        const doc = <ReceitaPdf dados={receitaPdfData} clinica={{ nome_fantasia: clinicaNome, logomarca_url: logomarcaUrl, cor_primaria: corPrimaria, config_unidade: (configUnidade as any) }} />;
+        const blob = await pdf(doc).toBlob();
+        const fileName = `RX_${(receitaPdfData.pacientes.nome_completo || 'paciente').split(' ')[0]}.pdf`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        // não bloquear o fluxo principal se falhar gerar PDF
+        console.warn('Falha ao gerar/baixar PDF da receita:', err);
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar atendimento.");
     } finally {
@@ -460,7 +509,7 @@ export default function NovoAtendimentoPage() {
       {/* Modal de Preview */}
       <Modal open={showPreviewReceita} onClose={() => setShowPreviewReceita(false)} title="Preview da Receita">
           <ReceitaPreview 
-            dados={{ ...refracao, paciente_nome: pacienteNomeExibicao, idade_paciente: idadePaciente, data_exame: new Date().toISOString() }}
+            dados={{ ...refracao, pacientes: { nome_completo: pacienteNomeExibicao }, idade_paciente: idadePaciente, data_exame: new Date().toISOString(), nota_rodape: notaRodapeReceita }}
             clinica={{ nome_fantasia: clinicaNome, logomarca_url: logomarcaUrl, cor_primaria: corPrimaria, config_unidade: configUnidade }}
           />
       </Modal>

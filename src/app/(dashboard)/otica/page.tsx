@@ -331,9 +331,9 @@ export default function OticaPage() {
         />
 
         <MenuCard
-          href="/otica/relatorios/fechamento"
+          href="/otica/relatorios/vendas"
           title="Relatórios de Vendas"
-          desc="Análise de produtividade por vendedor e lucratividade."
+          desc="Relatório de Vendas Completo."
           icon={<FileText size={24} />}
           color="text-slate-600"
           bgColor="bg-slate-100"
@@ -371,8 +371,8 @@ export default function OticaPage() {
         {/* CARD: FECHAMENTO DE ROTA */}
         <MenuCard
           href="/otica/relatorios/fechamento"
-          title="Fechamento de Rota"
-          desc="Consolidado de vendas e despesas do dia externo."
+          title="Fechamento de Rota - Movimentação Financeira"
+          desc="Conferência de vendas e fechamento financeiro do dia."
           icon={<FileText size={24} />}
           color="text-rose-600"
           bgColor="bg-rose-50"
@@ -387,15 +387,23 @@ export default function OticaPage() {
           color="text-cyan-700"
           bgColor="bg-cyan-50"
         />
-
-        <MenuCard
+        <Link
           href="/otica/configuracoes"
-          title="Configurações"
-          desc="Permissões de equipe, logotipos e regras de comissão."
-          icon={<Settings size={24} />}
-          color="text-slate-400"
-          bgColor="bg-slate-50"
-        />
+          className="group relative h-[340px] flex-col justify-between overflow-hidden rounded-[48px] bg-emerald-900 p-10 shadow-2xl shadow-esmerald-200 transition-all duration-500 hover:scale-[1.02] lg:col-span-1"
+        >
+          <div className="relative z-10">
+            <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-[24px] bg-green-500 text-white shadow-lg shadow-green-500/40 transition-transform group-hover:rotate-12">
+              <Settings size={32} />
+            </div>
+            <h3 className="text-4xl font-black leading-tight text-white">
+              Configurações
+              <br />
+              Ótica<span className="text-cyan-500">.</span>
+            </h3>
+            <p className="mt-4 text-sm font-medium italic text-green-100">Clique para ajustar as configurações da ótica, permissões de equipe, logotipos.</p>
+          </div>
+          <ArrowRight className="absolute bottom-10 right-10 text-cyan-500 transition-transform group-hover:translate-x-2" size={32} />
+        </Link>
 
       </div>
       {/* Modal de Celebração */}

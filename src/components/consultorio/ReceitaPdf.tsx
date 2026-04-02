@@ -1,7 +1,8 @@
 "use client";
-import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { Document, Image, StyleSheet, Text, View } from "@react-pdf/renderer";
 import type { RefracaoValue } from "@/components/consultorio/ExameRefracao";
 import { fmtNumber, fmtEixo, v } from "@/lib/refracaoFormat";
+import PDFTemplate from "./PDFTemplate";
 
 type ReceitaDados = {
   od_esferico?: string | number | null;
@@ -73,10 +74,7 @@ type OldProps = {
 
 const LOGO_SISTEMA_DEFAULT = "https://ggpjfyejksxphmzdscro.supabase.co/storage/v1/object/public/logo/Opto.png";
 
-// uses shared format helpers from src/lib/refracaoFormat
-
 export default function ReceitaPdf(props: NewProps | OldProps) {
-  // Compatibilidade: aceitar novo formato { dados, clinica } ou o formato antigo de props individuais
   const isNew = (props as NewProps).clinica !== undefined && (props as NewProps).dados !== undefined;
 
   const clinica: ClinicaCabecalho = isNew
@@ -97,7 +95,6 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
   const dataExame = isNew ? undefined : (props as OldProps).dataExame;
 
   const corBase = clinica.cor_primaria || "#00A8C1";
-  const modelo = clinica.modelo_timbrado || clinica.config_unidade?.modelo_timbrado || "modelo1";
   const contatoEmail = clinica.email || clinica.config_unidade?.email_contato || null;
   const contatoInstagram = clinica.instagram || clinica.config_unidade?.instagram_handle || null;
   const endereco = clinica.endereco_completo || clinica.config_unidade?.endereco_completo || null;
@@ -105,8 +102,8 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
   const exibirCarimboAuto = clinica.config_unidade?.exibir_carimbo_automatico ?? true;
   const dataGeracao = dataExame || dados.data_exame || new Date().toISOString().slice(0, 10);
   const logoCustomUrl = clinica.logomarca_url?.trim() ? clinica.logomarca_url : null;
-  // react-pdf não renderiza SVGs bem — para o PDF usamos um fallback PNG se a URL for .svg
-  const logoForPdf = logoCustomUrl && logoCustomUrl.toLowerCase().endsWith(".svg") ? LOGO_SISTEMA_DEFAULT : logoCustomUrl;
+  const rawLogoForPdf = logoCustomUrl && logoCustomUrl.toLowerCase().endsWith(".svg") ? LOGO_SISTEMA_DEFAULT : logoCustomUrl;
+  const logoForPdf = rawLogoForPdf ? encodeURI(rawLogoForPdf) : rawLogoForPdf;
   const pacienteNomeLinha = isNew ? ((dados as any)?.pacientes?.nome_completo || (dados as any)?.paciente_nome || null) : pacienteNome;
   const idadePorNascimento = isNew ? calcularIdadePorNascimento((dados as any)?.pacientes?.data_nascimento) : null;
   const idadePacienteLinha = isNew ? ((dados as any)?.idade_paciente ?? idadePorNascimento) : idadePaciente;
@@ -125,85 +122,13 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
     if (s === "-" || s === "•" || lower === "null" || lower === "undefined") return null;
     return s;
   };
-  const tratamentosExtras = [
+  const tratamentoTexto = [
     dados.tratamento_antirreflexo ? "Anti Reflexo" : null,
-    dados.tratamento_fotossensivel ? "Fotossensível" : null,
-  ].filter(Boolean) as string[];
-  const tratamentoTokens = [sanitizeLabel(dados.tratamento_lente), ...tratamentosExtras]
-    .filter(Boolean)
-    .flatMap((item) => String(item).split("•").map((part) => part.trim()))
-    .map((part) => sanitizeLabel(part))
-    .filter(Boolean) as string[];
-  const tratamentoUnico = Array.from(new Set(tratamentoTokens.map((item) => item.toLowerCase()))).map((item) =>
-    tratamentoTokens.find((orig) => orig.toLowerCase() === item)
-  );
-  const tratamentoTexto = tratamentoUnico.length > 0 ? (tratamentoUnico.filter(Boolean) as string[]).join(" • ") : "-";
+    dados.tratamento_fotossensivel ? "Fotossível" : null,
+  ].filter(Boolean).join(" • ") || "-";
   const dataConsultaLinha = formatDateBR(dataGeracao);
 
   const styles = StyleSheet.create({
-    page: {
-      padding: 40,
-      paddingTop: 100,
-      paddingBottom: 40,
-      fontSize: 10,
-      fontFamily: "Helvetica",
-      color: "#1e293b",
-      backgroundColor: "#FFFFFF",
-    },
-    headerBackground: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 100,
-    },
-    shapeModelo1: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 10,
-      backgroundColor: corBase,
-    },
-    // React-pdf nao suporta clipPath; usamos rotacao para obter o detalhe diagonal.
-    shapeModelo2: {
-      position: "absolute",
-      top: -6,
-      right: -18,
-      width: 220,
-      height: 66,
-      backgroundColor: corBase,
-      transform: "rotate(-8deg)",
-    },
-    logoBoxModelo1: {
-      position: "absolute",
-      top: 14,
-      left: 40,
-      width: 110,
-      height: 110,
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 10,
-    },
-    logoBoxModelo2: {
-      position: "absolute",
-      top: 14,
-      left: 40,
-      width: 110,
-      height: 110,
-      alignItems: "center",
-      justifyContent: "center",
-      zIndex: 10,
-    },
-    logo: { width: 90, height: 90, objectFit: "contain" },
-    clinicaInfoTop: {
-      marginTop: -38,
-      marginLeft: 126,
-      marginBottom: 28,
-    },
-    clinicaNome: { fontSize: 22, fontWeight: "bold", color: corBase, marginBottom: 2 },
-    clinicaSub: { fontSize: 9, color: "#94a3b8" },
-
     documentTitle: {
       fontSize: 14,
       fontWeight: "bold",
@@ -245,61 +170,15 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
     detailLabel: { fontSize: 8, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2, fontWeight: "bold" },
     detailValue: { fontSize: 11, fontWeight: "bold", color: "#1e293b" },
 
-    carimboArea: {
-      position: "absolute",
-      bottom: 200,
-      right: 40,
-      width: 200,
-      padding: 10,
-      borderWidth: 2,
-      borderColor: corBase,
-      alignItems: "center",
-      opacity: 0.82,
-      backgroundColor: "#FFFFFF",
-    },
-    carimboTexto: { color: corBase, fontWeight: "bold", fontSize: 9, textTransform: "uppercase", textAlign: "center" },
     assinaturaArea: { position: "absolute", bottom: 200, left: 40, width: 200, alignItems: "center" },
     assinaturaLinha: { borderTop: "1 solid #1e293b", width: 200, marginTop: 40, marginBottom: 5 },
 
-    footerContent: {
-      position: "absolute",
-      bottom: 120,
-      left: 40,
-      right: 40,
-      textAlign: "center",
-      fontSize: 8,
-      color: "#64748b",
-      lineHeight: 1.35,
-    },
-    footerBar: {
-      position: "absolute",
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: 40,
-      backgroundColor: corBase,
-    },
-    footerBarText: { fontSize: 7, color: "#FFFFFF", textAlign: "center", marginTop: 14 },
     notaRodape: { fontSize: 9, color: "#64748b", fontStyle: "italic", marginTop: 14 },
   });
 
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <View style={styles.headerBackground}>{modelo === "modelo1" ? <View style={styles.shapeModelo1} /> : <View style={styles.shapeModelo2} />}</View>
-
-        {logoCustomUrl ? (
-          <View style={modelo === "modelo1" ? styles.logoBoxModelo1 : styles.logoBoxModelo2}>
-            {/* eslint-disable-next-line jsx-a11y/alt-text */}
-            <Image src={{ uri: logoForPdf! }} style={styles.logo} />
-          </View>
-        ) : (
-          <View style={styles.clinicaInfoTop}>
-            <Text style={styles.clinicaNome}>{v(clinica.nome_fantasia)}</Text>
-            <Text style={styles.clinicaSub}>{v(clinica.cnpj_cpf)}</Text>
-          </View>
-        )}
-
+      <PDFTemplate clinica={clinica} title="Prescrição de Óculos" includeCarimbo={exibirCarimboAuto} footerText={[v(endereco), v(clinica.telefone)].filter(Boolean).join(' | ')}>
         <View style={styles.patientMetaBox}>
           <Text style={styles.patientMetaLine}>
             <Text style={styles.patientMetaLabel}>Nome Completo: </Text>
@@ -314,8 +193,6 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
             {v(dataConsultaLinha)}
           </Text>
         </View>
-
-        <Text style={styles.documentTitle}>Prescrição de Óculos</Text>
 
         <View style={styles.table}>
           <View style={styles.tableHeader}>
@@ -367,31 +244,17 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
           </View>
         </View>
 
-        {(clinica as any)?.config_unidade?.carimbo_nome && exibirCarimboAuto ? (
-          <View style={styles.carimboArea}>
-            <Text style={styles.carimboTexto}>{String((clinica as any).config_unidade.carimbo_nome)}</Text>
-            <Text style={[styles.carimboTexto, { fontSize: 7 }]}>{String((clinica as any).config_unidade.carimbo_titulo || "")}</Text>
-            <Text style={[styles.carimboTexto, { fontSize: 8, marginTop: 4 }]}>{String((clinica as any).config_unidade.carimbo_registro || "")}</Text>
-          </View>
-        ) : (
+        {!(clinica as any)?.config_unidade?.carimbo_nome && (
           <View style={styles.assinaturaArea}>
             <View style={styles.assinaturaLinha} />
             <Text style={{ fontSize: 9, fontWeight: "bold" }}>Assinatura do Profissional</Text>
           </View>
         )}
 
-        <View style={styles.footerContent}>
+        <View style={{ marginTop: 8 }}>
           <Text style={styles.notaRodape}>{v(dados.nota_rodape) !== "-" ? v(dados.nota_rodape) : "Válido por 6 meses conforme normas técnicas."}</Text>
         </View>
-
-        <View style={styles.footerBar}>
-          <Text style={styles.footerBarText}>
-            {[v(endereco), v(clinica.telefone), contatoEmail || null, instagramFmt || null]
-              .filter((item) => item && item !== "-")
-              .join(" | ")}
-          </Text>
-        </View>
-      </Page>
+      </PDFTemplate>
     </Document>
   );
 }
@@ -409,7 +272,7 @@ function mapFromRefracao(r?: RefracaoValue): ReceitaDados {
     oe_av: normalizeVal(r.oeAv),
     adicao: normalizeVal(r.adicao),
     tipo_lente: r.tipoLente || null,
-    tratamento_lente: [r.tratamentoAntiReflexo ? "Anti Reflexo" : null, r.tratamentoFotossensivel ? "Fotossensível" : null].filter(Boolean).join(" • ") || null,
+    tratamento_lente: [r.tratamentoAntiReflexo ? "Anti Reflexo" : null, r.tratamentoFotossensivel ? "Fotossível" : null].filter(Boolean).join(" • ") || null,
     miopia: r.miopia ?? null,
     astigmatismo: r.astigmatismo ?? null,
     hipermetropia: r.hipermetropia ?? null,
