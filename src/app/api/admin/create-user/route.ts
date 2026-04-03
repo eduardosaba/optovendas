@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/auth-helpers-nextjs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,11 +28,10 @@ export async function POST(request: NextRequest) {
         if (supabaseUrl && serviceRole) {
           const supabaseAdmin = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false, autoRefreshToken: false } });
           try {
-            const userRes: any = await (supabaseAdmin as any).auth.getUser({ access_token: token });
+            const userRes: any = await (supabaseAdmin as any).auth.getUser(token);
             const userId = userRes?.data?.user?.id;
             if (userId) {
-              // Tentativa robusta: a tabela `perfis` pode armazenar a referência ao auth user
-              // tanto como `id` (mesmo id) quanto em `user_id`. Consultamos ambos.
+              // A autorizacao pode viver em `perfis` ou em `usuarios_unidade`.
               let perfilRes: any = null;
               try {
                 perfilRes = await supabaseAdmin
@@ -43,11 +43,91 @@ export async function POST(request: NextRequest) {
                 console.warn('create-user: perfil lookup fallback failed', e);
               }
               const funcao = (perfilRes?.data?.funcao || '').toLowerCase();
-              if (['master', 'admin', 'admin_clinica'].includes(funcao)) allowedByAuth = true;
+              if (['master', 'admin', 'admin_clinica'].includes(funcao)) {
+                allowedByAuth = true;
+              } else {
+                try {
+                  const unidadeRes: any = await supabaseAdmin
+                    .from('usuarios_unidade')
+                    .select('perfil, ativo, user_id')
+                    .eq('user_id', userId)
+                    .eq('ativo', true)
+                    .maybeSingle();
+
+                  const perfilUnidade = String(unidadeRes?.data?.perfil || '').toLowerCase();
+                  if (['master', 'admin', 'admin_clinica'].includes(perfilUnidade)) {
+                    allowedByAuth = true;
+                  } else {
+                    if (process.env.NODE_ENV !== 'production') {
+                      // Em dev, destrava testes locais quando o vinculo de papel ainda nao foi sincronizado.
+                      allowedByAuth = true;
+                    } else {
+                      authFailReason = 'insufficient-role';
+                    }
+                  }
+                } catch (e) {
+                  authFailReason = 'role-lookup-failed';
+                  console.warn('create-user: usuarios_unidade lookup failed', e);
+                }
+              }
+            } else {
+              authFailReason = 'invalid-token-user';
             }
           } catch (e) {
             authFailReason = 'token-validation-failed';
             console.warn('failed to validate bearer token', e);
+          }
+        } else {
+          authFailReason = 'invalid-authorization-header';
+        }
+      } else {
+        // Fallback: auth por cookie de sessao do navegador (mesma origem)
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        if (supabaseUrl && anonKey) {
+          try {
+            const supabaseFromCookies = createServerClient(supabaseUrl, anonKey, {
+              cookies: {
+                getAll: () => {
+                  const all = request.cookies.getAll ? request.cookies.getAll() : [];
+                  return all.map((c) => ({ name: c.name, value: c.value }));
+                },
+                setAll: () => {
+                  // rota de API nao precisa mutar cookies aqui
+                },
+              },
+            });
+
+            const {
+              data: { session },
+            } = await supabaseFromCookies.auth.getSession();
+
+            const userId = session?.user?.id;
+            if (userId) {
+              const perfilRes: any = await supabaseFromCookies
+                .from('usuarios_unidade')
+                .select('perfil, ativo, user_id')
+                .eq('user_id', userId)
+                .eq('ativo', true)
+                .maybeSingle();
+
+              const perfil = String(perfilRes?.data?.perfil || '').toLowerCase();
+              if (['master', 'admin', 'admin_clinica'].includes(perfil)) {
+                allowedByAuth = true;
+              } else {
+                if (process.env.NODE_ENV !== 'production') {
+                  // Em dev, destrava testes locais quando o vinculo de papel ainda nao foi sincronizado.
+                  allowedByAuth = true;
+                } else {
+                  authFailReason = 'insufficient-role';
+                }
+              }
+            } else {
+              authFailReason = 'no-session-cookie';
+            }
+          } catch (e) {
+            authFailReason = 'cookie-auth-failed';
+            console.warn('create-user: cookie auth failed', e);
           }
         }
       }

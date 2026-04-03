@@ -6,6 +6,7 @@ import { ExternalLink, DollarSign } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { supabase } from "@/lib/supabase";
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 
 type FilaStatus = "espera" | "atendimento";
 
@@ -174,6 +175,10 @@ export default function ConsultorioPage() {
             Consultório
             <span className="text-blue-600">.</span>
           </h1>
+        </div>
+
+        <div className="flex items-center justify-end">
+          <ConsultorioLogoBadge />
         </div>
 
         {/* busca da fila será exibida na caixa lateral de 'Fila de Hoje' */}

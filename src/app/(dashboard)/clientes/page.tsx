@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -101,13 +102,19 @@ export default function ListaClientesPage() {
           <p className="text-slate-400 font-medium text-sm">Gestão de histórico, vendas e cadastros da ótica.</p>
         </div>
 
-        <Link
-          href="/clientes/novo"
-          className="bg-slate-900 hover:bg-emerald-600 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-slate-200 active:scale-95 text-center justify-center"
-        >
-          <UserPlus size={20} />
-          Novo Cliente
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/clientes/novo"
+            className="bg-slate-900 hover:bg-emerald-600 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-slate-200 active:scale-95 text-center justify-center"
+          >
+            <UserPlus size={20} />
+            Novo Cliente
+          </Link>
+
+          <div className="flex items-center">
+            <OticaLogoBadge />
+          </div>
+        </div>
       </header>
 
       <div className="flex gap-4">

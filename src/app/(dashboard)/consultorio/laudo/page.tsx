@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import Link from "next/link";
 import LaudoFuncional from "@/components/consultorio/LaudoFuncional";
 import { ArrowLeft, Search, UserCircle2, ChevronRight, FileText } from "lucide-react";
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 
 export default function LaudoPage() {
   const [query, setQuery] = useState("");
@@ -59,6 +60,9 @@ export default function LaudoPage() {
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">
             Laudo Funcional<span className="text-blue-600">.</span>
           </h1>
+        </div>
+        <div className="ml-auto">
+          <ConsultorioLogoBadge />
         </div>
       </header>
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import {
   ArrowLeft,
   TrendingUp,
@@ -96,6 +97,9 @@ export default function DashboardEstoquePage() {
              <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Analítico</p>
              <h1 className="text-4xl font-black text-slate-900 tracking-tight">Kardex de Ótica<span className="text-cyan-600">.</span></h1>
            </div>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end mr-2">
+          <OticaLogoBadge />
         </div>
         <button onClick={carregar} className="p-4 bg-white rounded-2xl text-slate-400 hover:text-cyan-600 shadow-sm border border-slate-50 transition-all">
           <RefreshCcw size={20} className={loading ? "animate-spin" : ""} />

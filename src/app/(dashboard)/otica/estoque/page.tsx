@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import {
   Package,
   Plus,
@@ -169,6 +170,9 @@ export default function EstoquePage() {
              <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Inventário</p>
              <h1 className="text-4xl font-black text-slate-900 tracking-tight">Estoque Ótica<span className="text-cyan-600">.</span></h1>
            </div>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end mr-2">
+          <OticaLogoBadge />
         </div>
         <div className="flex gap-3 w-full md:w-auto">
           <button 

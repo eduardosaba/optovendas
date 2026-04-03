@@ -4,13 +4,28 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/dexie-db";
 import { CloudOff, RefreshCw } from "lucide-react";
 import { useSync } from "@/hooks/useSync";
+import { useEffect, useState } from "react";
 
 export default function SyncStatus() {
   const { sincronizar } = useSync();
 
   const pendentes = useLiveQuery(() => db.vendasPendentes.where("syncPending").equals(1).count(), []);
+  const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
 
+  useEffect(() => {
+    function handleOnline() { setOnline(true); }
+    function handleOffline() { setOnline(false); }
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Mostrar aviso somente quando houver pendências E estivermos offline
   if (!pendentes || pendentes === 0) return null;
+  if (online) return null;
 
   return (
     <div className="mb-6 animate-in slide-in-from-top duration-500">

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { Search, Printer, FileText, User, Calendar, ArrowLeft } from "lucide-react";
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 import Link from "next/link";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import ReceitaPdf from "@/components/consultorio/ReceitaPdf";
@@ -77,6 +78,9 @@ export default function ReceituarioPage() {
         <div>
           <p className="text-blue-600 font-black text-xs uppercase tracking-widest">Documentos</p>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">Receituário<span className="text-blue-600">.</span></h1>
+        </div>
+        <div className="ml-auto">
+          <ConsultorioLogoBadge />
         </div>
       </header>
 

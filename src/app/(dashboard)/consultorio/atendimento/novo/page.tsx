@@ -177,6 +177,60 @@ export default function NovoAtendimentoPage() {
   const { corPrimaria } = useConfig();
   const searchParams = useSearchParams();
 
+  // Preenche `pacienteId` se foi passado via query string (ex: ?pacienteId=...)
+  useEffect(() => {
+    try {
+      const q =
+        searchParams.get?.("pacienteId") ||
+        (typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("pacienteId") : null);
+      console.debug("novoAtendimento: query pacienteId read", { q });
+      if (q) setPacienteId(String(q));
+    } catch (e) {
+      console.debug("novoAtendimento: erro ao ler pacienteId da query", e);
+    }
+  }, [searchParams]);
+
+  // Se `pacienteId` vier por query e não estiver presente em `pacientes`, buscar apenas esse paciente
+  useEffect(() => {
+    async function fetchSinglePacienteIfNeeded(id: string) {
+      try {
+        const exists = pacientes.find((p) => p.id === id);
+        console.debug('novoAtendimento: fetchSinglePacienteIfNeeded check exists', { id, exists: !!exists });
+        if (exists) return;
+        const ctx = await resolveClinicaContext();
+        const { data, error } = await supabase
+          .from("pacientes")
+          .select("id, nome_completo, cpf, celular, data_nascimento, cidade_atendimento")
+          .eq("clinica_id", ctx.clinicaId)
+          .eq("id", id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Erro ao buscar paciente por id', error);
+          return;
+        }
+        if (data) {
+          console.debug('novoAtendimento: fetchSinglePacienteIfNeeded found data', data);
+          setPacientes((s) => [data as PacienteOption].concat(s));
+          setPacienteQuery(data.nome_completo || "");
+          if (data.data_nascimento) {
+            const d = new Date(data.data_nascimento);
+            if (!isNaN(d.getTime())) {
+              const age = Math.floor((Date.now() - d.getTime()) / 1000 / 60 / 60 / 24 / 365);
+              setIdadePaciente(String(age));
+            }
+          }
+        }
+      } catch (e) {
+        console.error('fetchSinglePacienteIfNeeded error', e);
+      }
+    }
+
+    if (pacienteId) {
+      void fetchSinglePacienteIfNeeded(pacienteId);
+    }
+  }, [pacienteId]);
+
   const pacienteNome = useMemo(
     () => pacientes.find((p) => p.id === pacienteId)?.nome_completo ?? "",
     [pacientes, pacienteId],
@@ -198,6 +252,7 @@ export default function NovoAtendimentoPage() {
         ]);
 
         setPacientes((pRes.data as PacienteOption[]) ?? []);
+        console.debug('novoAtendimento: loadInitial pacientes', { count: (pRes.data || []).length });
         setClinicaNome(cRes.data?.nome_fantasia ?? "OptoVendas");
         setLogomarcaUrl(cRes.data?.logomarca_url ?? null);
         setProfissionalNome(pfRes.data?.nome ?? null);
@@ -209,6 +264,47 @@ export default function NovoAtendimentoPage() {
     }
     loadInitial();
   }, []);
+
+  // Buscar sugestões quando o usuário digita no campo de busca (debounce)
+  useEffect(() => {
+    if (!pacienteQuery || pacienteQuery.trim().length < 2) {
+      setSugestoes([]);
+      setLoadingSugestoes(false);
+      return;
+    }
+
+    let mounted = true;
+    setLoadingSugestoes(true);
+    const q = pacienteQuery.trim();
+    const timer = setTimeout(async () => {
+      try {
+        const ctx = await resolveClinicaContext();
+        const { data, error } = await supabase
+          .from("pacientes")
+          .select("id, nome_completo, cpf, celular, data_nascimento, cidade_atendimento")
+          .ilike("nome_completo", `%${q}%`)
+          .eq("clinica_id", ctx.clinicaId)
+          .order("nome_completo")
+          .limit(10);
+
+        if (error) {
+          console.error("sugestoes: erro ao buscar pacientes", error);
+          if (mounted) setSugestoes([]);
+        } else {
+          if (mounted) setSugestoes((data as PacienteOption[]) || []);
+        }
+      } catch (e) {
+        console.error("sugestoes: exception", e);
+      } finally {
+        if (mounted) setLoadingSugestoes(false);
+      }
+    }, 300);
+
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
+  }, [pacienteQuery]);
 
   // 2. Lógica de Salvar (O Coração da Mudança)
   async function salvarAtendimento() {
@@ -379,6 +475,42 @@ export default function NovoAtendimentoPage() {
     setConfirmOpen(true);
   }
 
+  async function imprimirReceita(item: ReceitaHistorico) {
+    try {
+      const receitaPdfData: any = {
+        pacientes: { nome_completo: pacienteNomeExibicao || pacienteQuery || 'Paciente' },
+        idade_paciente: idadePaciente || null,
+        data_exame: item.data_exame || new Date().toISOString(),
+        od_esferico: item.od_esferico ?? null,
+        od_cilindrico: item.od_cilindrico ?? null,
+        od_eixo: item.od_eixo ?? null,
+        od_av: item.od_av ?? null,
+        oe_esferico: item.oe_esferico ?? null,
+        oe_cilindrico: item.oe_cilindrico ?? null,
+        oe_eixo: item.oe_eixo ?? null,
+        oe_av: item.oe_av ?? null,
+        adicao: item.adicao ?? null,
+        dp_dnp: item.dp_dnp ?? null,
+        miopia: !!item.miopia,
+        astigmatismo: !!item.astigmatismo,
+        hipermetropia: !!item.hipermetropia,
+        presbiopia: !!item.presbiopia,
+        tipo_lente: item.tipo_lente ?? null,
+        tratamento_lente: (item as any).tratamento_lente ?? null,
+        nota_rodape: notaRodapeReceita || (item as any).nota_rodape || null,
+      };
+
+      const doc = <ReceitaPdf dados={receitaPdfData} clinica={{ nome_fantasia: clinicaNome, logomarca_url: logomarcaUrl, cor_primaria: corPrimaria, config_unidade: (configUnidade as any) }} />;
+      const blob = await pdf(doc).toBlob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 15_000);
+    } catch (e) {
+      console.error('imprimirReceita error', e);
+      toast.error('Falha ao gerar PDF da receita.');
+    }
+  }
+
   function confirmarCopia() {
     const item = confirmTarget;
     setConfirmOpen(false);
@@ -457,7 +589,23 @@ export default function NovoAtendimentoPage() {
                 {showSugestoes && sugestoes.length > 0 && (
                    <div className="absolute z-50 w-full bg-white shadow-xl rounded-2xl mt-2 border border-slate-100 overflow-hidden">
                       {sugestoes.map(p => (
-                        <div key={p.id} onClick={() => { setPacienteId(p.id); setPacienteQuery(p.nome_completo); setShowSugestoes(false); }} className="p-4 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-none">
+                        <div
+                          key={p.id}
+                          onClick={() => {
+                            setPacienteId(p.id);
+                            setPacienteQuery(p.nome_completo);
+                            // preenche idade a partir da data_nascimento, se disponível
+                            if (p.data_nascimento) {
+                              const d = new Date(p.data_nascimento);
+                              if (!isNaN(d.getTime())) {
+                                const age = Math.floor((Date.now() - d.getTime()) / 1000 / 60 / 60 / 24 / 365);
+                                setIdadePaciente(String(age));
+                              }
+                            }
+                            setShowSugestoes(false);
+                          }}
+                          className="p-4 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-none"
+                        >
                           <p className="font-bold text-slate-800">{p.nome_completo}</p>
                           <p className="text-xs text-slate-400">{p.cpf || 'Sem CPF'}</p>
                         </div>
@@ -482,7 +630,7 @@ export default function NovoAtendimentoPage() {
           <div className="animate-in fade-in">
             <ExameRefracao value={refracao} onChange={setRefracao} />
             <div className="mt-12 pt-12 border-t border-slate-100">
-              <HistoricoEvolucao historico={historico} onCopiar={copiarGrauHistorico} />
+              <HistoricoEvolucao historico={historico} onCopiar={copiarGrauHistorico} onImprimir={imprimirReceita} />
             </div>
           </div>
         )}

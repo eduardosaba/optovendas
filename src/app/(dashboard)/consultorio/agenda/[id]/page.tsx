@@ -9,6 +9,8 @@ import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import NovoAgendamento from "@/components/agenda/NovoAgendamento";
 import { ChevronLeft, Play, Users, MessageCircle, CalendarDays, Edit2, Trash2, Save, X, Clock } from "lucide-react";
+import { enviarZap } from '@/lib/whatsapp-service';
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 
 type AgendaStatus = "Confirmado" | "Concluido" | "Cancelado";
 
@@ -59,6 +61,7 @@ export default function AgendaExternaDetalhePage() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingHorario, setEditingHorario] = useState<string>("");
+  const [menuComunicacaoId, setMenuComunicacaoId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
 
@@ -208,13 +211,14 @@ export default function AgendaExternaDetalhePage() {
           </div>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           <button onClick={iniciarAtendimentoDoDia} className="bg-emerald-600 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-emerald-100 hover:scale-105 active:scale-95 text-sm">
             <Play size={18} fill="currentColor" /> Iniciar Atendimento
           </button>
           <Link href={`/consultorio/atendimento/novo?agendaId=${agendaId}`} className="bg-blue-600 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-blue-100 hover:scale-105 text-sm">
             Check-in <Users size={18} />
           </Link>
+          <ConsultorioLogoBadge />
         </div>
       </header>
 
@@ -294,14 +298,37 @@ export default function AgendaExternaDetalhePage() {
                                 <Trash2 size={16} />
                               </button>
                               {paciente?.celular && (
-                                <a
-                                  href={`https://wa.me/55${paciente.celular.replace(/\D/g, "")}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="p-3 bg-white text-emerald-500 rounded-2xl border border-slate-200 hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
-                                >
-                                  <MessageCircle size={20} />
-                                </a>
+                                <div className="relative">
+                                  <button
+                                    onClick={() => setMenuComunicacaoId(menuComunicacaoId === String(paciente.id) ? null : String(paciente.id))}
+                                    className="p-3 bg-white text-emerald-500 rounded-2xl border border-slate-200 hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                                    title={`Comunicar ${paciente?.nome_completo || 'Paciente'}`}
+                                  >
+                                    <MessageCircle size={20} />
+                                  </button>
+
+                                  {menuComunicacaoId === String(paciente.id) && (
+                                    <div className="absolute right-0 top-12 w-44 bg-white rounded-lg shadow-lg border border-slate-100 z-50">
+                                      <a
+                                        href={`/comunicacao?pacienteId=${paciente.id}&nome=${encodeURIComponent(paciente.nome_completo || '')}&fone=${encodeURIComponent(paciente.celular || '')}`}
+                                        className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                      >
+                                        Abrir central de comunicação
+                                      </a>
+                                      <button
+                                        onClick={() => {
+                                          setMenuComunicacaoId(null);
+                                          try {
+                                            enviarZap(paciente.celular || '', `Olá ${paciente.nome_completo || ''}, tudo bem?`);
+                                          } catch (e) {}
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                                      >
+                                        Enviar WhatsApp
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               )}
                             </>
                           )}

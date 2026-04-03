@@ -21,6 +21,7 @@ import { supabase } from "@/lib/supabase";
 import { addPendingVenda } from "@/lib/syncQueue";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import BotaoImpressaoTermica from "@/components/otica/BotaoImpressaoTermica";
 import PDFCarne from "@/components/otica/DocumentoCarne";
 import PDFComprovanteVenda, {
@@ -747,12 +748,17 @@ function NovaVendaStepperContent() {
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">Venda & Montagem</h1>
           </div>
         </div>
-        {/* Data e hora atuais */}
-        <div className="flex items-center gap-3 text-sm text-slate-500">
-          <Clock className="text-slate-400" />
-          <div className="leading-tight text-right">
-            <div className="font-black text-sm text-slate-800">{currentTime.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-            <div className="text-xs text-slate-500">{currentTime.toLocaleTimeString('pt-BR')}</div>
+        {/* Data e hora atuais + logomarca da ótica */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 text-sm text-slate-500">
+            <Clock className="text-slate-400" />
+            <div className="leading-tight text-right">
+              <div className="font-black text-sm text-slate-800">{currentTime.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+              <div className="text-xs text-slate-500">{currentTime.toLocaleTimeString('pt-BR')}</div>
+            </div>
+          </div>
+          <div className="hidden sm:block">
+            <OticaLogoBadge className="w-auto" />
           </div>
         </div>
       </header>

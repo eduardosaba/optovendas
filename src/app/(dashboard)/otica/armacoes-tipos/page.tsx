@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { Glasses, Plus, Trash2, ArrowLeft, Edit3, X } from "lucide-react";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import Link from "next/link";
 
 export default function CadastroTiposArmacaoPage() {
@@ -64,13 +65,16 @@ export default function CadastroTiposArmacaoPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-6 md:p-10 space-y-8 animate-in fade-in duration-500">
-      <header className="flex items-center gap-4">
+      <header className="flex items-center gap-4 justify-between">
         <Link href="/otica" className="p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-cyan-600">
           <ArrowLeft size={20} />
         </Link>
         <div>
           <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Estoque</p>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Tipos de Armação</h1>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end">
+          <OticaLogoBadge />
         </div>
       </header>
 

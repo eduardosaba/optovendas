@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarClock, PhoneCall, Search, CreditCard, Image, AlertTr
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 
 type PacienteRel = {
   nome_completo?: string | null;
@@ -112,6 +113,9 @@ export default function VendasPendentesPage() {
             <p className="mb-1 text-xs font-black uppercase tracking-[0.2em] text-rose-600">Follow-up Comercial</p>
             <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Vendas Pendentes</h1>
           </div>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end">
+          <OticaLogoBadge />
         </div>
       </header>
 

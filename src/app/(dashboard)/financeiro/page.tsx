@@ -19,9 +19,11 @@ import {
   Percent,
 } from "lucide-react";
 import { ReactNode } from "react";
+import StatCard from "@/components/shared/StatCard";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 
 // --- TIPAGEM ---
 type StatColor = "emerald" | "rose" | "amber" | "blue" | "indigo";
@@ -50,6 +52,7 @@ export default function FinanceiroPage() {
   const [contasPagar, setContasPagar] = useState<any[]>([]);
   const [vendasCount, setVendasCount] = useState(0);
   const [consultasCount, setConsultasCount] = useState(0);
+  const [valorVendasMes, setValorVendasMes] = useState(0);
   const [fluxoCaixa, setFluxoCaixa] = useState<any[]>([]);
 
   useEffect(() => {
@@ -86,6 +89,28 @@ export default function FinanceiroPage() {
         setVendasCount(vendasRes?.count || 0);
         setConsultasCount(consultasRes?.count || 0);
         setFluxoCaixa(fluxoRes.data || []);
+
+        // soma do valor total vendido no mês — tenta colunas diferentes e evita erro se alguma coluna não existir
+        let vendasMesData: any[] = [];
+
+        // tentativa 1: buscar 'valor_total' (com fallback de 'criado_em' -> 'created_at')
+        let res: any = await supabase.from('vendas').select('valor_total,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes);
+        if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
+          res = await supabase.from('vendas').select('valor_total,created_at').eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes);
+        }
+        if (!res.error && res.data) vendasMesData = res.data;
+
+        // tentativa 2: se não encontrou registros, tentar coluna 'valor' (alguns schemas usam esse campo)
+        if ((!vendasMesData || vendasMesData.length === 0)) {
+          let res2: any = await supabase.from('vendas').select('valor,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes);
+          if (res2.error && /criado_em|column .* does not exist/i.test(String(res2.error.message || res2.error))) {
+            res2 = await supabase.from('vendas').select('valor,created_at').eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes);
+          }
+          if (!res2.error && res2.data) vendasMesData = res2.data;
+        }
+
+        const somaVendas = (vendasMesData || []).reduce((s: number, r: any) => s + Number(r.valor_total ?? r.valor ?? 0), 0);
+        setValorVendasMes(somaVendas || 0);
 
       } catch {
         toast.error("Erro ao carregar inteligência financeira.");
@@ -148,6 +173,8 @@ export default function FinanceiroPage() {
 
     const contasPagarSum = contasPagar.filter(c => c.status !== 'pago').reduce((acc, c) => acc + Number(c.valor_total || 0), 0);
 
+    const valorVendidoMes = Number(valorVendasMes || 0);
+
     return {
       aReceberMes,
       contasPagar: contasPagarSum,
@@ -157,12 +184,13 @@ export default function FinanceiroPage() {
       rankingCidades: ranking,
       qtdReceberMes,
       qtdContasPagar: contasPagar.filter(c => c.status !== 'pago').length,
-      qtdInadimplentes
+      qtdInadimplentes,
+      valorVendidoMes,
     };
-  }, [installments, contasPagar, vendasCount, consultasCount, fluxoCaixa]);
+  }, [installments, contasPagar, vendasCount, consultasCount, fluxoCaixa, valorVendasMes]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
+    <div className="mx-auto max-w-7xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-widest text-emerald-600">Gestão de Capital</p>
@@ -171,20 +199,32 @@ export default function FinanceiroPage() {
           </h1>
         </div>
         
-        {/* KPI DE CONVERSÃO RÁPIDO */}
-        <div className="bg-white border border-slate-100 p-4 rounded-3xl shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-            <Percent size={20} />
+        <div className="flex items-center gap-3">
+          {/* KPI DE CONVERSÃO RÁPIDO */}
+          <div className="bg-white border border-slate-100 p-4 rounded-3xl shadow-sm flex items-center gap-4">
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+              <Percent size={20} />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase text-slate-400 leading-none">Conversão Ótica</p>
+              <p className="text-xl font-black text-slate-800">{indicadores.conversao.toFixed(1)}%</p>
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] font-black uppercase text-slate-400 leading-none">Conversão Ótica</p>
-            <p className="text-xl font-black text-slate-800">{indicadores.conversao.toFixed(1)}%</p>
-          </div>
+
+          <OticaLogoBadge />
         </div>
       </header>
 
       {/* CARDS DE INDICADORES PRINCIPAIS */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+        <StatCard
+          label="Vendas (Mês)"
+          value={loading ? "..." : brl(indicadores.valorVendidoMes || 0)}
+          trend={loading ? "Carregando" : `${installments.length} parcelas totais`}
+          icon={<Wallet size={20} className="text-blue-500" />}
+          color="blue"
+          empty={!loading && indicadores.valorVendidoMes === 0 && installments.length === 0}
+        />
         <StatCard
           label="A Receber (Mes)"
           value={loading ? "..." : brl(indicadores.aReceberMes)}
@@ -331,40 +371,7 @@ function brl(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function StatCard({ label, value, trend, icon, color, empty = false }: any) {
-  const colors: any = {
-    emerald: "bg-emerald-50 text-emerald-600",
-    rose: "bg-rose-50 text-rose-600",
-    amber: "bg-amber-50 text-amber-600",
-  };
-  if (empty) {
-    return (
-      <div className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{label}</p>
-        <div className="flex items-center justify-between">
-          <div className="text-sm italic text-slate-400">Sem dados no período</div>
-          <div className="flex items-center gap-2">
-            <div className={`p-1.5 rounded-lg ${colors[color]}`}>{icon}</div>
-          </div>
-        </div>
-        <div className="mt-4">
-          <span className="text-[10px] font-bold text-slate-400 uppercase">{trend}</span>
-        </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
-      <h3 className="text-3xl font-black text-slate-900 mb-4">{value}</h3>
-      <div className="flex items-center gap-2">
-        <div className={`p-1.5 rounded-lg ${colors[color]}`}>{icon}</div>
-        <span className="text-[10px] font-bold text-slate-400 uppercase">{trend}</span>
-      </div>
-    </div>
-  );
-}
 
 function MenuCard({ href, title, desc, icon, colorClass }: any) {
   return (

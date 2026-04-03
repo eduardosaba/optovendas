@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, BarChart3 } from "lucide-react";
+import ConsultorioLogoBadge from '@/components/shared/ConsultorioLogoBadge';
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -138,6 +139,9 @@ export default function RankingCidadesPage() {
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Painel do Comandante</p>
             <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Ranking de Produtividade por Cidade</h1>
           </div>
+        </div>
+        <div className="hidden md:flex items-center">
+          <ConsultorioLogoBadge />
         </div>
       </header>
 

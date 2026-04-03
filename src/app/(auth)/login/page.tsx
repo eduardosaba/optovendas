@@ -95,7 +95,7 @@ export default function LoginPage() {
         const perfil = perfilRes.data as { funcao?: string; nome?: string | null } | null;
         const funcao = (perfil?.funcao ?? "").toLowerCase();
 
-        if (funcao === "master") destino = "/admin";
+        // manter destino padrão "/dashboard" mesmo para perfis com função 'master'
 
         toast.success(`Bem-vindo, ${perfil?.nome || "Usuário"}!`);
       }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ClipboardCheck, Ruler } from "lucide-react";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import { resolveClinicaContext } from "@/lib/clinica";
 import dynamic from 'next/dynamic';
 const Step3Medidas = dynamic(() => import("../vendas/nova/steps/Step3Medidas"), {
@@ -86,6 +87,9 @@ export default function MedidasPage() {
               Tomada de Medidas<span className="text-cyan-600">.</span>
             </h1>
           </div>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end mr-4">
+          <OticaLogoBadge />
         </div>
 
         <Link

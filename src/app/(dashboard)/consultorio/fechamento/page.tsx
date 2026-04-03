@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { ArrowLeft, Banknote, ClipboardCheck, HeartHandshake, MapPin, Users } from "lucide-react";
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 
 type ConsultaFinanceira = {
   id: string;
@@ -135,6 +136,9 @@ export default function FechamentoConsultorioPage() {
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Conferência de Campo</p>
             <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Fechamento de Caixa</h1>
           </div>
+        </div>
+        <div className="ml-auto">
+          <ConsultorioLogoBadge />
         </div>
       </header>
 

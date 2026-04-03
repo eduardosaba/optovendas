@@ -6,6 +6,7 @@ import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import Link from "next/link";
 import { ArrowLeft, Search, UserCircle2, ChevronRight, FileEdit, FileDown } from "lucide-react";
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import PDFEncaminhamento from "@/components/consultorio/PDFEncaminhamento";
 
@@ -56,6 +57,9 @@ export default function EncaminhamentoPage() {
         <div>
           <p className="text-blue-600 font-black text-xs uppercase tracking-widest">Documentação</p>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">Encaminhamento<span className="text-blue-600">.</span></h1>
+        </div>
+        <div className="ml-auto">
+          <ConsultorioLogoBadge />
         </div>
       </header>
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { ShieldCheck, Lock, Unlock, ArrowLeft, Save, Loader2 } from "lucide-react";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 
 export default function GestaoPermissoesPage() {
   const [permissoes, setPermissoes] = useState<any[]>([]);
@@ -87,6 +88,9 @@ export default function GestaoPermissoesPage() {
             <ArrowLeft size={20} />
           </Link>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Níveis de Acesso</h1>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end mr-4">
+          <OticaLogoBadge />
         </div>
         <button 
           onClick={salvarPermissoes}

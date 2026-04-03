@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { Layers, Plus, Trash2, ArrowLeft, Loader2, Tag, Edit3 } from "lucide-react";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 
@@ -111,6 +112,9 @@ export default function CadastroLentesPage() {
             <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Catálogo Técnico</p>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Tabela de Lentes<span className="text-cyan-600">.</span></h1>
           </div>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end">
+          <OticaLogoBadge />
         </div>
       </header>
 

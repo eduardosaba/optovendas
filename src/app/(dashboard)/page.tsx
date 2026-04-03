@@ -70,28 +70,12 @@ export default function DashboardPrincipalPage() {
   const router = useRouter();
   const [kpis, setKpis] = useState({ atendimentosHoje: "-", pacientesFila: "-" });
   const [externalKpis, setExternalKpis] = useState({ cidadesAtendidas: "-", pacientesTotais: "-", porCidade: {} as Record<string, number> });
+  const [oticaStats, setOticaStats] = useState({ ordensPendentes: "-", vendasPendentes: "-" });
+  const [financeiroStats, setFinanceiroStats] = useState({ conciliacaoPendente: "-", contasAVencer: "-" });
+  const [comunicacaoStats, setComunicacaoStats] = useState({ aniversariantesSemana: "-", aniversariantesMes: "-" });
 
-  // se usuário master, redireciona para /admin
-  useEffect(() => {
-    let mounted = true;
-    async function checkMaster() {
-      try {
-        const sessionRes: any = await supabase.auth.getUser();
-        const user = sessionRes?.data?.user;
-        const userId = user?.id;
-        if (!userId) return;
-        const perfilRes = await supabase.from('perfis').select('funcao').eq('id', userId).maybeSingle();
-        const funcao = (perfilRes?.data?.funcao || '').toString().toLowerCase();
-        if (mounted && funcao === 'master') {
-          router.push('/admin');
-        }
-      } catch {
-        // ignore failures — mantém dashboard como fallback
-      }
-    }
-    void checkMaster();
-    return () => { mounted = false; };
-  }, [router]);
+  // Nota: não redirecionamos automaticamente para /admin aqui —
+  // a rota /dashboard é o destino pós-login para todos os perfis.
 
   useEffect(() => {
     let active = true;
@@ -153,6 +137,49 @@ export default function DashboardPrincipalPage() {
         if (active) setExternalKpis({ cidadesAtendidas: "0", pacientesTotais: "0", porCidade: {} });
       }
     })();
+    void (async function loadModulesSummary() {
+      try {
+        const ctx = await resolveClinicaContext();
+
+        // Ótica: ordens de serviço pendentes / não finalizadas
+        const osRes = await supabase.from("ordens_servico").select("id", { count: "exact", head: true }).eq("clinica_id", ctx.clinicaId).not("status_os", "ilike", "pronto");
+        // Vendas pendentes (vendas com status financeiro pendente)
+        const vendasRes = await supabase.from("vendas").select("id", { count: "exact", head: true }).eq("clinica_id", ctx.clinicaId).in("status_financeiro", ["pendente", "aguardando_conciliacao"]);
+
+        // Financeiro: lançamentos com conciliação pendente
+        const concRes = await supabase.from("fluxo_caixa").select("id", { count: "exact", head: true }).eq("clinica_id", ctx.clinicaId).eq("status_conciliacao", "pendente");
+
+        // Comunicação: aniversariantes semana / mês
+        const pacientesRes = await supabase.from("pacientes").select("id, data_nascimento").eq("clinica_id", ctx.clinicaId).not("data_nascimento", "is", null);
+
+        // compute birthdays
+        let semana = 0;
+        let mes = 0;
+        const hoje = new Date();
+        const inicioSemana = new Date(hoje);
+        inicioSemana.setDate(hoje.getDate() - hoje.getDay());
+        const fimSemana = new Date(inicioSemana);
+        fimSemana.setDate(inicioSemana.getDate() + 7);
+
+        for (const p of (pacientesRes.data || []) as Array<{ id: string; data_nascimento?: string | null }>) {
+          if (!p.data_nascimento) continue;
+          const d = new Date(`${p.data_nascimento}T00:00:00`);
+          const candidato = new Date(hoje.getFullYear(), d.getMonth(), d.getDate());
+          if (candidato >= inicioSemana && candidato < fimSemana) semana += 1;
+          if (candidato.getMonth() === hoje.getMonth()) mes += 1;
+        }
+
+        if (osRes.error) console.warn('dashboard: osRes', osRes.error);
+        if (vendasRes.error) console.warn('dashboard: vendasRes', vendasRes.error);
+        if (concRes.error) console.warn('dashboard: concRes', concRes.error);
+
+        setOticaStats({ ordensPendentes: String(osRes.count ?? 0), vendasPendentes: String(vendasRes.count ?? 0) });
+        setFinanceiroStats({ conciliacaoPendente: String(concRes.count ?? 0), contasAVencer: "-" });
+        setComunicacaoStats({ aniversariantesSemana: String(semana), aniversariantesMes: String(mes) });
+      } catch (e) {
+        // ignore — manter valores default
+      }
+    })();
     return () => {
       active = false;
     };
@@ -172,6 +199,18 @@ export default function DashboardPrincipalPage() {
         <GlassCard label="Faturamento" value="R$ 12.450" detail="+15% este mês" tone="blue" />
         <GlassCard label="Consultas" value="24" detail="6 pendentes hoje" tone="emerald" />
         <GlassCard label="Estoque" value="142" detail="Armações disponíveis" tone="violet" />
+      </section>
+
+      <section className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
+        <GlassCard label="Ótica - O.S. Pendentes" value={oticaStats.ordensPendentes} detail="Ordens de serviço abertas" tone="blue" />
+        <GlassCard label="Ótica - Vendas Pendentes" value={oticaStats.vendasPendentes} detail="Vendas com saldo" tone="emerald" />
+        <GlassCard label="Financeiro - Conciliar" value={financeiroStats.conciliacaoPendente} detail="Transações pendentes de conciliação" tone="violet" />
+      </section>
+
+      <section className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
+        <GlassCard label="Comunicação - Aniversários (semana)" value={comunicacaoStats.aniversariantesSemana} detail="Aniversariantes nos próximos 7 dias" tone="blue" />
+        <GlassCard label="Comunicação - Aniversários (mês)" value={comunicacaoStats.aniversariantesMes} detail="Aniversariantes no mês" tone="emerald" />
+        <GlassCard label="Próximos recebíveis" value={financeiroStats.contasAVencer} detail="Contas a vencer" tone="violet" />
       </section>
 
       <section className="grid grid-cols-1 gap-6 md:grid-cols-3">

@@ -22,7 +22,7 @@ export default function NotFound() {
         </div>
 
         <Link 
-          href="/" 
+          href="/dashboard" 
           className="inline-flex items-center gap-3 bg-slate-900 text-white px-10 py-5 rounded-[24px] font-black hover:scale-105 transition-all shadow-xl shadow-slate-200"
         >
           <ArrowLeft size={20} />

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { enviarZap, templatesMensagens, type TipoComunicacao } from "@/lib/whatsapp-service";
 import { useToast } from "@/components/ui/ToastProvider";
+// OticaLogoBadge intentionally removed from this page
 import {
   Calendar,
   Cake,
@@ -386,25 +387,27 @@ export default function ComunicacaoPage() {
           </h1>
         </div>
 
-        <div className="flex gap-1 rounded-2xl bg-slate-100 p-1">
-          <button
-            type="button"
-            onClick={() => setAba("alvos")}
-            className={`rounded-xl px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${
-              aba === "alvos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            Alvos do Dia
-          </button>
-          <button
-            type="button"
-            onClick={() => setAba("historico")}
-            className={`rounded-xl px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${
-              aba === "historico" ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
-            }`}
-          >
-            Historico
-          </button>
+        <div className="flex flex-col items-stretch gap-3 md:items-end">
+          <div className="flex gap-1 rounded-2xl bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setAba("alvos")}
+              className={`rounded-xl px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${
+                aba === "alvos" ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              Alvos do Dia
+            </button>
+            <button
+              type="button"
+              onClick={() => setAba("historico")}
+              className={`rounded-xl px-6 py-3 text-xs font-black uppercase tracking-widest transition-all ${
+                aba === "historico" ? "bg-white text-slate-900 shadow-sm" : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              Historico
+            </button>
+          </div>
         </div>
       </header>
 

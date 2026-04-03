@@ -6,6 +6,7 @@ import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import Link from "next/link";
 import { ArrowLeft, Search, UserCircle2, ChevronRight, FileBadge, CalendarDays, FileDown } from "lucide-react";
+import ConsultorioLogoBadge from '@/components/shared/ConsultorioLogoBadge';
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import PDFAtestado from "@/components/consultorio/PDFAtestado";
 
@@ -54,13 +55,16 @@ export default function AtestadoPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-6 md:p-10 space-y-10">
-      <header className="flex items-center gap-4 print:hidden">
+      <header className="flex items-center gap-4 print:hidden justify-between">
         <Link href="/consultorio" className="p-3 bg-white rounded-2xl shadow-sm text-slate-400 hover:text-blue-600 transition-all border border-slate-50">
           <ArrowLeft size={20} />
         </Link>
         <div>
           <p className="text-blue-600 font-black text-xs uppercase tracking-[0.2em] mb-1">Documentação</p>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">Gerar Atestado<span className="text-blue-600">.</span></h1>
+        </div>
+        <div className="hidden md:block">
+          <ConsultorioLogoBadge />
         </div>
       </header>
 

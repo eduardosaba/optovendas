@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Save, Loader2, Edit2 } from "lucide-react";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/ToastProvider';
 
@@ -55,13 +56,16 @@ export default function EditarTratamentoPage() {
 
   return (
     <div className="mx-auto max-w-4xl p-6 md:p-10 space-y-8 animate-in fade-in duration-700">
-      <header className="flex items-center gap-4">
+      <header className="flex items-center gap-4 justify-between">
         <Link href="/otica/tratamentos" className="p-3 bg-white border rounded-2xl text-slate-400 hover:text-blue-600 shadow-sm transition-all">
           <ArrowLeft size={20} />
         </Link>
         <div>
           <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.2em]">Configuração Técnica</p>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">Editar Registro<span className="text-blue-600">.</span></h1>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end">
+          <OticaLogoBadge />
         </div>
       </header>
 

@@ -8,6 +8,7 @@ import {
   Edit3, XCircle, AlertCircle, CheckCircle2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -129,6 +130,10 @@ export default function RelatorioVendasPage() {
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-600">Gestão de Vendas</p>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Relatório de Vendas<span className="text-cyan-600">.</span></h1>
           </div>
+        </div>
+
+        <div className="hidden sm:flex sm:items-center sm:justify-end mr-4">
+          <OticaLogoBadge />
         </div>
 
         <div className="flex gap-3">

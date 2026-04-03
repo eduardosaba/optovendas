@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Plus, Trash2, Save, Tag, Edit2, X } from "lucide-react";
 import { useToast } from "@/components/ui/ToastProvider";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 
 export default function ConfigCombosPage() {
   const [combos, setCombos] = useState<any[]>([]);
@@ -80,9 +81,14 @@ export default function ConfigCombosPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
-      <header>
-        <h1 className="text-3xl font-black text-slate-900">Configuração de Combos<span className="text-cyan-500">.</span></h1>
-        <p className="text-slate-500 text-sm">Defina preços fixos para combinações de armações e lentes.</p>
+      <header className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900">Configuração de Combos<span className="text-cyan-500">.</span></h1>
+          <p className="text-slate-500 text-sm">Defina preços fixos para combinações de armações e lentes.</p>
+        </div>
+        <div className="hidden sm:block">
+          <OticaLogoBadge />
+        </div>
       </header>
 
       <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">

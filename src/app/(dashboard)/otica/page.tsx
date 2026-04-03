@@ -25,6 +25,8 @@ import {
   BadgePercent as BadgePercentAlias,
 } from "lucide-react";
 import SyncStatus from "@/components/otica/SyncStatus";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
+import StatCard from "@/components/shared/StatCard";
 import confetti from "canvas-confetti";
 import { Award } from "lucide-react";
 import { ReactNode } from "react";
@@ -182,7 +184,7 @@ export default function OticaPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-12 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
-      <header className="flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-end">
+      <header className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-start">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-500" />
@@ -193,35 +195,47 @@ export default function OticaPage() {
           </h1>
         </div>
 
-        <div className="flex flex-wrap gap-4">
-          <TopMetric
-            label="Vendas Hoje"
-            value={metrics.vendasHoje}
-            color="emerald"
-            icon={<TrendingUp size={16} />}
-            isCurrency
-          />
-          <TopMetric
-            label="Ticket Médio (Mês)"
-            value={ticketMedio}
-            color="cyan"
-            icon={<ShoppingBag size={16} />}
-            isCurrency
-          />
-          <TopMetric
-            label="Conversão"
-            value={`${taxaConversao.toFixed(1)}%`}
-            color="amber"
-            icon={<Target size={16} />}
-          />
-          <TopMetric
-            label="OS em Aberto"
-            value={metrics.osPendentes}
-            color="indigo"
-            icon={<Clock size={16} />}
-          />
+        <div className="flex items-start justify-end w-full lg:w-auto">
+          <div className="ml-auto lg:ml-0">
+            <OticaLogoBadge />
+          </div>
         </div>
       </header>
+
+      {/* KPIs: colocados abaixo do título, alinhados à direita */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-4">
+        <StatCard
+          label="Vendas Hoje"
+          value={metrics.vendasHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          icon={<TrendingUp size={20} className="text-emerald-500" />}
+          color="emerald"
+          trend="Hoje"
+        />
+
+        <StatCard
+          label="Ticket Médio (Mês)"
+          value={ticketMedio === 0 ? "R$ 0,00" : ticketMedio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          icon={<ShoppingBag size={20} className="text-cyan-500" />}
+          color="indigo"
+          trend="Mês"
+        />
+
+        <StatCard
+          label="Conversão"
+          value={`${taxaConversao.toFixed(1)}%`}
+          icon={<Target size={20} className="text-amber-500" />}
+          color="amber"
+          trend="Consultas → Ótica"
+        />
+
+        <StatCard
+          label="OS em Aberto"
+          value={metrics.osPendentes}
+          icon={<Clock size={20} className="text-indigo-500" />}
+          color="indigo"
+          trend="Pendentes"
+        />
+      </div>
 
       {/* Meta Mensal */}
       {metaMensal !== null && (

@@ -101,8 +101,9 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
   const instagramFmt = contatoInstagram ? (contatoInstagram.startsWith("@") ? contatoInstagram : `@${contatoInstagram}`) : null;
   const exibirCarimboAuto = clinica.config_unidade?.exibir_carimbo_automatico ?? true;
   const dataGeracao = dataExame || dados.data_exame || new Date().toISOString().slice(0, 10);
+  // Preferir sempre a logomarca da clínica quando disponível.
   const logoCustomUrl = clinica.logomarca_url?.trim() ? clinica.logomarca_url : null;
-  const rawLogoForPdf = logoCustomUrl && logoCustomUrl.toLowerCase().endsWith(".svg") ? LOGO_SISTEMA_DEFAULT : logoCustomUrl;
+  const rawLogoForPdf = logoCustomUrl || LOGO_SISTEMA_DEFAULT;
   const logoForPdf = rawLogoForPdf ? encodeURI(rawLogoForPdf) : rawLogoForPdf;
   const pacienteNomeLinha = isNew ? ((dados as any)?.pacientes?.nome_completo || (dados as any)?.paciente_nome || null) : pacienteNome;
   const idadePorNascimento = isNew ? calcularIdadePorNascimento((dados as any)?.pacientes?.data_nascimento) : null;

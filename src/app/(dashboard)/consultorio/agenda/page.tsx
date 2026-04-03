@@ -7,6 +7,7 @@ import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { gerarLinkGoogleCalendar } from "@/lib/google-helper";
 import { Calendar, MapPin, Users, Plus, ExternalLink, ArrowRight, ChevronLeft, FileSpreadsheet, CheckCircle2, UserCheck, Search } from "lucide-react";
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 import { useSearchParams } from "next/navigation";
 import { exportarCheckinXlsx } from "@/lib/xlsx-helper";
 
@@ -174,13 +175,16 @@ type AgendaOption = {
               </div>
             </div>
           
-            <button
-              onClick={exportarXlsx}
-              className="flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
-            >
-              <FileSpreadsheet size={18} />
-              Exportar XLSX
-            </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={exportarXlsx}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
+                >
+                  <FileSpreadsheet size={18} />
+                  Exportar XLSX
+                </button>
+                <ConsultorioLogoBadge />
+              </div>
           </header>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

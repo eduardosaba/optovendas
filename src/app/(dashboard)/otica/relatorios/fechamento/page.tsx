@@ -13,6 +13,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useConfig } from '@/context/ConfigContext';
@@ -97,9 +98,7 @@ export default function FechamentoCaixaPage() {
         else acc.outros += valor;
         acc.total += valor;
         return acc;
-      },
-      { dinheiro: 0, pix: 0, cartao: 0, outros: 0, total: 0 }
-    );
+      }, { dinheiro: 0, pix: 0, cartao: 0, outros: 0, total: 0 });
   }, [movimentacoes]);
 
   // Funções de exportação usam o estado local `movimentacoes` e `config`

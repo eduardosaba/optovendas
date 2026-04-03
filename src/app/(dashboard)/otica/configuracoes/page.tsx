@@ -19,6 +19,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 
 export default function ConfiguracoesOticaPage() {
   const [loading, setLoading] = useState(true);
@@ -198,6 +199,9 @@ export default function ConfiguracoesOticaPage() {
             <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Módulo Ótica</p>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Identidade Visual<span className="text-cyan-600">.</span></h1>
           </div>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end mr-4">
+          <OticaLogoBadge />
         </div>
         <button 
           onClick={salvarConfiguracoes}

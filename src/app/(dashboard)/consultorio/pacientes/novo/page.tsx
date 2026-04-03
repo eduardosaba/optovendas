@@ -9,6 +9,7 @@ import { UserPlus, MapPin, Briefcase, Baby, Save, ArrowLeft, Upload, Camera, Tra
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { uploadFotoPaciente } from "@/lib/branding-storage";
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 
 function onlyDigits(value: string | null) {
   if (!value) return null;
@@ -252,6 +253,10 @@ export default function CadastroPacientePage() {
               <span className="text-blue-600">.</span>
             </h1>
           </div>
+        </div>
+
+        <div className="flex items-center">
+          <ConsultorioLogoBadge />
         </div>
       </header>
 

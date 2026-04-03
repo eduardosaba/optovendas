@@ -5,7 +5,7 @@ import {
   Search,
   UserPlus,
   MessageCircle,
-  MoreHorizontal,
+  Edit3,
   Stethoscope,
   Filter,
   ArrowRight,
@@ -14,9 +14,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { enviarZap } from "@/lib/whatsapp-service";
 import { resolveClinicaContext } from "@/lib/clinica";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/ToastProvider";
+import ConsultorioLogoBadge from "@/components/shared/ConsultorioLogoBadge";
 
 function toPacienteSlug(nome: string) {
   return nome
@@ -40,6 +42,7 @@ export default function ListaPacientesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState("");
   const [deleteAlsoAnamnese, setDeleteAlsoAnamnese] = useState(false);
+  const [menuComunicacaoId, setMenuComunicacaoId] = useState<string | null>(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -129,13 +132,16 @@ export default function ListaPacientesPage() {
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">Pacientes<span className="text-blue-600">.</span></h1>
         </div>
 
-        <Link
-          href="/consultorio/pacientes/novo"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-blue-200 active:scale-95 text-center justify-center"
-        >
-          <UserPlus size={20} />
-          Novo Cadastro
-        </Link>
+        <div className="flex flex-row items-center gap-3">
+          <Link
+            href="/consultorio/pacientes/novo"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-blue-200 active:scale-95 text-center justify-center"
+          >
+            <UserPlus size={20} />
+            Novo Cadastro
+          </Link>
+          <ConsultorioLogoBadge />
+        </div>
       </header>
 
       {/* Barra de Busca Estilo OptoVendas */}
@@ -176,9 +182,14 @@ export default function ListaPacientesPage() {
                   <button onClick={() => openConfirm(paciente.id, paciente.nome_completo)} className="p-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm">
                     <Trash size={18} />
                   </button>
-                  <button className="p-2 text-slate-300 hover:text-slate-600 transition-colors">
-                    <MoreHorizontal size={20} />
-                  </button>
+                  <Link
+                    href={`/consultorio/pacientes/novo?pacienteId=${paciente.id}`}
+                    className="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all flex items-center justify-center"
+                    title="Editar paciente"
+                    aria-label={`Editar ${paciente.nome_completo}`}
+                  >
+                    <Edit3 size={18} />
+                  </Link>
                 </div>
               </div>
 
@@ -188,15 +199,54 @@ export default function ListaPacientesPage() {
               </div>
 
               <div className="mt-6 flex items-center gap-2 text-slate-400">
-                <MapPin size={14} />
+                <MapPin size={18} />
                 <span className="text-xs font-medium">{paciente.cidade_atendimento || "Cidade não informada"}</span>
               </div>
 
               <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">
                 <div className="flex gap-2">
-                  <button className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-sm">
-                    <MessageCircle size={18} />
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        if (!paciente.celular) {
+                          toast?.info?.('Telefone não cadastrado para este paciente.');
+                          return;
+                        }
+                        setMenuComunicacaoId(menuComunicacaoId === paciente.id ? null : paciente.id);
+                      }}
+                      className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                      title={paciente.celular ? `Comunicar ${paciente.nome_completo}` : 'Sem telefone cadastrado'}
+                    >
+                      <MessageCircle size={18} />
+                    </button>
+
+                    {menuComunicacaoId === paciente.id && (
+                      <div className="absolute right-0 top-12 w-48 bg-white rounded-lg shadow-lg border border-slate-100 z-50">
+                        <Link
+                          href={`/comunicacao?pacienteId=${paciente.id}&nome=${encodeURIComponent(paciente.nome_completo || '')}&fone=${encodeURIComponent(paciente.celular || '')}`}
+                          className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                          onClick={() => setMenuComunicacaoId(null)}
+                        >
+                          Abrir central de comunicação
+                        </Link>
+                        <button
+                          onClick={() => {
+                            setMenuComunicacaoId(null);
+                            try {
+                              const mensagem = `Olá ${paciente.nome_completo || ''}, tudo bem?`;
+                              enviarZap(paciente.celular || '', mensagem);
+                              toast?.success?.('WhatsApp aberto.');
+                            } catch (e) {
+                              toast?.error?.('Falha ao abrir WhatsApp.');
+                            }
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          Enviar WhatsApp
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <div className="relative group/atendimento">
                     <Link
                       href={`/consultorio/atendimento/novo?pacienteId=${paciente.id}`}
@@ -214,7 +264,7 @@ export default function ListaPacientesPage() {
                   href={`/consultorio/pacientes/${toPacienteSlug(paciente.nome_completo || "paciente")}`}
                   className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-300 group-hover:text-blue-600 transition-all"
                 >
-                  Ver Ficha <ArrowRight size={14} />
+                  Ver Ficha <ArrowRight size={16} />
                 </Link>
               </div>
 

@@ -46,7 +46,7 @@ const PDFProntuario = ({ paciente, historico, clinica }: any) => (
         <Text style={styles.label}>Vendas / Ordens (últimas)</Text>
         {(historico?.vendas || []).slice(0, 8).map((v: any) => (
           <View key={v.id}>
-            <Text style={styles.item}>OS {v.numero_os || (v.id||'').slice(0,8)} — R$ {Number(v.valor_total||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — {v.status_financeiro || v.status || ''}</Text>
+            <Text style={styles.item}>OS {v.numero_os_manual || v.ordens_servico?.[0]?.numero_os || v.numero_os || (v.id||'').slice(0,8)} — R$ {Number(v.valor_total||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} — {v.status_financeiro || v.status || ''}</Text>
           </View>
         ))}
       </View>

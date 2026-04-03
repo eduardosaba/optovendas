@@ -18,6 +18,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/ToastProvider";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 
 export default function ListaClientesPage() {
   const [busca, setBusca] = useState("");
@@ -109,13 +110,16 @@ export default function ListaClientesPage() {
           <p className="text-slate-400 font-medium text-sm">Gestão de histórico, vendas e cadastros da ótica.</p>
         </div>
 
-        <Link
-          href="/clientes/novo"
-          className="bg-slate-900 hover:bg-emerald-600 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-slate-200 active:scale-95 text-center justify-center"
-        >
-          <UserPlus size={20} />
-          Novo Cliente
-        </Link>
+        <div className="flex flex-row items-center gap-3 md:justify-end">
+          <Link
+            href="/clientes/novo"
+            className="bg-slate-900 hover:bg-emerald-600 text-white px-8 py-4 rounded-[24px] font-black flex items-center gap-3 transition-all shadow-xl shadow-slate-200 active:scale-95 text-center justify-center"
+          >
+            <UserPlus size={20} />
+            Novo Cliente
+          </Link>
+          <OticaLogoBadge />
+        </div>
       </header>
 
       <div className="flex gap-4">

@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCircle2, CircleAlert, Clock3, Eye, ImageOff, Microscope
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 
 type PacienteRel = {
   nome_completo?: string | null;
@@ -173,6 +174,9 @@ export default function DashboardConferenciaMedidasPage() {
               Dashboard de Conferencia<span className="text-cyan-600">.</span>
             </h1>
           </div>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end mr-4">
+          <OticaLogoBadge />
         </div>
 
         <Link

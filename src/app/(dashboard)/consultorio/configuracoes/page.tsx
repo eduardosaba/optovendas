@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
 import { uploadLogoClinica } from "@/lib/branding-storage";
 import { Instagram, LayoutTemplate, Mail, Stamp } from "lucide-react";
+import ConsultorioLogoBadge from '@/components/shared/ConsultorioLogoBadge';
 import ConfiguracoesModulos from '@/components/otica/ConfiguracoesModulos';
 
 function onlyDigits(value?: string | null) {
@@ -272,13 +273,16 @@ export default function ConfigUnidadePage() {
             Personalize identidade visual, dados institucionais e comportamento dos documentos.
           </p>
         </div>
-        <div className="flex gap-3 text-sm">
+        <div className="flex gap-3 text-sm items-center">
           <Link href="/consultorio" className="rounded-[18px] bg-white px-4 py-2.5 font-bold text-slate-600 border border-slate-100 shadow-sm hover:text-blue-600 transition-colors">
             Consultorio
           </Link>
           <Link href="/otica" className="rounded-[18px] bg-white px-4 py-2.5 font-bold text-slate-600 border border-slate-100 shadow-sm hover:text-blue-600 transition-colors">
             Otica
           </Link>
+          <div className="hidden md:block ml-4">
+            <ConsultorioLogoBadge />
+          </div>
         </div>
       </header>
 

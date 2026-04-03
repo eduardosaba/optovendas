@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 import { Shield, Trash2, ArrowLeft, Loader2, UserCircle } from "lucide-react";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import SeccaoCadastroEquipe from "./SeccaoCadastroEquipe";
 import Link from "next/link";
@@ -86,6 +87,9 @@ export default function GestaoEquipeOticaPage() {
             <p className="text-cyan-600 font-black text-[10px] uppercase tracking-[0.3em] mb-1">Gestão de Equipe</p>
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Equipe de Vendas<span className="text-cyan-600">.</span></h1>
           </div>
+        </div>
+        <div className="hidden sm:flex sm:items-center sm:justify-end">
+          <OticaLogoBadge />
         </div>
       </header>
 

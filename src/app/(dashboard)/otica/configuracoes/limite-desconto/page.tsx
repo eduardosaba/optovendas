@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState } from 'react';
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 
 export default function LimiteDescontoPage() {
   const [percent, setPercent] = useState<number>(10);
@@ -45,8 +46,15 @@ export default function LimiteDescontoPage() {
 
   return (
     <div className="max-w-xl">
-      <h2 className="text-2xl font-black mb-4">Trava de Segurança — Limite de Desconto</h2>
-      <p className="text-sm text-slate-500 mb-4">Defina o percentual máximo de desconto que um vendedor pode aplicar sem pedir autorização.</p>
+      <header className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-black mb-1">Trava de Segurança — Limite de Desconto</h2>
+          <p className="text-sm text-slate-500">Defina o percentual máximo de desconto que um vendedor pode aplicar sem pedir autorização.</p>
+        </div>
+        <div className="hidden sm:block">
+          <OticaLogoBadge />
+        </div>
+      </header>
 
       <div className="flex items-center gap-3 mb-4">
         <input type="range" min={0} max={50} value={percent} onChange={(e) => setPercent(Number(e.target.value))} />

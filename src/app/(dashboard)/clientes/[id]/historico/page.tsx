@@ -114,7 +114,7 @@ export default function ClienteHistoricoPage() {
                     <div className="flex justify-between items-start mb-6">
                       <div>
                         <div className="flex items-center gap-2">
-                           <span className="font-black text-slate-900 uppercase">OS #{os?.numero_os || v.numero_os_manual || 'S/N'}</span>
+                           <span className="font-black text-slate-900 uppercase">OS #{v.numero_os_manual || os?.numero_os || v.numero_os || 'S/N'}</span>
                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${os?.status_os === 'Pronto' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
                              {os?.status_os}
                            </span>

@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from "react
 type ToastType = "success" | "error" | "info";
 
 type ToastItem = {
-  id: number;
+  id: string;
   type: ToastType;
   message: string;
 };
@@ -53,12 +53,12 @@ function toastIcon(type: ToastType) {
 export default function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const removeToast = useCallback((id: number) => {
+  const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const push = useCallback((type: ToastType, message: string) => {
-    const id = Date.now() + Math.floor(Math.random() * 1000);
+    const id = typeof crypto !== 'undefined' && (crypto as any).randomUUID ? (crypto as any).randomUUID() : String(Date.now()) + String(Math.floor(Math.random() * 1000000));
     setToasts((prev) => [...prev, { id, type, message }]);
     setTimeout(() => removeToast(id), 4200);
   }, [removeToast]);

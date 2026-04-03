@@ -124,17 +124,22 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     if (!clinicaId) return;
     async function carregarLogoModulo() {
       try {
-        // Ótica: buscar em otica_configuracoes
-        if (pathname?.startsWith('/otica')) {
+        // Módulos que usam branding da ótica
+        if (
+          pathname?.startsWith('/otica') ||
+          pathname?.startsWith('/clientes') ||
+          pathname?.startsWith('/financeiro') ||
+          pathname?.startsWith('/comunicacao')
+        ) {
           const { data } = await supabase.from('otica_configuracoes').select('logo_url').eq('clinica_id', clinicaId).maybeSingle();
           setModuleLogoUrl((data as any)?.logo_url || null);
           return;
         }
 
-        // Consultório: buscar logomarca na tabela clinicas (vários campos possíveis)
+        // Consultório: usar apenas clinicas.logomarca_url
         if (pathname?.startsWith('/consultorio')) {
-          const { data } = await supabase.from('clinicas').select('logomarca_url, logo_unidade_url, logo_url').eq('id', clinicaId).maybeSingle();
-          const url = (data as any)?.logomarca_url || (data as any)?.logo_unidade_url || (data as any)?.logo_url || null;
+          const { data } = await supabase.from('clinicas').select('logomarca_url').eq('id', clinicaId).maybeSingle();
+          const url = (data as any)?.logomarca_url || null;
           setModuleLogoUrl(url);
           return;
         }

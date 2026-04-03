@@ -14,9 +14,13 @@ import {
   ClipboardList,
   TrendingUp,
 } from "lucide-react";
+import { MessageCircle } from 'lucide-react';
+import { enviarZap } from '@/lib/whatsapp-service';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { PDFDownloadLink } from '@react-pdf/renderer';
+import { PDFDownloadLink, pdf } from '@react-pdf/renderer';
 import PDFProntuario from '@/components/consultorio/PDFProntuario';
+import ReceitaPdf from '@/components/consultorio/ReceitaPdf';
+import ConsultorioLogoBadge from '@/components/shared/ConsultorioLogoBadge';
 
 export default function PacienteRichFichaPage() {
   const params = useParams<{ slug: string }>();
@@ -25,6 +29,7 @@ export default function PacienteRichFichaPage() {
   const [historico, setHistorico] = useState<any>({ vendas: [], receitas: [], anexos: [], termos: [] });
   const [erro, setErro] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'geral' | 'clinico' | 'vendas' | 'arquivos'>('geral');
+  const [showComMenu, setShowComMenu] = useState(false);
 
   const dadosGrafico = useMemo(() => {
     return [...(historico.receitas || [])]
@@ -137,12 +142,62 @@ export default function PacienteRichFichaPage() {
           fetchHistoricoCompat('termos_aceite', currentPaciente.id)
         ]);
 
+        // Normaliza campos de receitas retornadas: algumas instalações usam nomes diferentes
+        const normalizeReceita = (row: any) => {
+          if (!row) return row;
+
+          // DNP/DP pode vir como texto único ou separado por / (ex: "62/64")
+          let dnp_od = row.dnp_od ?? null;
+          let dnp_oe = row.dnp_oe ?? null;
+          if (!dnp_od && !dnp_oe && row.dp_dnp) {
+            const parts = String(row.dp_dnp).split('/').map((s: string) => s.trim());
+            if (parts.length === 2) {
+              dnp_od = parts[0] || null;
+              dnp_oe = parts[1] || null;
+            } else {
+              dnp_od = row.dp_dnp || null;
+              dnp_oe = row.dp_dnp || null;
+            }
+          }
+
+          return {
+            ...row,
+            tipo_receita: row.tipo_receita ?? row.tipo_documento ?? 'Receita',
+            data_exame: row.data_exame ?? row.created_at ?? row.criado_em ?? null,
+            longe_od_esferico: row.longe_od_esferico ?? row.od_esferico ?? row.od_esferico_longe ?? row.od_esferico,
+            longe_oe_esferico: row.longe_oe_esferico ?? row.oe_esferico ?? row.oe_esferico_longe ?? row.oe_esferico,
+            longe_od_cilindrico: row.longe_od_cilindrico ?? row.od_cilindrico ?? row.od_cilindrico_longe ?? row.od_cilindrico,
+            longe_oe_cilindrico: row.longe_oe_cilindrico ?? row.oe_cilindrico ?? row.oe_cilindrico_longe ?? row.oe_cilindrico,
+            longe_od_eixo: row.longe_od_eixo ?? row.od_eixo ?? null,
+            longe_oe_eixo: row.longe_oe_eixo ?? row.oe_eixo ?? null,
+            perto_adicao: row.perto_adicao ?? row.adicao ?? row.addicao ?? null,
+            dp_dnp: row.dp_dnp ?? row.dnp ?? null,
+            dnp_od: dnp_od,
+            dnp_oe: dnp_oe,
+            optometrista_nome: row.optometrista_nome ?? row.usuario_nome ?? row.usuario ?? null,
+            observacoes: row.observacoes ?? row.observacoes_clinicas ?? row.observacoes_internas ?? row.nota_rodape ?? null,
+            tipo_lente: row.tipo_lente ?? null,
+            tratamento_lente: row.tratamento_lente ?? null,
+            nota_rodape: row.nota_rodape ?? null,
+            proxima_visita: row.proxima_visita ?? null,
+          };
+        };
+
         setHistorico({
-          receitas: rRes.data || [],
+          receitas: (rRes.data || []).map(normalizeReceita),
           vendas: vRes.data || [],
           anexos: aRes.data || [],
           termos: tRes.data || []
         });
+
+        // imprimirReceita precisa de contexto da clínica; carregamos aqui em memória leve
+        try {
+          const ctxClin = await resolveClinicaContext();
+          const clinRes = await supabase.from('clinicas').select('nome_fantasia, logomarca_url').eq('id', ctxClin.clinicaId).maybeSingle();
+          (window as any).__optovendas_clinica_cache = clinRes.data || null;
+        } catch (e) {
+          // não bloquear a exibição se falhar
+        }
 
       } catch (e) {
         console.error(e);
@@ -186,13 +241,63 @@ export default function PacienteRichFichaPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-           <Link href={`/consultorio/atendimento/novo?pacienteId=${paciente.id}`} className="bg-cyan-600 text-white px-6 py-4 rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-cyan-100 flex items-center gap-2">
-            <ClipboardList size={16} /> Iniciar Consulta
-           </Link>
-           <Link href={`/otica/vendas/nova?pacienteId=${paciente.id}`} className="bg-slate-100 text-slate-700 px-6 py-4 rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2">
-            <ShoppingBag size={16} /> Nova Venda
-           </Link>
+          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/consultorio/atendimento/novo?pacienteId=${paciente.id}`} className="bg-cyan-600 text-white px-6 py-4 rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-cyan-100 flex items-center gap-2">
+              <ClipboardList size={16} /> Iniciar Consulta
+            </Link>
+            <Link href={`/otica/vendas/nova?pacienteId=${paciente.id}`} className="bg-slate-100 text-slate-700 px-6 py-4 rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center gap-2">
+              <ShoppingBag size={16} /> Nova Venda
+            </Link>
+            <Link href={`/consultorio/atendimento/${paciente.id}`} className="bg-white text-slate-700 px-6 py-4 rounded-[20px] font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 border">
+              <Eye size={16} /> Ver Ficha Atendimento
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <button
+                onClick={() => {
+                  if (!paciente.celular) {
+                    setShowComMenu(false);
+                    return;
+                  }
+                  setShowComMenu(!showComMenu);
+                }}
+                className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-sm"
+                title={paciente.celular ? `Comunicar ${paciente.nome_completo}` : 'Sem telefone cadastrado'}
+              >
+                <MessageCircle size={18} />
+              </button>
+
+              {showComMenu && (
+                <div className="absolute right-0 top-12 w-52 bg-white rounded-lg shadow-lg border border-slate-100 z-50">
+                  <Link
+                    href={`/comunicacao?pacienteId=${paciente.id}&nome=${encodeURIComponent(paciente.nome_completo || '')}&fone=${encodeURIComponent(paciente.celular || '')}`}
+                    className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    onClick={() => setShowComMenu(false)}
+                  >
+                    Abrir central de comunicação
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setShowComMenu(false);
+                      try {
+                        enviarZap(paciente.celular || '', `Olá ${paciente.nome_completo || ''}, tudo bem?`);
+                      } catch (e) {}
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  >
+                    Enviar WhatsApp
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="ml-4">
+              <ConsultorioLogoBadge />
+            </div>
+          </div>
         </div>
       </section>
 
@@ -442,7 +547,7 @@ export default function PacienteRichFichaPage() {
             </div>
           </div>
           <div className="flex gap-2">
-             <button className="p-3 bg-white text-slate-400 rounded-xl hover:text-blue-600 border border-slate-100 transition-colors shadow-sm">
+             <button onClick={() => imprimirReceita(r)} className="p-3 bg-white text-slate-400 rounded-xl hover:text-blue-600 border border-slate-100 transition-colors shadow-sm">
                <Printer size={16}/>
              </button>
           </div>
@@ -597,3 +702,45 @@ function TimelineItem({ title, date, type, icon, status, link }: any) {
 }
 
 function historicalEmpty(vendas: any[]) { return (vendas || []).length === 0 }
+
+// Função utilitária para gerar e abrir PDF de uma receita
+async function imprimirReceita(item: any) {
+  try {
+    const cached: any = (typeof window !== 'undefined' ? (window as any).__optovendas_clinica_cache : null) || null;
+    let clinica = { nome_fantasia: 'Clínica', logomarca_url: null, config_unidade: null, cor_primaria: null };
+    if (cached) clinica = { ...clinica, ...cached };
+
+    const receitaPdfData: any = {
+      pacientes: { nome_completo: item.paciente_nome || item.pacientes?.nome_completo || 'Paciente' },
+      idade_paciente: item.idade_paciente || null,
+      data_exame: item.data_exame || item.created_at || item.criado_em || new Date().toISOString(),
+      od_esferico: item.od_esferico ?? item.longe_od_esferico ?? null,
+      od_cilindrico: item.od_cilindrico ?? item.longe_od_cilindrico ?? null,
+      od_eixo: item.od_eixo ?? item.longe_od_eixo ?? null,
+      od_av: item.od_av ?? null,
+      oe_esferico: item.oe_esferico ?? item.longe_oe_esferico ?? null,
+      oe_cilindrico: item.oe_cilindrico ?? item.longe_oe_cilindrico ?? null,
+      oe_eixo: item.oe_eixo ?? item.longe_oe_eixo ?? null,
+      oe_av: item.oe_av ?? null,
+      adicao: item.adicao ?? item.perto_adicao ?? null,
+      dp_dnp: item.dp_dnp ?? item.dnp ?? null,
+      miopia: !!item.miopia,
+      astigmatismo: !!item.astigmatismo,
+      hipermetropia: !!item.hipermetropia,
+      presbiopia: !!item.presbiopia,
+      tipo_lente: item.tipo_lente ?? null,
+      tratamento_lente: item.tratamento_lente ?? null,
+      nota_rodape: item.nota_rodape ?? item.observacoes ?? null,
+    };
+
+    const doc = <ReceitaPdf dados={receitaPdfData} clinica={clinica as any} />;
+    const blob = await pdf(doc).toBlob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 15_000);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error('imprimirReceita error', e);
+    try { alert('Falha ao gerar PDF da receita. Veja console para detalhes.'); } catch {};
+  }
+}

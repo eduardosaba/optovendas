@@ -13,6 +13,7 @@ import {
   Search
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from '@/components/ui/ToastProvider';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
@@ -75,10 +76,12 @@ export default function TratamentosPage() {
             <h1 className="text-4xl font-black text-slate-900 tracking-tight">Tratamentos<span className="text-cyan-600">.</span></h1>
           </div>
         </div>
-
-        <Link href="/otica/tratamentos/novo" className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-cyan-600 transition-all shadow-xl shadow-slate-200">
-          <Plus size={18} /> Novo Tratamento
-        </Link>
+        <div className="hidden sm:flex sm:items-center sm:justify-end gap-4">
+          <Link href="/otica/tratamentos/novo" className="flex items-center gap-2 px-6 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-cyan-600 transition-all shadow-xl shadow-slate-200">
+            <Plus size={18} /> Novo Tratamento
+          </Link>
+          <OticaLogoBadge />
+        </div>
       </header>
 
       <div className="bg-white p-4 rounded-[32px] shadow-sm border border-slate-50 flex items-center gap-4">
