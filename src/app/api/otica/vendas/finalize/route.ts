@@ -16,8 +16,36 @@ function gerarNumeroOSAutomatico() {
   return `OS-${y}${m}${d}-${seq}`;
 }
 
+function normalizarMetodoPagamento(v: any) {
+  const raw = String(v || '').toLowerCase().trim();
+  if (!raw) return '';
+  if (raw.includes('cartao') || raw.includes('cartão')) {
+    if (raw.includes('deb')) return 'cartao_debito';
+    if (raw.includes('cred')) return 'cartao_credito';
+    return 'cartao_credito';
+  }
+  if (raw === 'debito') return 'cartao_debito';
+  return raw;
+}
+
+function labelMetodoPagamento(v: string) {
+  const m = normalizarMetodoPagamento(v);
+  if (m === 'cartao_credito') return 'Cartão de Crédito';
+  if (m === 'cartao_debito') return 'Cartão de Débito';
+  if (m === 'dinheiro') return 'Dinheiro';
+  if (m === 'pix') return 'PIX';
+  if (m === 'crediario') return 'Crediário';
+  return m || 'Pagamento';
+}
+
 export async function POST(request: Request) {
   try {
+    const fail = (message: string, status = 400) => {
+      const err = new Error(message) as Error & { status?: number };
+      err.status = status;
+      return err;
+    };
+
     const body = await request.json();
     const { 
       clinica_id, paciente_id, financeiro, status_os, 
@@ -86,14 +114,19 @@ export async function POST(request: Request) {
       primeiro_vencimento: saldoOrig.primeiro_vencimento || financeiro?.primeiro_vencimento || null,
     };
 
-    // Lógica de status financeiro mais robusta e resumo rápido salvo na venda
+    const metodoEntradaNorm = normalizarMetodoPagamento(entrada.forma);
+    const metodoSaldoNorm = normalizarMetodoPagamento(saldo.forma || financeiro?.formaSaldo || null);
+    const metodosConciliacao = new Set(['cartao_credito', 'cartao_debito']);
+
+    // Lógica de status financeiro considerando pendência de conciliação para cartão
     let statusFinanceiroFinal = 'pendente';
-    // entradaValor e saldoValor já calculados acima
     if (saldo.valor <= 0) {
-      statusFinanceiroFinal = 'pago';
-    } else if (entradaValor > 0 && (String(saldo.forma) === 'crediario' || String(financeiro?.formaSaldo) === 'crediario')) {
+      statusFinanceiroFinal = (entradaValor > 0 && metodosConciliacao.has(metodoEntradaNorm)) ? 'aguardando_conciliacao' : 'pago';
+    } else if (entradaValor > 0 && metodoSaldoNorm === 'crediario') {
       statusFinanceiroFinal = 'pago_parcial';
-    } else if (['pix', 'dinheiro', 'debito', 'cartao_debito', 'cartao', 'cartao_credito'].includes((String(saldo.forma) || '').toString())) {
+    } else if (metodosConciliacao.has(metodoSaldoNorm)) {
+      statusFinanceiroFinal = 'aguardando_conciliacao';
+    } else if (['pix', 'dinheiro'].includes(metodoSaldoNorm)) {
       statusFinanceiroFinal = 'pago';
     } else {
       statusFinanceiroFinal = 'pendente';
@@ -101,6 +134,11 @@ export async function POST(request: Request) {
 
     // status_pagamento: refletir se foi totalmente pago ou parcialmente
     const statusPagamentoFinal = (Number(valorFinalNormalized) <= Number(entradaValor)) ? 'pago' : (entradaValor > 0 ? 'pago_parcial' : 'pendente');
+
+    // Preferir o número de parcelas enviado explicitamente pelo frontend (quando presente)
+    const qtdParcelasForVendasRaw = body.qtd_parcelas_venda ?? body.qtd_parcelas ?? saldo.qtd_parcelas ?? 1;
+    const qtdParcelasForVendas = Number(qtdParcelasForVendasRaw);
+    const valorParcelaForVendas = qtdParcelasForVendas > 0 ? Number(((saldo.valor || 0) / qtdParcelasForVendas).toFixed(2)) : 0;
 
     const { data: venda, error: vendaErr } = await supabaseAdmin
       .from("vendas")
@@ -127,8 +165,8 @@ export async function POST(request: Request) {
         autorizado_por_id: body.autorizado_por_id || body.autorizadoPor || null,
         justificativa_desconto: body.justificativa_desconto || null,
         criado_em: new Date().toISOString(),
-        qtd_parcelas_venda: Number(saldo.qtd_parcelas || 1),
-        valor_parcela_venda: Number(((saldo.valor || 0) / (Number(saldo.qtd_parcelas || 1))).toFixed(2)),
+        qtd_parcelas_venda: qtdParcelasForVendas,
+        valor_parcela_venda: valorParcelaForVendas,
         primeiro_vencimento_venda: saldo.primeiro_vencimento || null
       }, { onConflict: 'id' })
       .select()
@@ -136,14 +174,54 @@ export async function POST(request: Request) {
 
     if (vendaErr) throw vendaErr;
 
+    // Evita duplicidade de caixa por trigger legado de venda_automatica.
+    try {
+      await supabaseAdmin
+        .from('fluxo_caixa')
+        .delete()
+        .eq('referencia_id', venda.id)
+        .eq('clinica_id', clinica_id)
+        .eq('origem', 'venda_automatica');
+    } catch (e) {
+      console.warn('finalize: cleanup fluxo_caixa venda_automatica failed', e);
+    }
+
+    const creatingNewVenda = !body.id; // se tiver id no body, é atualização
+
+    // Função auxiliar de rollback parcial quando algo falhar após criar venda
+    async function rollbackPartialSave(reason?: any) {
+      try {
+        if (creatingNewVenda && venda?.id) {
+          await supabaseAdmin.from('financeiro_parcelas').delete().eq('venda_id', venda.id);
+          await supabaseAdmin.from('ordens_servico').delete().eq('venda_id', venda.id);
+          await supabaseAdmin.from('fluxo_caixa').delete().eq('referencia_id', venda.id).eq('origem', 'venda_otica');
+          await supabaseAdmin.from('fluxo_caixa').delete().eq('referencia_id', venda.id).eq('origem', 'venda_automatica');
+          await supabaseAdmin.from('vendas').delete().eq('id', venda.id);
+        }
+      } catch (e) {
+        console.warn('finalize: rollbackPartialSave failed', e, reason);
+      }
+    }
+
+    // Flags de resultado (declaradas no escopo externo para uso no retorno)
+    let entradaInserida = false;
+    let contaAtualizada = false;
+    let parcelasGeradas = false;
+    let saldoRegistrado = false;
+
     // 1.5 Determinar número final da OS (prioriza manual enviado pelo front)
     const usaNumManual = body.usa_num_manual || body.usaNumManual || false;
     const numeroManual = (body.numero_os_manual || body.numeroOsManual || "").toString().trim();
     const numeroOSFinal = (usaNumManual && numeroManual) ? numeroManual : gerarNumeroOSAutomatico();
 
     // 2. Salvar/Atualizar a Ordem de Serviço (ordens_servico)
+    try {
     // Build pricing and discount rateio for armação + lente
     const armacaoId = body.armacaoId || body.armacao_id || null;
+    // Regra de negocio atual: nao controlar estoque no fechamento da venda.
+    // Mantemos dados descritivos da armacao, mas nao vinculamos armacao_id na OS
+    // para evitar baixa/validacao automatica de estoque.
+    const armacaoIdForOS = null;
     const lenteId = body.lenteId || body.lente_id || null;
     let precoArm = 0;
     let precoLente = 0;
@@ -186,6 +264,8 @@ export async function POST(request: Request) {
     // Use os_detalhe do payload quando disponível para preencher todos os campos técnicos
     const osDetalhe = body.os_detalhe || {};
 
+    // Sem validacao de estoque no fechamento.
+
     const { error: osErr } = await supabaseAdmin
       .from('ordens_servico')
       .upsert({
@@ -196,7 +276,7 @@ export async function POST(request: Request) {
 
         // Identificação / relacionamento
         receita_id: osDetalhe.receita_id || body.receita_id || null,
-        armacao_id: osDetalhe.armacao_id || armacaoId || null,
+        armacao_id: armacaoIdForOS,
         armacao_modelo: osDetalhe.armacao_modelo || null,
         armacao_tipo: osDetalhe.armacao_tipo || null,
         material_lente: osDetalhe.material_lente || lenteId || null,
@@ -233,46 +313,97 @@ export async function POST(request: Request) {
 
     // 3. Tratar detlahes financeiros recebidos (entrada + saldo)
 
-    let entradaInserida = false;
-    let contaAtualizada = false;
-    let parcelasGeradas = false;
-    let saldoRegistrado = false;
+    const insertFluxoCaixaCompat = async (payload: Record<string, any>) => {
+      const first = await supabaseAdmin.from('fluxo_caixa').insert(payload);
+      if (!first.error) return first;
 
-    if (entrada.valor > 0) {
-      const descricao = `ENTRADA VENDA - CLIENTE: ${cliente?.nome_completo || 'N/D'} - OS: ${numeroOSFinal}`;
-      try {
-        const fluxoRes = await supabaseAdmin.from('fluxo_caixa').insert({
-          clinica_id,
-          tipo: 'entrada',
-          valor: entrada.valor,
-          descricao,
-          origem: 'venda_otica',
-          referencia_id: venda.id,
-          localidade: localidade_venda || 'Geral',
-          data_movimento: new Date().toISOString().slice(0, 10),
-          conta_id: entrada.conta_id,
-          forma_pagamento: entrada.forma || null
+      const msg = String(first.error.message || '').toLowerCase();
+      const isDuplicate =
+        msg.includes('duplicate key value') ||
+        msg.includes('ux_fluxo_caixa_referencia') ||
+        msg.includes('unique constraint');
+      const isSchemaMismatch =
+        msg.includes('schema cache') ||
+        msg.includes('column') ||
+        msg.includes('does not exist');
+
+      // Idempotencia: se já existe lançamento para essa referência, não quebra a finalização.
+      if (isDuplicate) {
+        return { error: null } as any;
+      }
+
+      if (!isSchemaMismatch) return first;
+
+      // Fallback para schemas antigos de fluxo_caixa (sem colunas novas)
+      const minimalPayload = {
+        clinica_id: payload.clinica_id,
+        tipo: payload.tipo,
+        origem: payload.origem,
+        referencia_id: payload.referencia_id,
+        descricao: payload.descricao,
+        valor: payload.valor,
+        data_movimento: payload.data_movimento,
+      };
+      return await supabaseAdmin.from('fluxo_caixa').insert(minimalPayload);
+    };
+
+    const nomeClienteFinanceiro =
+      body?.cliente?.nome_completo ||
+      body?.clienteManualNome ||
+      body?.cliente_manual_nome ||
+      cliente?.nome_completo ||
+      'Cliente';
+
+    const saldoGeraLancamento = ['pix', 'dinheiro', 'cartao_credito', 'cartao_debito'].includes(metodoSaldoNorm);
+    const totalLancamentoNoAto = Number(entrada.valor || 0) + (saldoGeraLancamento ? Number(saldo.valor || 0) : 0);
+    const metodoLancamento = metodoSaldoNorm || metodoEntradaNorm;
+    const precisaConciliacao = ['cartao_credito', 'cartao_debito'].includes(metodoLancamento);
+
+    if (Number(totalLancamentoNoAto || 0) > 0) {
+      const pagoTotal = Number(totalLancamentoNoAto) >= Number(valorFinalNormalized || 0);
+      const prefixo = pagoTotal ? 'Pago total' : 'Entrada';
+      const descricao = `${prefixo} - ${labelMetodoPagamento(metodoLancamento)} - OS ${numeroOSFinal} - ${nomeClienteFinanceiro}`;
+      const contaLancamento = entrada.conta_id || null;
+
+      const fluxoRes = await insertFluxoCaixaCompat({
+        clinica_id,
+        tipo: 'entrada',
+        valor: Number(totalLancamentoNoAto || 0),
+        valor_bruto: Number(totalLancamentoNoAto || 0),
+        taxa_cartao: 0,
+        status_conciliacao: precisaConciliacao ? 'pendente' : 'concluido',
+        descricao,
+        origem: 'venda_otica',
+        referencia_id: venda.id,
+        localidade: localidade_venda || 'Geral',
+        data_movimento: new Date().toISOString().slice(0, 10),
+        conta_id: contaLancamento,
+        metodo_pagamento: metodoLancamento || null
+      });
+      if (fluxoRes.error) throw fluxoRes.error;
+
+      entradaInserida = Number(entrada.valor || 0) > 0;
+      saldoRegistrado = Number(saldo.valor || 0) > 0;
+
+      // Cartão só compõe saldo de conta após conciliação.
+      if (!precisaConciliacao && contaLancamento) {
+        const rpcLancamento = await supabaseAdmin.rpc('atualizar_saldo_conta', {
+          target_conta_id: contaLancamento,
+          valor_add: Number(totalLancamentoNoAto || 0)
         });
-        entradaInserida = !fluxoRes.error;
-
-        if (entrada.conta_id) {
-          try {
-            await supabaseAdmin.rpc('atualizar_saldo_conta', { target_conta_id: entrada.conta_id, valor_add: entrada.valor });
-            contaAtualizada = true;
-          } catch (e) {
-            console.warn('finalize: rpc atualizar_saldo_conta failed for entrada', e);
-          }
-        }
-      } catch (e) {
-        console.warn('finalize: failed to process entrada fluxo_caixa/conta_corrente', e);
+        if (rpcLancamento.error) throw rpcLancamento.error;
+        contaAtualizada = true;
       }
     }
 
     // 3.2. Saldo restante: se crediário -> gerar parcelas em `financeiro_parcelas`
-    if ((saldo.forma === 'crediario' || (financeiro?.formaSaldo === 'crediario')) && Number(saldo.qtd_parcelas || 0) > 0) {
+    // Para geração de parcelas, preferir valor enviado explicitamente pelo front (qtd_parcelas_venda)
+    const qtdParcelasCrediarioRaw = body.qtd_parcelas_venda ?? body.qtd_parcelas ?? saldo.qtd_parcelas ?? 0;
+    const qtdParcelasCrediario = Number(qtdParcelasCrediarioRaw);
+    if ((saldo.forma === 'crediario' || (financeiro?.formaSaldo === 'crediario')) && qtdParcelasCrediario > 0) {
       try {
         await supabaseAdmin.from('financeiro_parcelas').delete().eq('venda_id', venda.id);
-        const qtd = Number(saldo.qtd_parcelas || 0);
+        const qtd = qtdParcelasCrediario;
         const valorRestante = Number(saldo.valor || 0);
         const valorParc = qtd > 0 ? (valorRestante / qtd) : 0;
         const parcelasIns = Array.from({ length: qtd }).map((_, i) => {
@@ -291,41 +422,12 @@ export async function POST(request: Request) {
         if (parcelasIns.length) {
           const parcelasRes = await supabaseAdmin.from('financeiro_parcelas').insert(parcelasIns);
           parcelasGeradas = !parcelasRes.error;
+          if (parcelasRes.error) throw parcelasRes.error;
         }
       } catch (e) {
         console.warn('finalize: failed to generate financeiro_parcelas', e);
-      }
-    } else if (['pix', 'dinheiro', 'debito', 'cartao_debito', 'cartao', 'cartao_credito'].includes((saldo.forma || '').toString())) {
-      // se pagou à vista (ou via cartão/débito), registrar o saldo no caixa também
-      try {
-        const descricaoSaldo = `SALDO VENDA - CLIENTE: ${cliente?.nome_completo || 'N/D'} - OS: ${numeroOSFinal}`;
-        const contaParaSaldo = entrada.conta_id || null;
-        if (Number(saldo.valor || 0) > 0) {
-          const fluxoSaldoRes = await supabaseAdmin.from('fluxo_caixa').insert({
-            clinica_id,
-            tipo: 'entrada',
-            valor: Number(saldo.valor || 0),
-            descricao: descricaoSaldo,
-            origem: 'venda_otica',
-            referencia_id: venda.id,
-            localidade: localidade_venda || 'Geral',
-            data_movimento: new Date().toISOString().slice(0, 10),
-            conta_id: contaParaSaldo,
-            forma_pagamento: saldo.forma || null
-          });
-          saldoRegistrado = !fluxoSaldoRes.error;
-
-          if (contaParaSaldo) {
-            try {
-              await supabaseAdmin.rpc('atualizar_saldo_conta', { target_conta_id: contaParaSaldo, valor_add: Number(saldo.valor || 0) });
-              contaAtualizada = true;
-            } catch (e) {
-              console.warn('finalize: rpc atualizar_saldo_conta failed for saldo', e);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('finalize: failed to process saldo cash/cc', e);
+        await rollbackPartialSave(e);
+        throw e;
       }
     }
 
@@ -339,10 +441,16 @@ export async function POST(request: Request) {
       console.warn('finalize: failed to sync vendas.valor_entrada', e);
     }
 
+    } catch (e) {
+      // erro durante passos pós-venda: tentar rollback parcial e repassar o erro
+      await rollbackPartialSave(e);
+      throw e;
+    }
+
     return NextResponse.json({ success: true, venda_id: venda.id, numero_os: numeroOSFinal, entradaInserida, contaAtualizada, parcelasGeradas, saldoRegistrado });
 
   } catch (err: any) {
     console.error("ERRO CRÍTICO API:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err.message }, { status: err?.status || 500 });
   }
 }

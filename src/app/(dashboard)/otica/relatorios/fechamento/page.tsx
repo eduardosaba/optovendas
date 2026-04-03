@@ -69,7 +69,8 @@ export default function FechamentoCaixaPage() {
         .eq("clinica_id", ctx.clinicaId)
         .gte("data_movimento", deStr)
         .lte("data_movimento", ateStr)
-        .eq("tipo", "entrada");
+        .eq("tipo", "entrada")
+        .neq("status_conciliacao", "pendente");
 
       const { data, error } = await query;
 
@@ -251,7 +252,11 @@ export default function FechamentoCaixaPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link href="/otica/financeiro/conciliacao" className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-3 rounded-2xl font-black text-[11px] uppercase tracking-wider hover:bg-blue-100 transition-all">
+            <CreditCard size={14} /> Conciliação de Cartão
+          </Link>
+          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
           <Calendar className="ml-2 text-slate-300" size={18} />
           <input
             type="date"
@@ -259,6 +264,7 @@ export default function FechamentoCaixaPage() {
             onChange={(e) => setDataFiltro(e.target.value)}
             className="bg-transparent border-none font-black text-slate-700 outline-none p-2"
           />
+          </div>
         </div>
       </header>
 

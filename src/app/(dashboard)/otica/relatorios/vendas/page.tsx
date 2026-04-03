@@ -94,7 +94,7 @@ export default function RelatorioVendasPage() {
   const totalFiltrado = useMemo(() => {
     return vendasFiltradas
       .filter(v => v.status_financeiro !== 'cancelado')
-      .reduce((acc, v) => acc + (Number(v.valor_total) || 0), 0);
+      .reduce((acc, v) => acc + (Number(v.valor_final ?? v.valor_total) || 0), 0);
   }, [vendasFiltradas]);
 
   function exportarExcel() {
@@ -106,7 +106,7 @@ export default function RelatorioVendasPage() {
       v.pacientes?.nome_completo,
       v.localidade_venda || "Geral",
       v.status_financeiro,
-      (Number(v.valor_total) || 0).toFixed(2)
+      (Number(v.valor_final ?? v.valor_total) || 0).toFixed(2)
     ]);
     const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(";")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -210,6 +210,10 @@ export default function RelatorioVendasPage() {
                             <span className="flex items-center gap-1 text-[10px] font-black uppercase text-red-500 bg-red-50 px-2 py-1 rounded-lg">
                                 <XCircle size={12}/> Cancelado
                             </span>
+                        ) : v.status_financeiro === 'aguardando_conciliacao' ? (
+                          <span className="flex items-center gap-1 text-[10px] font-black uppercase text-blue-700 bg-blue-50 px-2 py-1 rounded-lg">
+                            <AlertCircle size={12}/> Aguardando Conciliação
+                          </span>
                         ) : v.status_financeiro === 'pago' ? (
                             <span className="flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg">
                                 <CheckCircle2 size={12}/> Pago
@@ -223,7 +227,7 @@ export default function RelatorioVendasPage() {
                   </td>
                   <td className="px-8 py-6">
                      <p className={`text-sm font-black ${v.status_financeiro === 'cancelado' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-                        {Number(v.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {Number(v.valor_final ?? v.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                      </p>
                   </td>
                   <td className="px-8 py-6 text-right space-x-2 whitespace-nowrap">

@@ -161,7 +161,17 @@ export async function POST(req: NextRequest) {
     const valorTotal = Number(vendaData.financeiro?.total || 0);
     const valorEntrada = Number(vendaData.financeiro?.valorEntrada || 0);
     const tipoFechamento = vendaData.financeiro?.tipoFechamento || 'entrada_crediario';
-    const statusFinanceiro = tipoFechamento === 'total' ? 'pago' : tipoFechamento === 'pendente' ? 'pendente' : valorEntrada > 0 ? 'pago_parcial' : 'pendente';
+    const formaSaldoRaw = String(vendaData.financeiro?.formaSaldo || vendaData.metodo_pagamento || '').toLowerCase();
+    const eCartao = formaSaldoRaw.includes('cart') || formaSaldoRaw.includes('debito') || formaSaldoRaw.includes('débito');
+    const statusFinanceiro = eCartao
+      ? 'aguardando_conciliacao'
+      : tipoFechamento === 'total'
+        ? 'pago'
+        : tipoFechamento === 'pendente'
+          ? 'pendente'
+          : valorEntrada > 0
+            ? 'pago_parcial'
+            : 'pendente';
 
     const vendaPayload: any = {
       clinica_id: clinicaId,

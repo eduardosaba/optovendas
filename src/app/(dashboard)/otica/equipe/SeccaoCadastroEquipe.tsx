@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
+import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/ToastProvider";
-import { Eye, EyeOff, Lock, UserPlus, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Lock, UserPlus, Loader2, Mail, User } from "lucide-react";
 
-export default function SeçãoCadastroEquipe({ aoAtualizar }: any) {
+export default function SeccaoCadastroEquipe({ aoAtualizar }: any) {
   const [showPassword, setShowPassword] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [form, setForm] = useState({ nome: "", email: "", senha: "" });
@@ -14,91 +14,104 @@ export default function SeçãoCadastroEquipe({ aoAtualizar }: any) {
 
   async function handleCriarEVincular(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.email || !form.nome) return toast.info("Preencha o nome e e-mail.");
+    if (!form.email || !form.nome || !form.senha) {
+      return toast.info("Preencha todos os campos, incluindo a senha.");
+    }
 
     setSalvando(true);
     try {
       const ctx = await resolveClinicaContext();
 
-      // Use a API server-side para criar o usuário (gera Auth user + registro em `perfis`)
-      const internalApiKey = process.env.NEXT_PUBLIC_INTERNAL_API_KEY;
-      if (!internalApiKey) throw new Error('NEXT_PUBLIC_INTERNAL_API_KEY não configurada.');
+      // Chamamos a mesma API robusta do Admin
+      const { data: { session } = {} as any } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const headers: Record<string,string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch('/api/otica/invite', {
+      const res = await fetch('/api/admin/create-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-internal-key': internalApiKey,
-        },
+        headers,
         body: JSON.stringify({
           email: form.email.toLowerCase().trim(),
-          display_name: form.nome,
+          password: form.senha,
+          nome_completo: form.nome,
           clinica_id: ctx.clinicaId,
-          role: 'vendedor_otica',
+          perfil: 'vendas',
         }),
       });
 
+      const result = await res.json();
+
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || 'Erro ao criar usuário');
+        throw new Error(result.error || 'Erro ao criar vendedor');
       }
 
-      toast.success('Usuário criado e vinculado à unidade!');
+      toast.success('Vendedor cadastrado com sucesso!');
       setForm({ nome: '', email: '', senha: '' });
       if (aoAtualizar) aoAtualizar();
     } catch (err: any) {
-      toast.error("Erro ao cadastrar: " + (err?.message ?? String(err)));
+      toast.error(err.message);
     } finally {
       setSalvando(false);
     }
   }
 
   return (
-    <form onSubmit={handleCriarEVincular} className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm">
-      <div className="md:col-span-3 flex items-center gap-2 mb-2">
-        <UserPlus size={18} className="text-cyan-500" />
-        <h2 className="text-xs font-black uppercase text-slate-400 tracking-widest">Novo Vendedor</h2>
+    <form onSubmit={handleCriarEVincular} className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm space-y-6">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="p-2 bg-cyan-50 rounded-lg text-cyan-600">
+            <UserPlus size={20} />
+        </div>
+        <h2 className="text-sm font-black uppercase text-slate-700 tracking-widest">Novo Vendedor</h2>
       </div>
 
-      <input
-        placeholder="Nome"
-        value={form.nome}
-        onChange={(e) => setForm({ ...form, nome: e.target.value })}
-        className="p-4 bg-slate-50 rounded-2xl border-none font-bold"
-      />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="relative">
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+            <input
+                placeholder="Nome do Vendedor"
+                value={form.nome}
+                onChange={(e) => setForm({ ...form, nome: e.target.value })}
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-cyan-500 shadow-inner"
+            />
+        </div>
 
-      <input
-        placeholder="E-mail"
-        type="email"
-        value={form.email}
-        onChange={(e) => setForm({ ...form, email: e.target.value })}
-        className="p-4 bg-slate-50 rounded-2xl border-none font-bold"
-      />
+        <div className="relative">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+            <input
+                placeholder="E-mail de acesso"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="w-full pl-12 pr-4 py-4 bg-slate-50 rounded-2xl border-none font-bold focus:ring-2 focus:ring-cyan-500 shadow-inner"
+            />
+        </div>
 
-      <div className="relative">
-        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-        <input
-          type={showPassword ? "text" : "password"}
-          placeholder="Senha"
-          value={form.senha}
-          onChange={(e) => setForm({ ...form, senha: e.target.value })}
-          className="w-full pl-12 pr-12 py-4 bg-slate-50 border-none rounded-2xl font-bold focus:ring-2 focus:ring-cyan-500 shadow-inner"
-        />
-        <button
-          type="button"
-          onClick={() => setShowPassword(!showPassword)}
-          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-600 transition-all"
-        >
-          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-        </button>
+        <div className="relative">
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+            <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Senha provisória"
+                value={form.senha}
+                onChange={(e) => setForm({ ...form, senha: e.target.value })}
+                className="w-full pl-12 pr-12 py-4 bg-slate-50 border-none rounded-2xl font-bold focus:ring-2 focus:ring-cyan-500 shadow-inner"
+            />
+            <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-600"
+            >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+        </div>
       </div>
 
       <button
         type="submit"
         disabled={salvando}
-        className="md:col-span-3 bg-slate-900 text-white py-4 rounded-2xl font-black uppercase hover:bg-cyan-600 transition-all shadow-xl"
+        className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black uppercase tracking-widest hover:bg-cyan-600 transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
       >
-        {salvando ? <Loader2 className="animate-spin mx-auto" /> : "Confirmar Cadastro"}
+        {salvando ? <Loader2 className="animate-spin" size={20} /> : "Finalizar Cadastro e Ativar Acesso"}
       </button>
     </form>
   );

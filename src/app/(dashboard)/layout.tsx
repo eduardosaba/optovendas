@@ -75,6 +75,7 @@ export default function DashboardLayout({
   const [layoutHydrated, setLayoutHydrated] = useState(false);
   const [shortcutsMinimized, setShortcutsMinimized] = useState(false);
   const [shortcutsPos, setShortcutsPos] = useState<{ x: number; y: number } | null>(null);
+  const [inputFocused, setInputFocused] = useState(false);
   const draggingRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const mainRef = useRef<HTMLDivElement | null>(null);
   const shortcutsPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -196,6 +197,37 @@ export default function DashboardLayout({
       window.removeEventListener('touchend', onUp as any);
     };
     // run only once on mount
+  }, []);
+
+  // Detecta foco em inputs/areas editáveis para esconder a barra móvel (evita teclado sobrepondo)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    function onFocusIn(e: FocusEvent) {
+      const target = e.target as HTMLElement | null;
+      const tag = (target?.tagName || '').toUpperCase();
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (target as HTMLElement)?.isContentEditable) {
+        setInputFocused(true);
+      }
+    }
+
+    function onFocusOut() {
+      // small delay to allow activeElement to settle
+      setTimeout(() => {
+        const active = document.activeElement as HTMLElement | null;
+        const tag = (active?.tagName || '').toUpperCase();
+        if (!(tag === 'INPUT' || tag === 'TEXTAREA' || active?.isContentEditable)) {
+          setInputFocused(false);
+        }
+      }, 0);
+    }
+
+    window.addEventListener('focusin', onFocusIn as any);
+    window.addEventListener('focusout', onFocusOut as any);
+    return () => {
+      window.removeEventListener('focusin', onFocusIn as any);
+      window.removeEventListener('focusout', onFocusOut as any);
+    };
   }, []);
 
   // Não renderiza até o cliente estar montado para evitar hydration mismatch
@@ -423,7 +455,7 @@ export default function DashboardLayout({
           </div>
         )}
 
-        <main ref={mainRef} className={`flex-1 overflow-y-auto p-4 pb-24 md:p-10 md:pb-10 transition-all duration-500 ${ctx?.isFocusMode ? 'md:pl-0' : 'md:pl-[20rem]'}`}>
+        <main ref={mainRef} className={`flex-1 overflow-y-auto p-4 pb-32 md:p-10 md:pb-10 transition-all duration-500 ${ctx?.isFocusMode ? 'md:pl-0' : 'md:pl-[20rem]'}`}>
           {children}
           {layoutHydrated ? <WelcomeTour /> : null}
         </main>
@@ -503,27 +535,66 @@ export default function DashboardLayout({
           }
         </FocusContext.Consumer>
 
-        <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-4 border-t border-slate-200/80 bg-white/95 backdrop-blur md:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <Link href={(role === "master" || role === "admin" || role === "consultorio") ? "/consultorio" : role === "financeiro" ? "/financeiro" : "/otica"} className="flex flex-col items-center justify-center gap-1 px-2 py-2 text-center text-xs font-semibold text-slate-700">
-            <span className="text-2xl">🏠</span>
-            <span className="text-[10px]">Início</span>
-          </Link>
+        {ctx?.isFocusMode ? null : (
+          <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-4 border-t border-slate-200/80 bg-white/95 backdrop-blur md:hidden shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.05)]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
 
-          <Link href="/otica/vendas/nova" className="flex flex-col items-center justify-center gap-1 px-2 py-2 text-center text-xs font-semibold text-slate-700">
-            <span className="text-2xl">👓</span>
-            <span className="text-[10px]">Nova Venda</span>
-          </Link>
+            {/* 1. INÍCIO (Inteligente) */}
+            <Link
+              href={role === 'vendas' ? '/otica' : '/consultorio'}
+              className={`flex flex-col items-center justify-center gap-1 py-3 transition-colors ${(isActivePath('/otica') || isActivePath('/consultorio')) ? 'text-blue-600' : 'text-slate-500'}`}
+            >
+              <NavIcon path="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <span className="text-[10px] font-black uppercase tracking-tighter">Início</span>
+            </Link>
 
-          <Link href="/otica" className="flex flex-col items-center justify-center gap-1 px-2 py-2 text-center text-xs font-semibold text-slate-700">
-            <span className="text-2xl">📋</span>
-            <span className="text-[10px]">Minhas OS</span>
-          </Link>
+            {/* 2. AÇÃO CENTRAL 1 (Contextual) */}
+            {pathname.includes('/otica') ? (
+              <Link
+                href="/otica/vendas/nova"
+                className={`flex flex-col items-center justify-center gap-1 py-3 ${pathname.includes('vendas/nova') ? 'text-blue-600' : 'text-slate-500'}`}
+              >
+                <NavIcon path="M12 5v14M5 12h14" />
+                <span className="text-[10px] font-black uppercase tracking-tighter">Vender</span>
+              </Link>
+            ) : (
+              <Link
+                href="/consultorio/pacientes"
+                className={`flex flex-col items-center justify-center gap-1 py-3 ${pathname.includes('pacientes') ? 'text-blue-600' : 'text-slate-500'}`}
+              >
+                <NavIcon path="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+                <span className="text-[10px] font-black uppercase tracking-tighter">Pacientes</span>
+              </Link>
+            )}
 
-          <Link href="/perfil" className="flex flex-col items-center justify-center gap-1 px-2 py-2 text-center text-xs font-semibold text-slate-700">
-            <span className="text-2xl">👤</span>
-            <span className="text-[10px]">Perfil</span>
-          </Link>
-        </nav>
+            {/* 3. AÇÃO CENTRAL 2 (Contextual) */}
+            {pathname.includes('/otica') ? (
+              <Link
+                href="/otica/relatorios/fechamento"
+                className={`flex flex-col items-center justify-center gap-1 py-3 ${pathname.includes('fechamento') ? 'text-blue-600' : 'text-slate-500'}`}
+              >
+                <NavIcon path="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                <span className="text-[10px] font-black uppercase tracking-tighter">Caixa</span>
+              </Link>
+            ) : (
+              <Link
+                href="/financeiro"
+                className={`flex flex-col items-center justify-center gap-1 py-3 ${pathname.includes('financeiro') ? 'text-blue-600' : 'text-slate-500'}`}
+              >
+                <NavIcon path="M3 7h18v10H3zM16 12h3" />
+                <span className="text-[10px] font-black uppercase tracking-tighter">Financeiro</span>
+              </Link>
+            )}
+
+            {/* 4. PERFIL (Fixo) */}
+            <Link
+              href="/perfil"
+              className={`flex flex-col items-center justify-center gap-1 py-3 ${isActivePath('/perfil') ? 'text-blue-600' : 'text-slate-500'}`}
+            >
+              <NavIcon path="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <span className="text-[10px] font-black uppercase tracking-tighter">Perfil</span>
+            </Link>
+          </nav>
+        )}
               </div>
             )}
           </FocusContext.Consumer>

@@ -38,6 +38,14 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [pacienteInfo, setPacienteInfo] = useState<{ nome_completo?: string; cpf?: string; cidade_atendimento?: string } | null>(null);
 
+  if (!data) {
+    return (
+      <div className="p-10 text-center text-slate-400 font-black uppercase tracking-widest animate-pulse">
+        Carregando fechamento...
+      </div>
+    );
+  }
+
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
@@ -56,6 +64,8 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   const subtotal = totalGeral;
   const totalComDesconto = Math.max(0, subtotal - Number(descontoManual || 0));
   const saldoRestante = Math.max(0, totalComDesconto - valorEntrada);
+  const qtdParcelasAtual = Math.max(1, Number(data.financeiro?.qtdParcelas || (data.financeiro?.formaSaldo === 'crediario' ? 3 : 1)));
+  const valorParcelaCartaoInformativo = qtdParcelasAtual > 0 ? Number((saldoRestante / qtdParcelasAtual).toFixed(2)) : 0;
 
   const formatBRL = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
   const nomeArquivo = `carne_vendas_${((pacienteInfo?.nome_completo) || data.cliente?.nome_completo || data.clienteManualNome || 'cliente').replace(/\s/g,'').replace(/[^\w-]/g,'')}.pdf`;
@@ -278,7 +288,8 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   }
 
   // --- FINALIZAÇÃO ---
-  async function finalizar(tipo: 'normal' | 'pendente') {
+  async function finalizar(tipo: 'normal' | 'pendente', skipAutorizacaoCheck = false) {
+    if (loading) return;
     if (tipo === 'normal' && !data.assinatura) return toast.error("Colha a assinatura de compra.");
     
     setLoading(true);
@@ -300,6 +311,11 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
         clinica_id: ctx.clinicaId,
         paciente_id: data.pacienteId || null,
         receita_id: (data as any).receitaId || null,
+        usa_num_manual: !!(data as any).usaNumManual,
+        numero_os_manual: (data as any).numeroOsManual || null,
+        cliente: {
+          nome_completo: (data as any).cliente?.nome_completo || data.clienteManualNome || null,
+        },
 
         // Totais
         valor_total: subtotal,
@@ -381,7 +397,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
         return Math.max(0, Math.min(1, num / 100));
       })();
 
-      if (descontoManual > (subtotal * LIMITE_DESCONTO_SEM_SENHA) && !autorizadorId) {
+      if (!skipAutorizacaoCheck && descontoManual > (subtotal * LIMITE_DESCONTO_SEM_SENHA) && !autorizadorId) {
         setModalSenha(true);
         setLoading(false);
         return toast.error('Autorização necessária para desconto acima do limite.');
@@ -435,10 +451,8 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
       setAutorizadorId(json.perfil.id);
       setModalSenha(false);
       toast.success(`Desconto autorizado por ${json.perfil.nome}`);
-      // Após autorização, prosseguir com a finalização automaticamente
-      setTimeout(() => {
-        try { finalizar('normal'); } catch (e) { /* ignore */ }
-      }, 500);
+      // Após autorização, finaliza uma única vez sem reabrir o modal
+      await finalizar('normal', true);
     } catch (e) {
       toast.error('Erro na conexão com servidor.');
     }
@@ -598,17 +612,23 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
                 <select
                   className="w-full p-4 border rounded-2xl font-bold bg-white"
                   value={data.financeiro?.formaSaldo || ''}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === 'crediario') {
-                      // garante valores default para crediário
-                      const qtd = data.financeiro?.qtdParcelas || '3';
-                      const primeiro = data.financeiro?.primeiroVencimento || new Date().toISOString().slice(0,10);
-                      onChange({...data, financeiro: {...data.financeiro, formaSaldo: 'crediario', qtdParcelas: String(qtd), primeiroVencimento: primeiro}});
-                      return;
-                    }
-                    onChange({...data, financeiro: {...data.financeiro, formaSaldo: val}});
-                  }}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'crediario') {
+                        // garante valores default para crediário
+                        const qtd = data.financeiro?.qtdParcelas || '3';
+                        const primeiro = data.financeiro?.primeiroVencimento || new Date().toISOString().slice(0,10);
+                        onChange({...data, financeiro: {...data.financeiro, formaSaldo: 'crediario', qtdParcelas: String(qtd), primeiroVencimento: primeiro}});
+                        return;
+                      }
+                      if (val === 'cartao') {
+                        // permite informar parcelamento no cartão — default 1
+                        const qtd = data.financeiro?.qtdParcelas || '1';
+                          onChange({...data, financeiro: {...data.financeiro, formaSaldo: 'cartao', qtdParcelas: String(qtd), primeiroVencimento: null}});
+                        return;
+                      }
+                      onChange({...data, financeiro: {...data.financeiro, formaSaldo: val}});
+                    }}
                 >
                    <option value="">Selecione...</option>
                    <option value="pix">PIX</option>
@@ -633,7 +653,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
           </div>
 
            {/* Inline config for crediário: qtdParcelas + primeiro vencimento */}
-           {data.financeiro?.formaSaldo === 'crediario' && (
+           {(data.financeiro?.formaSaldo === 'crediario' || data.financeiro?.formaSaldo === 'cartao') && (
              <div className="mt-3 grid grid-cols-2 gap-3">
                <div>
                  <label className="block text-xs font-black uppercase text-slate-400 mb-1">Parcelas</label>
@@ -641,20 +661,28 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
                    type="number"
                    min={1}
                    max={60}
-                   value={Number(data.financeiro?.qtdParcelas || 3)}
+                   value={qtdParcelasAtual}
                    onChange={(e) => onChange({...data, financeiro: {...data.financeiro, qtdParcelas: String(Math.max(1, Number(e.target.value || 1)))}})}
                    className="w-full p-3 border rounded-2xl"
                  />
                </div>
-               <div>
-                 <label className="block text-xs font-black uppercase text-slate-400 mb-1">Primeiro Vencimento</label>
-                 <input
-                   type="date"
-                   value={data.financeiro?.primeiroVencimento || new Date().toISOString().slice(0,10)}
-                   onChange={(e) => onChange({...data, financeiro: {...data.financeiro, primeiroVencimento: e.target.value}})}
-                   className="w-full p-3 border rounded-2xl"
-                 />
-               </div>
+               {data.financeiro?.formaSaldo === 'crediario' ? (
+                 <div>
+                   <label className="block text-xs font-black uppercase text-slate-400 mb-1">Primeiro Vencimento</label>
+                   <input
+                     type="date"
+                     value={data.financeiro?.primeiroVencimento || new Date().toISOString().slice(0,10)}
+                     onChange={(e) => onChange({...data, financeiro: {...data.financeiro, primeiroVencimento: e.target.value}})}
+                     className="w-full p-3 border rounded-2xl"
+                   />
+                 </div>
+               ) : (
+                 <div className="p-3 rounded-2xl border bg-slate-50">
+                   <label className="block text-xs font-black uppercase text-slate-400 mb-1">Valor Informativo da Parcela</label>
+                   <p className="text-lg font-black text-slate-700">{formatBRL(valorParcelaCartaoInformativo)}</p>
+                   <p className="text-[10px] text-slate-400 mt-1">Estimativa: saldo restante dividido pela quantidade de parcelas.</p>
+                 </div>
+               )}
              </div>
            )}
         </section>

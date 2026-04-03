@@ -905,7 +905,13 @@ function NovaVendaStepperContent() {
         ) : (
           <button
             aria-label="finalizar-venda-trigger"
-            onClick={() => window.dispatchEvent(new CustomEvent('opv:openFinalizeModal'))}
+            onClick={() => {
+              try {
+                (window as any).__opv_finalize ? (window as any).__opv_finalize() : window.dispatchEvent(new CustomEvent('opv:openFinalizeModal'));
+              } catch {
+                window.dispatchEvent(new CustomEvent('opv:openFinalizeModal'));
+              }
+            }}
             disabled={salvando}
             className="flex items-center gap-2 px-10 py-4 bg-cyan-500 text-white rounded-2xl font-black shadow-xl shadow-cyan-100 hover:bg-cyan-600 transition-all disabled:bg-slate-300"
           >

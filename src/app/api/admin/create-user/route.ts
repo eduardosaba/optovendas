@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
     // Segurança: aceitar duas formas de autorização:
     // 1) header interno x-internal-key (para jobs/integrações server->server)
     // 2) Authorization: Bearer <access_token> — verifica perfil do usuário (master/admin)
-    const internalKey = req.headers.get('x-internal-key');
+    const internalKey = request.headers.get('x-internal-key');
     let allowedByAuth = false;
     let authFailReason = '';
     if (internalKey) {
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
         console.warn('internal key provided but does not match server value');
       }
     } else {
-      const authHeader = req.headers.get('authorization') || '';
+      const authHeader = request.headers.get('authorization') || '';
       const match = authHeader.match(/^Bearer\s+(.*)$/i);
       if (match) {
         const token = match[1];
@@ -57,17 +57,18 @@ export async function POST(req: NextRequest) {
       const reason = authFailReason || 'no-valid-auth-provided';
       console.warn('create-user unauthorized:', reason, {
         hasInternalKey: !!internalKey,
-        hasAuthHeader: !!req.headers.get('authorization'),
+        hasAuthHeader: !!request.headers.get('authorization'),
         hasServiceRole: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
         hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
       });
       return NextResponse.json({ error: 'Unauthorized', reason }, { status: 403 });
     }
-    const body = await req.json();
+    const body = await request.json();
     const { clinica_id, nome_completo, email, perfil, ativo, password } = body;
     
-    if (!clinica_id || !email || !nome_completo) 
-      return NextResponse.json({ error: 'clinica_id, nome_completo e email são obrigatórios' }, { status: 400 });
+    if (!clinica_id || !email || !nome_completo) {
+      return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 });
+    }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;

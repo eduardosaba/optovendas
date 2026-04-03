@@ -64,15 +64,16 @@ BEGIN
     RAISE EXCEPTION 'Quantidade invalida para baixa';
   END IF;
 
+  -- Atualiza permitindo que a quantidade fique negativa (aceita vendas mesmo sem estoque físico)
   UPDATE estoque_armacoes e
      SET quantidade_atual = e.quantidade_atual - p_qtd
    WHERE e.id = p_id
      AND e.clinica_id = current_clinica_id()
-     AND e.quantidade_atual >= p_qtd
    RETURNING e.quantidade_atual INTO v_nova_qtd;
 
   IF v_nova_qtd IS NULL THEN
-    RAISE EXCEPTION 'Estoque insuficiente ou item nao encontrado';
+    -- Nao bloquear venda por estoque ausente neste fluxo.
+    RETURN 0;
   END IF;
 
   RETURN v_nova_qtd;

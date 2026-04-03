@@ -27,7 +27,7 @@ function FormularioCliente() {
   const [fetching, setFetching] = useState(!!clienteId);
   const [clinicaId, setClinicaId] = useState("");
 
-  const [form, setForm] = useState({
+  const initialForm = {
     nome_completo: "",
     apelido: "",
     cpf: "",
@@ -39,7 +39,9 @@ function FormularioCliente() {
     endereco: "",
     bairro: "",
     observacoes: "",
-  });
+  };
+
+  const [form, setForm] = useState(initialForm);
 
   useEffect(() => {
     async function inicializar() {
@@ -53,7 +55,15 @@ function FormularioCliente() {
           .eq("id", clienteId)
           .single();
 
-        if (data) setForm(data as any);
+        if (data) {
+          // Normaliza valores possivelmente nulos para evitar `value={null}` em inputs controlados
+          const normalized: any = { ...initialForm };
+          for (const k of Object.keys(normalized)) {
+            // use nullish coalescing to convert null/undefined to empty string
+            normalized[k] = (data as any)[k] ?? "";
+          }
+          setForm(normalized);
+        }
         setFetching(false);
       }
     }

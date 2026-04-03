@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { resolveClinicaContext } from "@/lib/clinica";
 import { maskAv } from "@/lib/refracaoFormat";
 import { useToast } from "@/components/ui/ToastProvider";
 import { ClipboardCheck, Eye, Activity, History, AlertTriangle, Save } from "lucide-react";
@@ -165,6 +166,21 @@ export default function LaudoFuncional({ pacienteId }: { pacienteId: string }) {
       const ok = await salvarLaudo();
       if (!ok) return;
 
+      const ctx = await resolveClinicaContext();
+
+      // buscar dados da clínica para cabeçalho do PDF
+      let clinica: any = null;
+      try {
+        const { data: c } = await supabase
+          .from('clinicas')
+          .select('nome_fantasia, logomarca_url, endereco_completo, cnpj')
+          .eq('id', ctx.clinicaId)
+          .maybeSingle();
+        clinica = c || null;
+      } catch {
+        clinica = null;
+      }
+
       // buscar nome do paciente para título do arquivo
       let pacienteNome = 'Paciente';
       try {
@@ -174,8 +190,26 @@ export default function LaudoFuncional({ pacienteId }: { pacienteId: string }) {
         // ignore — já temos fallback
       }
 
-      const blob = await generateLaudoPdfBlob({ pacienteNome, conclusao: dados.conclusao });
-      const filename = `Laudo ${pacienteNome.replace(/\s+/g, ' ').trim()}.pdf`;
+      const blob = await generateLaudoPdfBlob({
+        clinica,
+        pacienteNome,
+        dados: {
+          av_sc_longe_od: dados.av_sc_longe_od,
+          av_sc_perto_od: dados.av_sc_perto_od,
+          av_sc_longe_oe: dados.av_sc_longe_oe,
+          av_sc_perto_oe: dados.av_sc_perto_oe,
+          av_cc_longe_od: dados.av_cc_longe_od,
+          av_cc_perto_od: dados.av_cc_perto_od,
+          av_cc_longe_oe: dados.av_cc_longe_oe,
+          av_cc_perto_oe: dados.av_cc_perto_oe,
+          sensibilidade: dados.sensibilidade,
+          motor_acomodativo: dados.motor_acomodativo,
+          ishihara: dados.ishihara,
+          profundidade: dados.profundidade,
+          conclusao: dados.conclusao,
+        },
+      });
+      const filename = `Laudo_Funcional_${pacienteNome.replace(/\s+/g, '_').trim()}.pdf`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

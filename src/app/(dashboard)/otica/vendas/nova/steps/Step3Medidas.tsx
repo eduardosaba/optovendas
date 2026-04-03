@@ -956,12 +956,22 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
 
   async function abrirCamera() {
     setCameraError("");
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError("Este dispositivo/navegador não suporta acesso à câmera.");
-      return;
-    }
 
+    // Em dispositivos móveis, prefira abrir o app de câmera via input[file] com capture
     try {
+      const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) || (typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
+      if (isMobile) {
+        // dispara o input file com capture (atributo já presente no markup)
+        fileInputRef.current?.click();
+        return;
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError("Este dispositivo/navegador não suporta acesso à câmera.");
+        return;
+      }
+
       if (!cameraStreamRef.current) {
         cameraStreamRef.current = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "user" },
@@ -969,7 +979,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
         });
       }
       setCameraOpen(true);
-    } catch {
+    } catch (err) {
+      console.warn('abrirCamera erro:', err);
       setCameraError("Não foi possível abrir a câmera. Verifique as permissões e tente novamente.");
     }
   }

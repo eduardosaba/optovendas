@@ -59,7 +59,7 @@ export default function RankingCidadesPage() {
         .gte("criado_em", `${inicio}T00:00:00`)
         .lte("criado_em", `${fim}T23:59:59`);
 
-      if (vRes.error) {
+      if (vRes.error && /criado_em|column .* does not exist/i.test(String(vRes.error.message || vRes.error))) {
         vRes = await supabase
           .from("vendas")
           .select("localidade_venda, valor_total")

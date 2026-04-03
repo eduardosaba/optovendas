@@ -208,7 +208,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     let active = true;
 
     async function pesquisar() {
-      const termo = busca.trim();
+        const termo = (busca || "").trim();
       if (!termo || termo.length < 2 || !clinicaId) {
         setResultadoBusca([]);
         setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
@@ -217,6 +217,8 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
       setBuscando(true);
       try {
+        // sanitize search term to avoid injecting invalid tokens into PostgREST filters
+        const safeTerm = termo.replace(/[%()']/g, "").trim();
         const [pacientesRes, vendasRes, armacoesRes, lentesRes, parcelasRes] = await Promise.all([
           // 1) Pacientes por nome ou CPF
           supabase
@@ -250,14 +252,21 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             .limit(2),
 
           // 5) Parcelas pendentes (installments)
+          // usar tabela correta `financeiro_parcelas`
           supabase
-            .from("installments")
+            .from("financeiro_parcelas")
             .select("id, valor_parcela, vencimento, paciente_id")
             .eq("status", "atrasado")
             .limit(2),
         ]);
 
         if (!active) return;
+
+        if (pacientesRes.error) console.warn('search: pacientes error', pacientesRes.error, pacientesRes);
+        if (vendasRes.error) console.warn('search: vendas error', vendasRes.error, vendasRes);
+        if (armacoesRes.error) console.warn('search: armacoes error', armacoesRes.error, armacoesRes);
+        if (lentesRes.error) console.warn('search: lentes error', lentesRes.error, lentesRes);
+        if (parcelasRes.error) console.warn('search: parcelas error', parcelasRes.error, parcelasRes);
 
         const pacientes = (pacientesRes.data ?? []) as Array<any>;
         const vendas = (vendasRes.data ?? []) as Array<any>;
@@ -271,7 +280,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
           { id: 'feat-estoque', titulo: 'Estoque', subtitulo: 'Gerenciar estoque de armações', rota: '/otica/estoque' },
         ];
 
-        const termoNormalizado2 = termo.toLowerCase();
+        const termoNormalizado2 = safeTerm.toLowerCase();
         const featureMatches = (features as any[]).filter(f => f.titulo.toLowerCase().includes(termoNormalizado2) || f.subtitulo.toLowerCase().includes(termoNormalizado2));
 
         setResultadosDB({ pacientes, vendas, estoque: [...armacoes, ...lentes], financeiro: parcelas });

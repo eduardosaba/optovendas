@@ -39,6 +39,13 @@ export default function PacienteRichFichaPage() {
       }));
   }, [historico.receitas]);
 
+  function formatDateSafe(raw?: string | null) {
+    if (!raw) return "Sem data";
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return "Sem data";
+    return d.toLocaleDateString('pt-BR');
+  }
+
   function formatSigned(val: any, opts?: { empty?: string, fixed?: number }) {
     const empty = opts?.empty ?? '---';
     const fixed = typeof opts?.fixed === 'number' ? opts.fixed : 2;
@@ -57,6 +64,53 @@ export default function PacienteRichFichaPage() {
       setLoading(true);
       try {
         const ctx = await resolveClinicaContext();
+
+        async function fetchHistoricoCompat(table: string, pacienteId: string) {
+          if (table === 'vendas') {
+            let res = await supabase
+              .from('vendas')
+              .select('*, ordens_servico(numero_os,status_os)')
+              .eq('paciente_id', pacienteId)
+              .order('criado_em', { ascending: false });
+
+            if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
+              res = await supabase
+                .from('vendas')
+                .select('*, ordens_servico(numero_os,status_os)')
+                .eq('paciente_id', pacienteId)
+                .order('created_at', { ascending: false });
+            }
+            if (res.error && /created_at|column .* does not exist/i.test(String(res.error.message || res.error))) {
+              res = await supabase
+                .from('vendas')
+                .select('*, ordens_servico(numero_os,status_os)')
+                .eq('paciente_id', pacienteId)
+                .order('id', { ascending: false });
+            }
+            return res;
+          }
+
+          if (table === 'termos_aceite') {
+            const raw = await supabase.from(table).select('*').eq('paciente_id', pacienteId);
+            if (raw.error) return raw;
+            const sorted = [...(raw.data || [])].sort((a: any, b: any) => {
+              const da = new Date(a?.data_aceite || 0).getTime();
+              const db = new Date(b?.data_aceite || 0).getTime();
+              if (db !== da) return db - da;
+              return String(b?.id || '').localeCompare(String(a?.id || ''));
+            });
+            return { ...raw, data: sorted } as typeof raw;
+          }
+
+          let res = await supabase.from(table).select('*').eq('paciente_id', pacienteId).order('criado_em', { ascending: false });
+          if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
+            res = await supabase.from(table).select('*').eq('paciente_id', pacienteId).order('created_at', { ascending: false });
+          }
+          if (res.error && /created_at|column .* does not exist/i.test(String(res.error.message || res.error))) {
+            res = await supabase.from(table).select('*').eq('paciente_id', pacienteId).order('id', { ascending: false });
+          }
+          return res;
+        }
         
         // 1. Buscar Dados Detalhados do Paciente
         const { data: allPacientes } = await supabase
@@ -78,9 +132,9 @@ export default function PacienteRichFichaPage() {
         // 2. Buscar Todo o Ecossistema do Paciente (Receitas, Vendas, Arquivos, Termos)
         const [rRes, vRes, aRes, tRes] = await Promise.all([
           supabase.from('receitas_optometricas').select('*').eq('paciente_id', currentPaciente.id).order('data_exame', { ascending: false }),
-          supabase.from('vendas').select('*').eq('paciente_id', currentPaciente.id).order('created_at', { ascending: false }),
-          supabase.from('paciente_arquivos').select('*').eq('paciente_id', currentPaciente.id).order('criado_em', { ascending: false }),
-          supabase.from('termos_aceite').select('*').eq('paciente_id', currentPaciente.id).order('created_at', { ascending: false })
+          fetchHistoricoCompat('vendas', currentPaciente.id),
+          fetchHistoricoCompat('paciente_arquivos', currentPaciente.id),
+          fetchHistoricoCompat('termos_aceite', currentPaciente.id)
         ]);
 
         setHistorico({
@@ -219,14 +273,55 @@ export default function PacienteRichFichaPage() {
               {historico.vendas.map((v: any) => (
                 <TimelineItem 
                   key={v.id}
-                  title={`Venda Realizada - OS #${v.numero_os || 'N/D'}`}
-                  date={new Date(v.created_at).toLocaleDateString('pt-BR')}
+                  title={`Venda Realizada - OS #${v.ordens_servico?.[0]?.numero_os || 'N/D'}`}
+                  date={formatDateSafe(v.criado_em || v.created_at)}
                   type="venda"
                   status={v.status_financeiro}
                   icon={<ShoppingBag className="text-emerald-500" />}
-                  link={`/otica/vendas/${v.id}`}
+                  link={`/clientes/${paciente.id}/historico`}
                 />
               ))}
+            </div>
+          )}
+
+          {activeTab === 'vendas' && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center justify-between px-2">
+                <h2 className="text-xl font-black text-slate-800 tracking-tight">Vendas e O.S.</h2>
+                <span className="text-[10px] font-black text-slate-400 uppercase bg-slate-50 px-3 py-1 rounded-full">
+                  {historico.vendas.length} Registros
+                </span>
+              </div>
+
+              {historico.vendas.length === 0 ? (
+                <div className="p-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+                  <ShoppingBag size={48} className="mx-auto text-slate-100 mb-4" />
+                  <p className="font-bold text-slate-400 italic">Nenhuma venda encontrada para este paciente.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {historico.vendas.map((v: any) => {
+                    const numeroOS = v.ordens_servico?.[0]?.numero_os || 'N/D';
+                    return (
+                      <div key={v.id} className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-black text-slate-800">OS #{numeroOS}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{formatDateSafe(v.criado_em || v.created_at)}</p>
+                          <p className="mt-1 text-[10px] font-black uppercase text-slate-500">Financeiro: {v.status_financeiro || '-'}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-black text-emerald-700">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v.valor_final ?? v.valor_total ?? 0))}
+                          </p>
+                          <Link href={`/clientes/${paciente.id}/historico`} className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase text-cyan-600 hover:text-cyan-800">
+                            Ver venda <ChevronRight size={12} />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 

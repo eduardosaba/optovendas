@@ -2,90 +2,109 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, Save, Loader2, Edit2 } from "lucide-react";
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/ToastProvider';
 
 export default function EditarTratamentoPage() {
   const router = useRouter();
   const params = useParams();
-  const id = (params as any)?.id as string;
-
-  const [nome, setNome] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [preco, setPreco] = useState('');
-  const [ativo, setAtivo] = useState(true);
-  const [loading, setLoading] = useState(true);
+  const id = params?.id as string;
   const toast = useToast();
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ nome: '', descricao: '', preco: '' });
+
   useEffect(() => {
-    let mounted = true;
     async function load() {
-      setLoading(true);
-      try {
-        const q = await supabase.from('clinica_tratamentos').select('*').eq('id', id).maybeSingle();
-        if (q.error) throw q.error;
-        if (!mounted) return;
-        const data: any = q.data ?? null;
-        if (data) {
-          setNome(data.nome || '');
-          setDescricao(data.descricao || '');
-          setPreco(data.preco ? String(data.preco) : '');
-          setAtivo(data.ativo ?? true);
-        }
-      } catch (e) {
-        console.error('failed load tratamento', e);
-        toast.error('Falha ao carregar tratamento');
-      } finally {
-        if (mounted) setLoading(false);
+      const { data, error } = await supabase.from('clinica_tratamentos').select('*').eq('id', id).maybeSingle();
+      if (data) {
+        setForm({
+          nome: data.nome || '',
+          descricao: data.descricao || '',
+          preco: data.preco ? String(data.preco) : '',
+        });
       }
+      setLoading(false);
     }
     if (id) load();
-    return () => { mounted = false; };
   }, [id]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    setSaving(true);
     try {
-      const updates: any = { nome, descricao, preco: preco ? Number(preco) : null, ativo };
-      const up = await supabase.from('clinica_tratamentos').update(updates).eq('id', id);
-      if (up.error) throw up.error;
+      const updates = { 
+        ...form, 
+        preco: form.preco ? Number(form.preco) : null 
+      };
+      const { error } = await supabase.from('clinica_tratamentos').update(updates).eq('id', id);
+      if (error) throw error;
       toast.success('Tratamento atualizado');
       router.push('/otica/tratamentos');
     } catch (e) {
-      console.error(e);
-      toast.error('Falha ao salvar tratamento');
+      toast.error('Falha ao salvar');
+    } finally {
+      setSaving(false);
     }
   }
 
-  if (loading) return <div className="p-6">Carregando...</div>;
+  if (loading) return <div className="p-20 text-center animate-pulse font-black text-slate-300">CARREGANDO...</div>;
 
   return (
-    <div className="p-6">
-      <h2 className="text-xl font-semibold">Editar Tratamento</h2>
-      <form onSubmit={handleSave} className="mt-4 max-w-lg">
-        <label className="block">
-          <span className="text-sm">Nome</span>
-          <input value={nome} onChange={(e) => setNome(e.target.value)} required className="mt-1 block w-full rounded-md border px-3 py-2" />
-        </label>
+    <div className="mx-auto max-w-4xl p-6 md:p-10 space-y-8 animate-in fade-in duration-700">
+      <header className="flex items-center gap-4">
+        <Link href="/otica/tratamentos" className="p-3 bg-white border rounded-2xl text-slate-400 hover:text-blue-600 shadow-sm transition-all">
+          <ArrowLeft size={20} />
+        </Link>
+        <div>
+          <p className="text-blue-600 font-black text-[10px] uppercase tracking-[0.2em]">Configuração Técnica</p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Editar Registro<span className="text-blue-600">.</span></h1>
+        </div>
+      </header>
 
-        <label className="block mt-3">
-          <span className="text-sm">Descrição</span>
-          <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} className="mt-1 block w-full rounded-md border px-3 py-2" rows={4} />
-        </label>
+      <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white p-10 rounded-[40px] border border-slate-50 shadow-sm">
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Nome do Tratamento</label>
+            <input 
+              required
+              value={form.nome}
+              onChange={e => setForm({...form, nome: e.target.value})}
+              className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 shadow-inner"
+            />
+          </div>
 
-        <label className="block mt-3">
-          <span className="text-sm">Preço</span>
-          <input value={preco} onChange={(e) => setPreco(e.target.value)} type="number" step="0.01" className="mt-1 block w-full rounded-md border px-3 py-2" />
-        </label>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Valor Adicional (R$)</label>
+            <input 
+              type="number"
+              step="0.01"
+              value={form.preco}
+              onChange={e => setForm({...form, preco: e.target.value})}
+              className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 shadow-inner"
+            />
+          </div>
+        </div>
 
-        <label className="flex items-center gap-2 mt-3">
-          <input type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} />
-          <span className="text-sm">Ativo</span>
-        </label>
+        <div className="space-y-6 flex flex-col">
+          <div className="space-y-2 flex-1">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Descrição</label>
+            <textarea 
+              rows={5}
+              value={form.descricao}
+              onChange={e => setForm({...form, descricao: e.target.value})}
+              className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 shadow-inner resize-none"
+            />
+          </div>
 
-        <div className="mt-4">
-          <button type="submit" className="inline-flex items-center rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700">
-            Salvar
+          <button 
+            disabled={saving}
+            className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="animate-spin" /> : <><Save size={20} /> Atualizar Tratamento</>}
           </button>
         </div>
       </form>

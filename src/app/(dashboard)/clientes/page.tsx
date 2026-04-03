@@ -131,14 +131,8 @@ export default function ListaClientesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {clientesFiltrados.map((cliente) => (
-            <div key={cliente.id} className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-2xl transition-all duration-500 group relative overflow-hidden">
-              <div className="absolute right-8 top-8">
-                 <span className="bg-slate-50 text-slate-400 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter">
-                    {cliente.cidade_atendimento || "Geral"}
-                 </span>
-              </div>
-
-              <div className="flex justify-between items-start mb-6">
+            <div key={cliente.id} className="bg-white p-6 md:p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-2xl transition-all duration-500 group relative overflow-hidden">
+              <div className="flex justify-between items-start mb-5 md:mb-6">
                 <div className="w-16 h-16 bg-slate-50 rounded-[24px] overflow-hidden flex items-center justify-center text-slate-400 font-black text-2xl group-hover:bg-emerald-600 group-hover:text-white transition-all duration-500 shadow-inner">
                   {cliente.foto_url ? (
                     <img src={cliente.foto_url} alt={cliente.nome_completo} className="h-full w-full object-cover" />
@@ -157,21 +151,26 @@ export default function ListaClientesPage() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <h3 className="text-xl font-black text-slate-900 truncate pr-10">{cliente.nome_completo}</h3>
+              <div className="space-y-1.5">
+                <h3 className="text-xl font-black leading-tight text-slate-900 truncate pr-10">{cliente.nome_completo}</h3>
                 <div className="flex items-center gap-2">
                     <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{cliente.apelido || "Cliente"}</p>
                     <span className="w-1 h-1 bg-slate-200 rounded-full" />
                     <p className="text-[10px] font-bold text-slate-400 uppercase">{cliente.cpf || "CPF não informado"}</p>
                 </div>
+                <div className="mt-2">
+                  <span className="inline-flex bg-slate-50 text-slate-400 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter">
+                    {cliente.cidade_atendimento || "Geral"}
+                  </span>
+                </div>
               </div>
 
-              <div className="mt-6 flex items-center gap-2 text-slate-400">
+              <div className="mt-5 md:mt-6 flex items-center gap-2 text-slate-400">
                 <MapPin size={14} className="text-emerald-500" />
                 <span className="text-xs font-bold text-slate-500">{cliente.cidade_atendimento || "Geral"}</span>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">
+              <div className="mt-6 md:mt-8 pt-5 md:pt-6 border-t border-slate-50 flex items-center justify-between">
                 <div className="flex gap-2">
                   <a href={cliente.celular ? `https://wa.me/55${(cliente.celular || "").replace(/\D/g, "")}` : "#"} target="_blank" rel="noreferrer" className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-all shadow-sm" title="Enviar Mensagem">
                     <MessageCircle size={18} />

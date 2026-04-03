@@ -312,6 +312,15 @@ export default function OticaPage() {
           bgColor="bg-cyan-50"
         />
 
+                <MenuCard
+                  href="/otica/equipe"
+                  title="Equipe de Vendas"
+                  desc="Criar e gerenciar vendedores, permissões e equipes da ótica."
+                  icon={<Users size={24} />}
+                  color="text-indigo-600"
+                  bgColor="bg-indigo-50"
+                />
+
         <MenuCard
           href="/otica/armacoes-tipos"
           title="Tipos de Armação"

@@ -202,13 +202,25 @@ export default function PaginaAtendimento() {
           });
         }
 
-        const { data: lastAnamnese } = await supabase
+        let anamneseRes = await supabase
           .from("anamnese")
           .select("*")
           .eq("paciente_id", pacienteId)
           .order("criado_em", { ascending: false })
           .limit(1)
           .maybeSingle();
+
+        if (anamneseRes.error && /criado_em|column .* does not exist/i.test(String(anamneseRes.error.message || anamneseRes.error))) {
+          anamneseRes = await supabase
+            .from("anamnese")
+            .select("*")
+            .eq("paciente_id", pacienteId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        }
+
+        const lastAnamnese = anamneseRes.data;
 
         if (lastAnamnese) {
           setAnamnese({

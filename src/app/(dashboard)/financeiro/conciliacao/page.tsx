@@ -43,7 +43,6 @@ export default function ConciliacaoPage() {
         .select("*")
         .eq("clinica_id", ctx.clinicaId)
         .eq("status_conciliacao", "pendente")
-        .ilike("descricao", "%Cartão%")
         .order("data_movimento", { ascending: true });
 
       if (error) throw error;
@@ -115,7 +114,7 @@ export default function ConciliacaoPage() {
             lancamentos.map((item) => (
               <button
                 key={item.id}
-                onClick={() => { setItemSelecionado(item); setValorLiquido(item.valor_bruto); }}
+                onClick={() => { setItemSelecionado(item); setValorLiquido(Number(item.valor_bruto || item.valor || 0)); }}
                 className={`w-full flex items-center justify-between p-6 bg-white rounded-[32px] border transition-all hover:shadow-md ${itemSelecionado?.id === item.id ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-50'}`}
               >
                 <div className="flex items-center gap-4">
@@ -125,7 +124,7 @@ export default function ConciliacaoPage() {
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{item.localidade} • {new Date(item.data_movimento).toLocaleDateString('pt-BR')}</p>
                   </div>
                 </div>
-                <p className="font-black text-slate-900">{brl(item.valor_bruto)}</p>
+                <p className="font-black text-slate-900">{brl(Number(item.valor_bruto || item.valor || 0))}</p>
               </button>
             ))
           )}
@@ -138,7 +137,7 @@ export default function ConciliacaoPage() {
               <div className="space-y-6">
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500">Valor Bruto da Venda</label>
-                  <p className="text-2xl font-black">{brl(itemSelecionado.valor_bruto)}</p>
+                  <p className="text-2xl font-black">{brl(Number(itemSelecionado.valor_bruto || itemSelecionado.valor || 0))}</p>
                 </div>
 
                 <div>
@@ -157,7 +156,7 @@ export default function ConciliacaoPage() {
                 <div className="pt-4 border-t border-white/5 flex justify-between items-center">
                   <div>
                     <p className="text-[10px] font-black uppercase text-rose-400">Taxas Calculadas</p>
-                    <p className="text-lg font-black text-rose-400">-{brl(itemSelecionado.valor_bruto - valorLiquido)}</p>
+                    <p className="text-lg font-black text-rose-400">-{brl(Number(itemSelecionado.valor_bruto || itemSelecionado.valor || 0) - valorLiquido)}</p>
                   </div>
                   <TrendingDown className="text-rose-400/30" size={32} />
                 </div>

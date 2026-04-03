@@ -217,10 +217,21 @@ export default function DashboardOS() {
     });
   }, [ordens, filtros, apenasAtrasadas, statusRapido]);
 
+  function bloquearPorFinanceiro(status: string | null | undefined) {
+    const s = String(status || '').toLowerCase();
+    return s === 'pendente' || s === 'aguardando_conciliacao';
+  }
+
+  function mensagemBloqueioFinanceiro(status: string | null | undefined) {
+    const s = String(status || '').toLowerCase();
+    if (s === 'aguardando_conciliacao') return 'Aguardando conciliacao de cartao - producao bloqueada';
+    return 'Financeiro pendente - producao bloqueada';
+  }
+
   async function atualizarStatus(os: OSRow, status: StatusOS) {
     const venda = getVendaFromOS(os);
-    if ((venda?.status_financeiro || "").toLowerCase() === "pendente") {
-      toast.error("OS bloqueada: pagamento pendente. Regularize o financeiro para liberar produção.");
+    if (bloquearPorFinanceiro(venda?.status_financeiro)) {
+      toast.error("OS bloqueada: financeiro pendente de regularizacao/conciliação.");
       return;
     }
 
@@ -243,8 +254,8 @@ export default function DashboardOS() {
 
   async function confirmarEntrega(os: OSRow) {
     const venda = getVendaFromOS(os) as any;
-    if ((venda?.status_financeiro || "").toLowerCase() === "pendente") {
-      toast.error("OS bloqueada: pagamento pendente. Regularize o financeiro antes de confirmar entrega.");
+    if (bloquearPorFinanceiro(venda?.status_financeiro)) {
+      toast.error("OS bloqueada: financeiro pendente de regularizacao/conciliação.");
       return;
     }
 
@@ -297,7 +308,7 @@ export default function DashboardOS() {
 
   function onDragStartCard(os: OSRow) {
     const venda = getVendaFromOS(os);
-    if ((venda?.status_financeiro || "").toLowerCase() === "pendente") {
+    if (bloquearPorFinanceiro(venda?.status_financeiro)) {
       toast.info("OS bloqueada por pendencia financeira.");
       return;
     }
@@ -465,6 +476,9 @@ export default function DashboardOS() {
           <Link href="/otica/vendas/nova" className="rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50">
             Nova Venda / OS
           </Link>
+          <Link href="/otica/financeiro/conciliacao" className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 font-semibold text-blue-700 hover:bg-blue-100">
+            Conciliação Cartão
+          </Link>
           <Link href="/otica/vendas/pendentes" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 font-semibold text-rose-700 hover:bg-rose-100">
             Vendas Pendentes
           </Link>
@@ -575,7 +589,7 @@ export default function DashboardOS() {
                     const atrasado = emAtraso(os.previsao_entrega, os.status_os);
                     const paciente = getPacienteFromOS(os);
                     const venda = getVendaFromOS(os);
-                    const bloqueadaFinanceiro = (venda?.status_financeiro || "").toLowerCase() === "pendente";
+                    const bloqueadaFinanceiro = bloquearPorFinanceiro(venda?.status_financeiro);
                     const statusAtual = normalizarStatus(os.status_os);
                     const podeVoltar = Boolean(proximoStatus(statusAtual, -1));
                     const podeAvancar = Boolean(proximoStatus(statusAtual, 1));
@@ -606,7 +620,7 @@ export default function DashboardOS() {
 
                         {bloqueadaFinanceiro && (
                           <div className="mb-2 rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-rose-700">
-                            Financeiro pendente - producao bloqueada
+                            {mensagemBloqueioFinanceiro(venda?.status_financeiro)}
                           </div>
                         )}
 
