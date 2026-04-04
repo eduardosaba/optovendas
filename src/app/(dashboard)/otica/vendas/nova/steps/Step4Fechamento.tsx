@@ -194,11 +194,26 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
       const { data: urlData } = supabase.storage.from('branding-assets').getPublicUrl(path);
       const url = urlData?.publicUrl;
       if (!url) throw new Error('Falha ao obter URL pública do arquivo.');
-      onChange({
-        ...data,
-        [type === 'compra' ? 'assinatura' : 'termoQuebraAceito']: base64,
-        anexos_urls: [...(data.anexos_urls || []), url]
-      });
+
+      // Evitar sobrescrever campos booleanos com base64 (causa erro no backend)
+      if (type === 'compra') {
+        onChange({
+          ...data,
+          assinatura: base64,
+          anexos_urls: [...(data.anexos_urls || []), url]
+        });
+      } else {
+        onChange({
+          ...data,
+          termoQuebraAceito: true,
+          // campo aceito pelo backend para assinatura da armação própria
+          assinatura_arma_responsabilidade: base64,
+          // compatibilidade com nomes usados no front
+          assinaturaArmacaoCliente: base64,
+          anexos_urls: [...(data.anexos_urls || []), url]
+        });
+      }
+
       toast.success("Assinatura salva e anexada!");
     } catch (e) { console.error('handleSignature error', e); toast.error("Erro ao salvar assinatura."); }
   }
@@ -295,6 +310,22 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
+
+      // Validações cliente/clinica para evitar erro 400 no backend
+      if (!ctx?.clinicaId) {
+        setLoading(false);
+        return toast.error('Perfil sem clínica vinculada. Faça login novamente.');
+      }
+
+      if (!data.pacienteId && !data.vendaManual) {
+        setLoading(false);
+        return toast.info('Preencha a etapa do cliente antes de finalizar.');
+      }
+
+      if (data.vendaManual && !(data.clienteManualNome && data.clienteManualNome.trim())) {
+        setLoading(false);
+        return toast.info('Informe nome do cliente para venda manual.');
+      }
       // prepara payload com mapeamento exato para colunas da tabela `vendas`
       const statusFinanceiroCalculado = (() => {
         if (tipo === 'pendente') return 'pendente';

@@ -389,40 +389,47 @@ export default function ContasPage() {
             <h1 className="text-4xl font-black tracking-tight text-slate-900">Contas e Caixas</h1>
           </div>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={exportarExcel}
-            className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-3 text-sm font-black text-emerald-700 transition-all hover:bg-emerald-100"
-          >
-            <FileSpreadsheet size={18} /> Exportar
-          </button>
-          <button
-            onClick={() => abrirTransfer()}
-            className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-3 text-sm font-black text-blue-700 transition-all hover:bg-blue-100"
-          >
-            <RefreshCw size={18} /> Transferir
-          </button>
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col md:flex-row md:items-center gap-3 w-full">
+          <div className="flex gap-3">
             <button
-              onClick={() => { setShowMovimentacao(true); setMovData({ ...movData, tipo: "entrada" }); }}
-              className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-2 text-[10px] font-black uppercase text-emerald-700 hover:bg-emerald-100 transition-all"
+              onClick={exportarExcel}
+              className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-3 text-sm font-black text-emerald-700 transition-all hover:bg-emerald-100"
             >
-              <ArrowUp size={14} /> Entrada Avulsa
+              <FileSpreadsheet size={18} /> Exportar
             </button>
-
             <button
-              onClick={() => { setShowMovimentacao(true); setMovData({ ...movData, tipo: "saida" }); }}
-              className="flex items-center gap-2 rounded-2xl bg-rose-50 px-4 py-2 text-[10px] font-black uppercase text-rose-700 hover:bg-rose-100 transition-all"
+              onClick={() => abrirTransfer()}
+              className="flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50 px-5 py-3 text-sm font-black text-blue-700 transition-all hover:bg-blue-100"
             >
-              <ArrowDown size={14} /> Saída Avulsa
+              <RefreshCw size={18} /> Transferir
             </button>
           </div>
-          <Link
-            href="/financeiro/contas/novo"
-            className="flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-xl shadow-slate-200 transition-all hover:bg-emerald-600"
-          >
-            <Plus size={18} /> Nova Conta
-          </Link>
+
+          {/* Segunda linha: botões compactos + botão principal */}
+          <div className="flex w-full md:w-auto items-center justify-between md:justify-start gap-3">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => { setShowMovimentacao(true); setMovData({ ...movData, tipo: "entrada" }); }}
+                className="flex items-center gap-2 rounded-2xl bg-emerald-50 px-4 py-2 text-[10px] font-black uppercase text-emerald-700 hover:bg-emerald-100 transition-all"
+              >
+                <ArrowUp size={14} /> Entrada Avulsa
+              </button>
+
+              <button
+                onClick={() => { setShowMovimentacao(true); setMovData({ ...movData, tipo: "saida" }); }}
+                className="flex items-center gap-2 rounded-2xl bg-rose-50 px-4 py-2 text-[10px] font-black uppercase text-rose-700 hover:bg-rose-100 transition-all"
+              >
+                <ArrowDown size={14} /> Saída Avulsa
+              </button>
+            </div>
+
+            <Link
+              href="/financeiro/contas/novo"
+              className="flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-sm font-black text-white shadow-xl shadow-slate-200 transition-all hover:bg-emerald-600 ml-auto md:ml-0"
+            >
+              <Plus size={18} /> Nova Conta
+            </Link>
+          </div>
         </div>
       </header>
 

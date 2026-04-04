@@ -568,7 +568,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             </button>
 
             {notificationsOpen && (
-              <div ref={notifRef} className="absolute right-0 mt-2 w-96 rounded-2xl border border-slate-100 bg-white shadow-2xl z-50 p-2">
+              <div ref={notifRef} className="absolute left-1/2 transform -translate-x-1/2 mt-2 w-96 max-w-[92vw] rounded-2xl border border-slate-100 bg-white shadow-2xl z-50 p-2">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-50">
                   <p className="text-sm font-black">Notificações</p>
                   <button className="text-xs text-slate-400" onClick={() => { setNotificationsData({ parcelas: [], vendas: [] }); setNotificationsOpen(false); }}>Fechar</button>
@@ -592,7 +592,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   {!notificationsLoading && notificationsData.vendas.map((v: any) => (
                     <Link key={v.id} href={`/otica/vendas/${v.id}`} onClick={() => setNotificationsOpen(false)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
                       <div className="flex-1">
-                        <p className="text-sm font-bold">Venda {v.id} • R$ {Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-sm font-bold">R$ {Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                         <p className="text-[10px] text-slate-400">{new Date(v.criado_em).toLocaleDateString('pt-BR')} • {v.localidade_venda || '-'}</p>
                       </div>
                     </Link>

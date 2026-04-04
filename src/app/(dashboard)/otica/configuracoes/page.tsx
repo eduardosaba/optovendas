@@ -277,7 +277,7 @@ export default function ConfiguracoesOticaPage() {
             <ConfigInput label="WhatsApp" value={config.whatsapp} onValueChange={v => setConfig({...config, whatsapp: v})} icon={<Globe size={14}/>} />
             <div className="md:col-span-2">
               <ConfigInput label="E-mail de Contato" value={config.email} onValueChange={v => setConfig({...config, email: v})} icon={<Mail size={14}/>} />      
-                <div className="md:col-span-2 flex items-center gap-4">
+                <div className="md:col-span-2 flex flex-col sm:flex-row sm:items-center gap-4">
                   <label className="flex items-center gap-3">
                     <input
                       type="checkbox"
@@ -288,7 +288,7 @@ export default function ConfiguracoesOticaPage() {
                     <span className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Cobrar comissão sobre vendas</span>
                   </label>
 
-                  <div className="ml-6">
+                  <div className="ml-0 sm:ml-6 w-full sm:w-auto">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Percentual padrão</label>
                     <div className="flex items-center gap-2 mt-1">
                       <input
@@ -298,21 +298,32 @@ export default function ConfiguracoesOticaPage() {
                         step={0.01}
                         value={config.comissao_padrao_porcentagem as any}
                         onChange={e => setConfig({...config, comissao_padrao_porcentagem: Number(e.target.value) || 0})}
-                        className="w-32 bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 shadow-inner transition-all"
+                        className="w-full sm:w-32 bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 shadow-inner transition-all"
                       />
                       <span className="text-slate-400 font-black">%</span>
                     </div>
                   </div>
-                  <div className="ml-6">
+
+                  <div className="ml-0 sm:ml-6 w-full sm:w-auto">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-tighter">Meta Mensal (R$)</label>
                     <div className="flex items-center gap-2 mt-1">
                       <input
-                        type="number"
-                        min={0}
-                        step={0.01}
-                        value={config.meta_mensal as any}
-                        onChange={e => setConfig({...config, meta_mensal: Number(e.target.value) || 0})}
-                        className="w-40 bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 shadow-inner transition-all"
+                        type="text"
+                        inputMode="decimal"
+                        value={config.meta_mensal ? Number(config.meta_mensal).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : ''}
+                        onChange={e => {
+                          const raw = String(e.target.value || '').trim();
+                          // keep only digits, dots and commas and minus
+                          let cleaned = raw.replace(/[^0-9,.-]/g, '');
+                          // if both dot and comma present, assume dot are thousand separators
+                          if (cleaned.includes(',') && cleaned.includes('.')) cleaned = cleaned.replace(/\./g, '');
+                          // convert comma to dot for decimal
+                          if (cleaned.includes(',')) cleaned = cleaned.replace(/,/g, '.');
+                          const num = Number(cleaned);
+                          setConfig(prev => ({ ...prev, meta_mensal: Number.isFinite(num) ? num : 0 }));
+                        }}
+                        placeholder="0,00"
+                        className="w-full sm:w-40 bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 shadow-inner transition-all"
                       />
                     </div>
                   </div>

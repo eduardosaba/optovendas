@@ -354,15 +354,15 @@ export default function ConfigUnidadePage() {
 
           <div className="md:col-span-2">
             <label className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Logo da clinica (URL)</label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <input
                 placeholder="Logo da clinica (URL)"
                 value={dadosClinica.logomarca_url || ""}
                 onChange={(e) => setDadosClinica((prev) => ({ ...prev, logomarca_url: e.target.value }))}
                 className="flex-1 rounded-[20px] border-none bg-slate-50 p-4 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
               />
-              <div className="flex gap-2">
-                <label className="cursor-pointer rounded-[14px] bg-white border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
+              <div className="flex w-full sm:w-auto gap-2 flex-wrap">
+                <label className="w-full sm:w-auto text-center cursor-pointer rounded-[14px] bg-white border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
                   {enviandoLogo ? "Enviando..." : "Selecionar arquivo"}
                   <input
                     type="file"
@@ -374,7 +374,7 @@ export default function ConfigUnidadePage() {
                 <button
                   type="button"
                   onClick={() => setDadosClinica((prev) => ({ ...prev, logomarca_url: "" }))}
-                  className="rounded-[14px] bg-rose-50 border border-rose-200 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-100"
+                  className="w-full sm:w-auto text-center rounded-[14px] bg-rose-50 border border-rose-200 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-100"
                 >
                   Remover
                 </button>
@@ -409,7 +409,9 @@ export default function ConfigUnidadePage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6">
-          <ConfiguracoesModulos config={{ unificar_modulos: unificarModulos }} onUpdate={(p: any) => void handleToggleUnificar(p)} />
+          <div className="flex flex-col gap-2">
+            <ConfiguracoesModulos config={{ unificar_modulos: unificarModulos }} onUpdate={(p: any) => void handleToggleUnificar(p)} />
+          </div>
         </div>
       </section>
 

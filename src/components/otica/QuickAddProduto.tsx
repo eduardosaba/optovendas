@@ -100,8 +100,8 @@ export default function QuickAddProduto({ tipo, aoFinalizar, aoFechar }: Props) 
               label="Preço (R$)"
               type="number"
               placeholder="0.00"
-              value={String(form.preco)}
-              onChange={(v: string) => setForm({ ...form, preco: Number(v) || 0 })}
+              value={form.preco === 0 ? "" : String(form.preco)}
+              onChange={(v: string) => setForm({ ...form, preco: Number(v.replace(',', '.')) || 0 })}
             />
           </div>
 
@@ -119,15 +119,20 @@ export default function QuickAddProduto({ tipo, aoFinalizar, aoFechar }: Props) 
 }
 
 function Input({ label, value, onChange, type = "text", placeholder }: any) {
+  const isNumber = type === "number";
   return (
     <div className="space-y-2">
       <label className="text-xs font-black uppercase text-slate-400 tracking-widest">{label}</label>
       <input
-        value={value}
+        value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        type={type}
+        type={isNumber ? "text" : type}
+        inputMode={isNumber ? "decimal" : undefined}
+        pattern={isNumber ? "[0-9]*[.,]?[0-9]*" : undefined}
+        step={isNumber ? "0.01" : undefined}
         placeholder={placeholder}
-        className="w-full p-3 bg-slate-50 border-none rounded-lg font-medium text-slate-800 focus:ring-2 ring-blue-500"
+        className="w-full p-3 bg-slate-50 border-none rounded-lg font-medium text-slate-800 focus:ring-2 ring-blue-500 text-right"
+        aria-label={label}
       />
     </div>
   );

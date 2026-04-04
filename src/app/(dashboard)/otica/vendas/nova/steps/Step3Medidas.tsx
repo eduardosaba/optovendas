@@ -1671,7 +1671,6 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               ref={fileInputRef}
               type="file"
               accept="image/*"
-              capture="environment"
               onChange={(e) => void handleFile(e)}
               className="hidden"
             />

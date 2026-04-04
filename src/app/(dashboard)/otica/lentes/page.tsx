@@ -176,47 +176,77 @@ export default function CadastroLentesPage() {
             <p className="text-slate-400 font-bold italic">Nenhuma lente cadastrada neste catálogo.</p>
           </div>
         ) : (
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
-              <tr>
-                <th className="p-6">Descrição Técnica</th>
-                <th className="p-6">Investimento Sugerido</th>
-                <th className="p-6 text-right">Gestão</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {lentes.map(l => (
-                <tr key={l.id} className="group hover:bg-slate-50/50 transition-all duration-300">
-                  <td className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-cyan-50 rounded-xl flex items-center justify-center text-cyan-600 font-black text-xs">
-                        {l.nome.substring(0,2).toUpperCase()}
-                      </div>
-                      <span className="font-black text-slate-700 tracking-tight">{l.nome}</span>
-                    </div>
-                  </td>
-                  <td className="p-6">
-                    <span className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-full font-black text-sm border border-emerald-100 shadow-sm">
-                      R$ {Number(l.preco_base).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </span>
-                  </td>
-                  <td className="p-6 text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <button onClick={() => iniciarEdicao(l)} className="p-3 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-2xl transition-all">
-                        <Edit3 size={18} />
-                      </button>
-                      <button 
-                        onClick={() => excluirLente(l.id)} 
-                        className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-2xl transition-all"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
+          <>
+          <div className="md:block hidden">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                <tr>
+                  <th className="p-6">Descrição Técnica</th>
+                  <th className="p-6">Investimento Sugerido</th>
+                  <th className="p-6 text-right">Gestão</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {lentes.map((l) => (
+                  <tr key={l.id} className="group hover:bg-slate-50/50 transition-all duration-300">
+                    <td className="p-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-cyan-50 rounded-xl flex items-center justify-center text-cyan-600 font-black text-xs">
+                          {String(l.nome || "").substring(0, 2).toUpperCase()}
+                        </div>
+                        <span className="font-black text-slate-700 tracking-tight">{l.nome}</span>
+                      </div>
+                    </td>
+                    <td className="p-6">
+                      <span className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-full font-black text-sm border border-emerald-100 shadow-sm">
+                        R$ {Number(l.preco_base ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </td>
+                    <td className="p-6 text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <button onClick={() => iniciarEdicao(l)} className="p-3 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-2xl transition-all">
+                          <Edit3 size={18} />
+                        </button>
+                        <button
+                          onClick={() => excluirLente(l.id)}
+                          className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-2xl transition-all"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: show cards */}
+          <div className="md:hidden p-4 space-y-3">
+            {lentes.map((l) => (
+              <div key={l.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex-shrink-0 h-10 w-10 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-600 font-black text-xs">
+                    {String(l.nome || "").substring(0, 2).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-black text-slate-800 truncate">{l.nome}</div>
+                    <div className="text-[12px] text-emerald-600 mt-1">R$ {Number(l.preco_base ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                  </div>
+                </div>
+
+                <div className="ml-4 flex items-center gap-2">
+                  <button onClick={() => iniciarEdicao(l)} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-2xl transition-all">
+                    <Edit3 size={16} />
+                  </button>
+                  <button onClick={() => excluirLente(l.id)} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-2xl transition-all">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </div>
 

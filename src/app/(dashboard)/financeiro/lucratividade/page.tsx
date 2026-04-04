@@ -168,47 +168,78 @@ export default function LucratividadeRotaPage() {
           </section>
 
           <section className="bg-white rounded-[40px] shadow-sm border border-slate-50 overflow-hidden">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                <tr>
-                  <th className="p-8 text-center">Posicao</th>
-                  <th className="p-8">Cidade</th>
-                  <th className="p-8">Receita Bruta</th>
-                  <th className="p-8">Custos de Rota</th>
-                  <th className="p-8">Margem</th>
-                  <th className="p-8 text-right">Lucro Liquido</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {dados.map((item, idx) => {
+            {/* Desktop/tablet: tabela tradicional */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50/50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                  <tr>
+                    <th className="p-8 text-center">Posicao</th>
+                    <th className="p-8">Cidade</th>
+                    <th className="p-8">Receita Bruta</th>
+                    <th className="p-8">Custos de Rota</th>
+                    <th className="p-8">Margem</th>
+                    <th className="p-8 text-right">Lucro Liquido</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {dados.map((item, idx) => {
+                    const lucro = Number(item.lucro_liquido || 0);
+                    const margem = Number(item.margem_percentual || 0);
+                    const positivo = lucro >= 0;
+
+                    return (
+                      <tr key={`${item.cidade}-${idx}`} className="group hover:bg-slate-50/50 transition-all">
+                        <td className="p-8 text-center">
+                          <span className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto font-black text-xs ${idx === 0 ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400"}`}>
+                            {idx + 1}o
+                          </span>
+                        </td>
+                        <td className="p-8 font-black text-slate-800 uppercase tracking-tighter">{item.cidade}</td>
+                        <td className="p-8 font-bold text-emerald-600">{brl(Number(item.total_receita || 0))}</td>
+                        <td className="p-8 font-bold text-rose-500">{brl(Number(item.total_despesa || 0))}</td>
+                        <td className="p-8">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${positivo ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                            {positivo ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                            {margem.toFixed(1)}%
+                          </span>
+                        </td>
+                        <td className={`p-8 text-right font-black text-lg ${positivo ? "text-slate-900" : "text-rose-600"}`}>
+                          {brl(lucro)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: cards (mais legível em tela pequena) */}
+            <div className="md:hidden p-4 space-y-3">
+              {dados.length === 0 ? (
+                <p className="text-sm font-bold italic text-slate-400">Sem dados para a competencia selecionada.</p>
+              ) : (
+                dados.map((item, idx) => {
                   const lucro = Number(item.lucro_liquido || 0);
                   const margem = Number(item.margem_percentual || 0);
                   const positivo = lucro >= 0;
-
                   return (
-                    <tr key={`${item.cidade}-${idx}`} className="group hover:bg-slate-50/50 transition-all">
-                      <td className="p-8 text-center">
-                        <span className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto font-black text-xs ${idx === 0 ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400"}`}>
-                          {idx + 1}o
-                        </span>
-                      </td>
-                      <td className="p-8 font-black text-slate-800 uppercase tracking-tighter">{item.cidade}</td>
-                      <td className="p-8 font-bold text-emerald-600">{brl(Number(item.total_receita || 0))}</td>
-                      <td className="p-8 font-bold text-rose-500">{brl(Number(item.total_despesa || 0))}</td>
-                      <td className="p-8">
-                        <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest ${positivo ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
-                          {positivo ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                          {margem.toFixed(1)}%
-                        </span>
-                      </td>
-                      <td className={`p-8 text-right font-black text-lg ${positivo ? "text-slate-900" : "text-rose-600"}`}>
-                        {brl(lucro)}
-                      </td>
-                    </tr>
+                    <div key={`${item.cidade}-card-${idx}`} className="bg-white p-4 rounded-xl border shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-black uppercase tracking-wider">{item.cidade}</div>
+                          <div className="text-xs text-slate-500 mt-1">Receita: <span className="font-bold text-emerald-600">{brl(Number(item.total_receita || 0))}</span></div>
+                          <div className="text-xs text-slate-500">Custos: <span className="font-bold text-rose-500">{brl(Number(item.total_despesa || 0))}</span></div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-lg font-black ${positivo ? 'text-emerald-600' : 'text-rose-600'}`}>{brl(lucro)}</div>
+                          <div className="text-xs text-slate-400 mt-1">Margem: {margem.toFixed(1)}%</div>
+                        </div>
+                      </div>
+                    </div>
                   );
-                })}
-              </tbody>
-            </table>
+                })
+              )}
+            </div>
           </section>
         </div>
       )}

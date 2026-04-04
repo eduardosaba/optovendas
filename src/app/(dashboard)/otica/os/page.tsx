@@ -718,8 +718,8 @@ export default function DashboardOS() {
 
       {selectedOS && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="w-full max-w-4xl overflow-hidden rounded-[48px] border border-slate-100 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
-            <header className="flex items-center justify-between border-b border-slate-100 bg-slate-50 p-8">
+          <div className="w-full max-w-[92vw] sm:max-w-4xl overflow-hidden rounded-[48px] border border-slate-100 bg-white shadow-2xl animate-in zoom-in-95 duration-300 p-4 sm:p-8 min-w-0">
+            <header className="flex items-center justify-between border-b border-slate-100 bg-slate-50 p-4 sm:p-8">
               <div className="flex items-center gap-4">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500 text-white shadow-lg shadow-cyan-100">
                   <Layers size={28} />
@@ -751,7 +751,7 @@ export default function DashboardOS() {
               </button>
             </header>
 
-            <div className="grid max-h-[70vh] grid-cols-1 gap-8 overflow-y-auto p-8 md:grid-cols-3">
+            <div className="grid max-h-[70vh] grid-cols-1 gap-8 overflow-y-auto p-4 sm:p-8 md:grid-cols-3 overflow-x-hidden min-w-0">
               <div className="space-y-6">
                 <div className="mb-2 flex items-center gap-2">
                   <Calendar size={16} className="text-cyan-500" />

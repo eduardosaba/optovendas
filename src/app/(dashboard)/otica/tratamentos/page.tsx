@@ -95,47 +95,83 @@ export default function TratamentosPage() {
       </div>
 
       <div className="bg-white rounded-[40px] border border-slate-50 shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50/50">
-              <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400">Tratamento / Descrição</th>
-              <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400">Valor Adicional</th>
-              <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 text-right pr-12">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {loading ? (
-              <tr><td colSpan={3} className="p-20 text-center"><Loader2 className="animate-spin inline text-cyan-600" /></td></tr>
-            ) : filtrados.length === 0 ? (
-              <tr><td colSpan={3} className="p-20 text-center text-slate-400 font-bold italic">Nenhum tratamento encontrado.</td></tr>
-            ) : filtrados.map((t) => (
-              <tr key={t.id} className="group hover:bg-slate-50/50 transition-all">
-                <td className="px-8 py-6">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-slate-50 rounded-xl text-slate-400 group-hover:bg-cyan-50 group-hover:text-cyan-600 transition-all">
-                      <Sparkles size={18} />
-                    </div>
-                    <div>
-                      <p className="font-black text-slate-800 uppercase text-sm">{t.nome}</p>
-                      <p className="text-[10px] text-slate-400 font-medium line-clamp-1">{t.descricao || 'Sem descrição'}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-8 py-6 font-black text-slate-700">
-                  {t.preco ? t.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '---'}
-                </td>
-                <td className="px-8 py-6 text-right pr-12 space-x-2">
-                  <Link href={`/otica/tratamentos/${t.id}/editar`} className="inline-block p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
-                    <Edit3 size={18} />
-                  </Link>
-                  <button onClick={() => { setDeleteId(t.id); setConfirmOpen(true); }} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all">
-                    <Trash2 size={18} />
-                  </button>
-                </td>
+        {/* Desktop / Tablet: tabela */}
+        <div className="md:block hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/50">
+                <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400">Tratamento / Descrição</th>
+                <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400">Valor Adicional</th>
+                <th className="px-8 py-5 text-[10px] font-black uppercase text-slate-400 text-right pr-12">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {loading ? (
+                <tr><td colSpan={3} className="p-20 text-center"><Loader2 className="animate-spin inline text-cyan-600" /></td></tr>
+              ) : filtrados.length === 0 ? (
+                <tr><td colSpan={3} className="p-20 text-center text-slate-400 font-bold italic">Nenhum tratamento encontrado.</td></tr>
+              ) : filtrados.map((t) => (
+                <tr key={t.id} className="group hover:bg-slate-50/50 transition-all">
+                  <td className="px-8 py-6">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-slate-50 rounded-xl text-slate-400 group-hover:bg-cyan-50 group-hover:text-cyan-600 transition-all">
+                        <Sparkles size={18} />
+                      </div>
+                      <div>
+                        <p className="font-black text-slate-800 uppercase text-sm">{t.nome}</p>
+                        <p className="text-[10px] text-slate-400 font-medium line-clamp-1">{t.descricao || 'Sem descrição'}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-6 font-black text-slate-700">
+                    {t.preco ? t.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '---'}
+                  </td>
+                  <td className="px-8 py-6 text-right pr-12 space-x-2">
+                    <Link href={`/otica/tratamentos/${t.id}/editar`} className="inline-block p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all">
+                      <Edit3 size={18} />
+                    </Link>
+                    <button onClick={() => { setDeleteId(t.id); setConfirmOpen(true); }} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all">
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile: cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {loading ? (
+            <div className="p-8 text-center"><Loader2 className="animate-spin inline text-cyan-600" /></div>
+          ) : filtrados.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 font-bold italic">Nenhum tratamento encontrado.</div>
+          ) : (
+            filtrados.map((t) => (
+              <div key={t.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm flex flex-col sm:flex-row sm:items-center">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="p-2 bg-slate-50 rounded-xl text-slate-400 flex items-center justify-center">
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-black text-slate-800 truncate">{t.nome}</div>
+                    <div className="text-[12px] text-slate-400 truncate">{t.descricao || 'Sem descrição'}</div>
+                    <div className="text-[12px] text-emerald-600 mt-1">{t.preco ? t.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '---'}</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 sm:mt-0 sm:ml-4 flex-shrink-0 flex gap-2">
+                  <Link href={`/otica/tratamentos/${t.id}/editar`} className="p-2 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-2xl transition-all">
+                    <Edit3 size={16} />
+                  </Link>
+                  <button onClick={() => { setDeleteId(t.id); setConfirmOpen(true); }} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-2xl transition-all">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       <ConfirmDialog 

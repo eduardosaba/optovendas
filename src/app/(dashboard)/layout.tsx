@@ -305,7 +305,7 @@ export default function DashboardLayout({
         <FocusContext.Consumer>
           {(ctx) =>
             ctx?.isFocusMode ? null : (
-              <aside className="fixed left-5 top-5 hidden h-[calc(100vh-40px)] w-72 flex-col rounded-[40px] border border-slate-100 bg-white/95 p-7 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)] backdrop-blur md:flex">
+              <aside className="fixed left-3 top-5 hidden h-[calc(100vh-40px)] w-64 flex-col rounded-[40px] border border-slate-100 bg-white/95 p-5 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)] backdrop-blur md:flex">
                 <div className="mb-10 flex items-center gap-3">
                   {logoSistema ? (
                     <img src={logoSistema} alt={nomeSistema || "OptoVendas"} className="h-24 w-auto object-contain" />
@@ -322,16 +322,10 @@ export default function DashboardLayout({
                       <Link
                         key={item.href}
                         href={item.href}
-                        className={`group flex items-center gap-3 rounded-3xl px-3 py-2.5 transition-all ${
-                          isActive ? "bg-slate-50" : "hover:bg-slate-50/90"
-                        }`}
+                        className={`group flex items-center gap-2 rounded-3xl px-2 py-2 transition-all ${isActive ? "bg-slate-50" : "hover:bg-slate-50/90"}`}
                       >
                         <span
-                          className={`grid h-11 w-11 place-items-center rounded-2xl text-[11px] font-black tracking-wide transition-all ${
-                            isActive
-                              ? "bg-blue-600 text-white shadow-[0_20px_40px_-20px_rgba(37,99,235,0.9)]"
-                              : item.iconClass
-                          }`}
+                          className={`grid h-10 w-10 place-items-center rounded-2xl text-[11px] font-black tracking-wide transition-all ${isActive ? "bg-blue-600 text-white shadow-[0_20px_40px_-20px_rgba(37,99,235,0.9)]" : item.iconClass}`}
                         >
                           <NavIcon path={item.iconPath} />
                         </span>
