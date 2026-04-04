@@ -1633,6 +1633,9 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               <div className="min-w-[140px] rounded-2xl bg-slate-50 p-2">
                 <p className="mb-1 text-[9px] font-black uppercase tracking-wider text-slate-400">PT (Ponte) mm</p>
                 <input
+                  id="ponte_manual"
+                  name="ponte_manual"
+                  aria-label="Ponte manual (mm)"
                   type="number"
                   min={1}
                   value={ponteManual}
@@ -1668,11 +1671,14 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
         {!image ? (
           <div className="flex flex-col items-center justify-center border-4 border-dashed border-slate-100 rounded-[32px] p-20 group hover:border-cyan-200 transition-all cursor-pointer relative">
             <input
+              id="medidas_foto"
+              name="medidas_foto"
               ref={fileInputRef}
               type="file"
               accept="image/*"
               onChange={(e) => void handleFile(e)}
               className="hidden"
+              aria-label="Upload de foto para medidas"
             />
             <div className="w-20 h-20 bg-slate-50 text-slate-300 rounded-3xl flex items-center justify-center group-hover:bg-cyan-50 group-hover:text-cyan-500 transition-all mb-4">
               <Camera size={40} />

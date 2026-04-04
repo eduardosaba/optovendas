@@ -114,12 +114,17 @@ export default function NovoAgendamento({ agendaId, cidade, onCreated }: Props) 
       <form onSubmit={handleSalvar} className="space-y-5">
         {/* BUSCA DE PACIENTE */}
         <div className="relative">
-          <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Paciente</label>
+          <label htmlFor="agendamento_paciente" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Paciente</label>
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
+              id="agendamento_paciente"
+              name="agendamento_paciente"
+              aria-label="Paciente"
               type="text"
               placeholder="Nome ou CPF..."
+              required
+              aria-required="true"
               value={query}
               onFocus={() => setShowSuggestions(true)}
               onChange={(e) => {
@@ -159,11 +164,16 @@ export default function NovoAgendamento({ agendaId, cidade, onCreated }: Props) 
 
         {/* HORÁRIO */}
         <div>
-          <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Horário Sugerido</label>
+          <label htmlFor="agendamento_horario" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Horário Sugerido</label>
           <div className="relative">
             <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input
+              id="agendamento_horario"
+              name="agendamento_horario"
+              aria-label="Horário sugerido"
               type="time"
+              required
+              aria-required="true"
               value={horario}
               onChange={(e) => setHorario(e.target.value)}
               className="w-full bg-slate-50 border-2 border-transparent focus:border-blue-500 focus:bg-white rounded-2xl p-4 pl-12 font-bold text-slate-700 transition-all outline-none"
@@ -173,10 +183,13 @@ export default function NovoAgendamento({ agendaId, cidade, onCreated }: Props) 
 
         {/* OBSERVAÇÃO */}
         <div>
-          <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Notas de Atendimento</label>
+          <label htmlFor="agendamento_observacao" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Notas de Atendimento</label>
           <div className="relative">
             <FileText className="absolute left-4 top-4 text-slate-400" size={16} />
             <textarea
+              id="agendamento_observacao"
+              name="agendamento_observacao"
+              aria-label="Notas de atendimento"
               placeholder="Ex: Urgente, retorno..."
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}

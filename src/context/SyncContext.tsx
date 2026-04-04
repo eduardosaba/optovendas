@@ -23,11 +23,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SyncStatus>("idle");
   const [lastResult, setLastResult] = useState<any>(null);
 
-  const runSyncAll = useCallback(async () => {
+  const runSyncAll = useCallback(async (opts: { interactive?: boolean } = {}) => {
+    const { interactive = false } = opts;
     try {
       if (typeof window === "undefined" || !navigator.onLine) return;
       setStatus("syncing");
-      toast?.info?.("Sincronização: iniciando...");
+      if (interactive) toast?.info?.("Sincronização: iniciando...");
 
       // processa a fila tradicional de jobs
       await processQueue();
@@ -49,8 +50,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       if (res && (res as any).ok) {
         setStatus("success");
         const { total = 0, processed = 0, success = 0, failed = 0 } = res as any;
-        if (total === 0) toast?.info?.("Sincronização: nada a enviar.");
-        else toast?.success?.(`Sincronização concluída: ${success}/${processed} processadas, ${failed} falhas`);
+        // Only notify user on interactive runs or when there was work processed
+        if (interactive) {
+          if (total === 0) toast?.info?.("Sincronização: nada a enviar.");
+          else toast?.success?.(`Sincronização concluída: ${success}/${processed} processadas, ${failed} falhas`);
+        } else {
+          if ((processed || 0) > 0 || (failed || 0) > 0) {
+            toast?.success?.(`Sincronização automática: ${success}/${processed} processadas, ${failed} falhas`);
+          }
+        }
       } else {
         setStatus("error");
         setLastResult(res);
@@ -71,10 +79,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // tentativa inicial quando montar o provider
-    void runSyncAll();
+    void runSyncAll({ interactive: false });
 
     const onOnline = () => {
-      void runSyncAll();
+      void runSyncAll({ interactive: false });
     };
 
     const onVisibility = () => {
@@ -89,7 +97,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     };
   }, [runSyncAll]);
 
-  const value = useMemo(() => ({ processQueue, sincronizarVendas, status, lastResult, triggerSync: runSyncAll }), [status, lastResult, runSyncAll]);
+  const value = useMemo(() => ({ processQueue, sincronizarVendas, status, lastResult, triggerSync: () => runSyncAll({ interactive: true }) }), [status, lastResult, runSyncAll]);
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
 }

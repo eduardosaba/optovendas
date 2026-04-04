@@ -60,6 +60,9 @@ export default function FichaAnamnese({ value, onChange }: Props) {
         </div>
 
         <textarea
+          id="motivo_consulta"
+          name="motivo_consulta"
+          aria-label="Motivo da consulta"
           value={value.motivoConsulta}
           onChange={(e) => updateField("motivoConsulta", e.target.value)}
           className="w-full bg-slate-50 border-none rounded-[32px] p-6 font-medium text-slate-700 shadow-inner focus:ring-2 focus:ring-blue-500 h-32 transition-all italic placeholder:text-slate-300"
@@ -67,10 +70,13 @@ export default function FichaAnamnese({ value, onChange }: Props) {
         />
 
         <div className="pt-2">
-          <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Último exame</label>
+          <label htmlFor="ultimo_exame" className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Último exame</label>
           <div className="flex items-center gap-3 mt-2 bg-slate-50 rounded-2xl p-2 pl-4">
             <History size={16} className="text-slate-400" />
             <input
+              id="ultimo_exame"
+              name="ultimo_exame"
+              aria-label="Último exame"
               value={value.ultimoExame}
               onChange={(e) => updateField("ultimoExame", e.target.value)}
               placeholder="Ex: 6 meses atrás"
@@ -113,6 +119,8 @@ export default function FichaAnamnese({ value, onChange }: Props) {
             <button
               type="button"
               onClick={() => updateField("usaOculos", true)}
+              aria-pressed={value.usaOculos}
+              aria-label="Usa óculos - Sim"
               className={`px-6 py-2 rounded-xl text-xs font-black uppercase transition-all ${value.usaOculos ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400"}`}
             > Sim </button>
             <button
@@ -120,6 +128,8 @@ export default function FichaAnamnese({ value, onChange }: Props) {
               onClick={() => {
                 onChange({ ...value, usaOculos: false, usuarioOculos: [] });
               }}
+              aria-pressed={!value.usaOculos}
+              aria-label="Usa óculos - Não"
               className={`px-6 py-2 rounded-xl text-xs font-black uppercase transition-all ${!value.usaOculos ? "bg-white text-slate-600 shadow-sm" : "text-slate-400"}`}
             > Não </button>
           </div>
@@ -147,6 +157,9 @@ export default function FichaAnamnese({ value, onChange }: Props) {
           <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest">Histórico Familiar</h3>
         </div>
         <input
+          id="antecedentes_familiares"
+          name="antecedentes_familiares"
+          aria-label="Antecedentes familiares"
           value={value.antecedentesFamiliares}
           onChange={(e) => updateField("antecedentesFamiliares", e.target.value)}
           className="w-full bg-slate-50 border-none rounded-[24px] p-5 font-bold text-slate-700 shadow-inner focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-300"
@@ -164,6 +177,9 @@ export default function FichaAnamnese({ value, onChange }: Props) {
           <span className="text-[9px] font-black uppercase text-amber-400/60 tracking-widest bg-amber-400/5 px-3 py-1 rounded-full border border-amber-400/20">Uso Interno</span>
         </div>
         <textarea
+          id="observacoes_internas"
+          name="observacoes_internas"
+          aria-label="Observações internas"
           value={value.observacoesInternas || ""}
           onChange={(e) => updateField("observacoesInternas", e.target.value)}
           className="w-full bg-white/5 border-none rounded-[24px] p-6 font-medium text-slate-300 shadow-inner focus:ring-1 focus:ring-amber-500 h-28 transition-all text-sm placeholder:text-white/10"
@@ -179,6 +195,8 @@ function TagButton({ label, active, onClick, activeColor = "bg-blue-600" }: any)
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
       className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all border ${
         active 
         ? `${activeColor} text-white border-transparent shadow-lg scale-105` 

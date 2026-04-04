@@ -509,7 +509,11 @@ export default function ContasPage() {
 
               <div>
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Breve Descrição</label>
+                <label htmlFor="mov_descricao" className="sr-only">Breve Descrição</label>
                 <input
+                  id="mov_descricao"
+                  name="mov_descricao"
+                  aria-label="Breve descrição da movimentação"
                   type="text"
                   placeholder="Ex: Pagamento Internet"
                   className="w-full p-4 bg-slate-50 border-none rounded-2xl font-medium text-slate-700"
@@ -603,12 +607,12 @@ export default function ContasPage() {
 
               <div className="p-6 grid grid-cols-3 gap-4 border-b">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">De:</label>
-                  <input type="date" className="w-full p-3 bg-slate-100 border-none rounded-xl font-bold" onChange={(e) => setExtratoFiltro({ ...extratoFiltro, de: e.target.value })} />
+                  <label htmlFor="extrato_de" className="text-[10px] font-black uppercase text-slate-400 ml-1">De:</label>
+                    <input id="extrato_de" name="extrato_de" type="date" className="w-full p-3 bg-slate-100 border-none rounded-xl font-bold" onChange={(e) => setExtratoFiltro({ ...extratoFiltro, de: e.target.value })} />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Até:</label>
-                  <input type="date" className="w-full p-3 bg-slate-100 border-none rounded-xl font-bold" onChange={(e) => setExtratoFiltro({ ...extratoFiltro, ate: e.target.value })} />
+                  <label htmlFor="extrato_ate" className="text-[10px] font-black uppercase text-slate-400 ml-1">Até:</label>
+                    <input id="extrato_ate" name="extrato_ate" type="date" className="w-full p-3 bg-slate-100 border-none rounded-xl font-bold" onChange={(e) => setExtratoFiltro({ ...extratoFiltro, ate: e.target.value })} />
                 </div>
                 <div className="flex items-end justify-end">
                   <button
@@ -713,6 +717,9 @@ export default function ContasPage() {
       <section className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
         <input
+          id="filtrar_contas"
+          name="filtrar_contas"
+          aria-label="Filtrar contas por nome"
           type="text"
           placeholder="Filtrar contas por nome..."
           value={busca}
@@ -736,8 +743,8 @@ export default function ContasPage() {
               </div>
 
               <div>
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Motivo da diferença (opcional)</label>
-                <input value={conciliarMotivo} onChange={(e) => setConciliarMotivo(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl font-medium text-slate-700" placeholder="Ex: Taxa extra operadora" />
+                <label htmlFor="conciliar_motivo" className="text-[10px] font-black uppercase text-slate-400 ml-1">Motivo da diferença (opcional)</label>
+                <input id="conciliar_motivo" name="conciliar_motivo" aria-label="Motivo da diferença" value={conciliarMotivo} onChange={(e) => setConciliarMotivo(e.target.value)} className="w-full p-3 bg-slate-50 rounded-xl font-medium text-slate-700" placeholder="Ex: Taxa extra operadora" />
               </div>
 
               <div className="flex gap-3 mt-2">

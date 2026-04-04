@@ -843,7 +843,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
                 <span className="text-[10px] font-black uppercase">Adicionar</span>
               </button>
            </div>
-           <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*,application/pdf" onChange={handleFileUpload} />
+           <input id="anexos_venda" name="anexos_venda" type="file" ref={fileInputRef} className="hidden" multiple accept="image/*,application/pdf" onChange={handleFileUpload} aria-label="Anexar arquivos da venda" />
         </section>
 
         {/* CARNÊ DE PAGAMENTO */}

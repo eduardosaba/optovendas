@@ -17,31 +17,8 @@ export function useSync() {
     }
   };
 
-  useEffect(() => {
-    function handleOnline() {
-      void sincronizar();
-    }
-
-    function handleVisibility() {
-      if (document.visibilityState === "visible" && navigator.onLine) {
-        void sincronizar();
-      }
-    }
-
-    window.addEventListener("online", handleOnline);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    // tentativa inicial quando o hook monta (se estiver online)
-    if (typeof window !== "undefined" && navigator.onLine) {
-      void sincronizar();
-    }
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // NOTE: hook no longer auto-runs on mount or listens to visibility/online.
+  // Automatic syncs are handled by SyncProvider to avoid duplicate runs and toasts.
 
   return { sincronizar };
 }

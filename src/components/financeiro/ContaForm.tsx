@@ -64,8 +64,11 @@ export default function ContaForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="mb-1 block text-xs font-black uppercase text-slate-500">Descricao</label>
+        <label htmlFor="conta_descricao" className="mb-1 block text-xs font-black uppercase text-slate-500">Descricao</label>
         <input
+          id="conta_descricao"
+          name="conta_descricao"
+          aria-label="Descrição da conta"
           value={descricao}
           onChange={(e) => setDescricao(e.target.value)}
           className="w-full rounded-lg border border-slate-200 bg-white p-3 text-sm"
@@ -75,8 +78,11 @@ export default function ContaForm({
 
       {!initial?.id && (
         <div>
-          <label className="mb-1 block text-xs font-black uppercase text-slate-500">Saldo inicial</label>
+          <label htmlFor="conta_saldo_inicial" className="mb-1 block text-xs font-black uppercase text-slate-500">Saldo inicial</label>
           <input
+            id="conta_saldo_inicial"
+            name="conta_saldo_inicial"
+            aria-label="Saldo inicial"
             value={saldoInicial}
             onChange={(e) => setSaldoInicial(e.target.value)}
             className="w-full rounded-lg border border-slate-200 bg-white p-3 text-sm"

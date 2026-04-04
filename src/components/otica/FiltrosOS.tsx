@@ -28,8 +28,11 @@ export default function FiltrosOS({
   return (
     <div className="mb-6 grid grid-cols-1 items-end gap-4 rounded-lg bg-white p-4 shadow md:grid-cols-4">
       <div>
-        <label className="block text-xs font-bold uppercase text-gray-500">Cidade / Localidade</label>
+        <label htmlFor="filtros_cidade" className="block text-xs font-bold uppercase text-gray-500">Cidade / Localidade</label>
         <input
+          id="filtros_cidade"
+          name="filtros_cidade"
+          aria-label="Filtro por cidade ou localidade"
           value={cidade}
           onChange={(e) => setCidade(e.target.value)}
           placeholder="Ex: Feira de Santana"
@@ -38,8 +41,8 @@ export default function FiltrosOS({
       </div>
 
       <div>
-        <label className="block text-xs font-bold uppercase text-gray-500">Previsao de Entrega</label>
-        <input type="date" value={data} onChange={(e) => setData(e.target.value)} className="mt-1 w-full rounded border p-2" />
+        <label htmlFor="filtros_data" className="block text-xs font-bold uppercase text-gray-500">Previsao de Entrega</label>
+        <input id="filtros_data" name="filtros_data" aria-label="Filtro por data de entrega" type="date" value={data} onChange={(e) => setData(e.target.value)} className="mt-1 w-full rounded border p-2" />
       </div>
 
       <div className="flex gap-2 md:col-span-2">

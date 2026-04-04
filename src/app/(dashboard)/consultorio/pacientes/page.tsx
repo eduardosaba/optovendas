@@ -221,7 +221,7 @@ export default function ListaPacientesPage() {
                     </button>
 
                     {menuComunicacaoId === paciente.id && (
-                      <div className="absolute right-0 top-12 w-48 bg-white rounded-lg shadow-lg border border-slate-100 z-50">
+                      <div className="absolute right-0 top-12 w-full sm:w-48 max-w-[92vw] bg-white rounded-lg shadow-lg border border-slate-100 z-50">
                         <Link
                           href={`/comunicacao?pacienteId=${paciente.id}&nome=${encodeURIComponent(paciente.nome_completo || '')}&fone=${encodeURIComponent(paciente.celular || '')}`}
                           className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"

@@ -99,11 +99,11 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Pr
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4 relative z-10">
-            <InputMedicao label="Esférico" value={value.odEsferico} onChange={(v: string) => setField("odEsferico", v)} step={0.25} />
-            <InputMedicao label="Cilíndrico" value={value.odCilindrico} onChange={(v: string) => setField("odCilindrico", v)} step={0.25} />
-            <InputMedicao label="Eixo" value={value.odEixo} onChange={(v: string) => setField("odEixo", v)} isEixo />
-            <InputMedicao label="AV" value={value.odAv} onChange={(v: string) => setField("odAv", v)} isAv />
-          </div>
+                  <InputMedicao label="Esférico" value={value.odEsferico} onChange={(v: string) => setField("odEsferico", v)} step={0.25} />
+                  <InputMedicao label="Cilíndrico" value={value.odCilindrico} onChange={(v: string) => setField("odCilindrico", v)} step={0.25} />
+                  <InputMedicao label="Eixo" value={value.odEixo} onChange={(v: string) => setField("odEixo", v)} isEixo />
+                  <InputMedicao label="AV" value={value.odAv} onChange={(v: string) => setField("odAv", v)} isAv />
+                </div>
         </div>
 
         {/* CARD OLHO ESQUERDO */}
@@ -135,6 +135,9 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Pr
               <input
                 type="text"
                 inputMode="decimal"
+                id="adicao"
+                name="adicao"
+                aria-label="Adição"
                 value={editingAdicao ? value.adicao : formatRefracaoString(value.adicao)}
                 onChange={(e) => setField("adicao", normalizeNumericInput(e.target.value))}
                 onFocus={() => setEditingAdicao(true)}
@@ -158,6 +161,9 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Pr
           <div className="flex-1">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">DP / DNP</label>
             <input
+              id="dp_dnp"
+              name="dp_dnp"
+              aria-label="DP / DNP"
               value={value.dpDnp}
               onChange={(e) => setField("dpDnp", e.target.value)}
               className="text-2xl font-black text-slate-800 bg-transparent border-none p-0 focus:ring-0 w-full placeholder:text-slate-200"
@@ -282,7 +288,7 @@ function InputMedicao({ label, value, onChange, isEixo, isAv, step }: any) {
     <div className="flex flex-col gap-2">
       <label className="text-[10px] font-black uppercase text-slate-400 text-center block tracking-tighter">{label}</label>
       <div className="relative group/input">
-        <InputWithFormatting value={value} onChange={onChange} isAv={isAv} isEixo={isEixo} />
+        <InputWithFormatting ariaLabel={label} value={value} onChange={onChange} isAv={isAv} isEixo={isEixo} />
         {step && (
           <div className="mt-2 flex items-center justify-center gap-1">
             <button type="button" onClick={() => changeBy(-Math.abs(step))} className="flex-1 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-blue-600 transition-all flex items-center justify-center"><ChevronDown size={14} /></button>
@@ -294,7 +300,7 @@ function InputMedicao({ label, value, onChange, isEixo, isAv, step }: any) {
   );
 }
 
-function InputWithFormatting({ value, onChange, isAv, isEixo }: any) {
+function InputWithFormatting({ ariaLabel, value, onChange, isAv, isEixo }: any) {
   const [editing, setEditing] = useState(false);
 
   // usa a máscara compartilhada `maskAv` de `src/lib/refracaoFormat.ts`
@@ -310,6 +316,7 @@ function InputWithFormatting({ value, onChange, isAv, isEixo }: any) {
 
   return (
     <input
+      aria-label={ariaLabel ?? (isAv ? "AV" : isEixo ? "Eixo" : "Medida")}
       type="text"
       inputMode={isAv ? "text" : "decimal"}
       value={editing ? value ?? "" : (isAv ? (value ?? "") : formatDisplay(value))}

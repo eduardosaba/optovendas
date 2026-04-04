@@ -88,8 +88,11 @@ export default function SelectLocalidade({ valor, aoMudar }: Props) {
 
   return (
     <div className="space-y-1 relative">
-      <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Cidade do Atendimento</label>
+      <label htmlFor="cidade_atendimento" className="text-[10px] font-black uppercase text-slate-400 ml-2">Cidade do Atendimento</label>
       <input
+        id="cidade_atendimento"
+        name="cidade_atendimento"
+        aria-label="Cidade do Atendimento"
         type="text"
         value={query}
         onChange={(e) => { setQuery(e.target.value); setShowSugestoes(true); }}

@@ -67,14 +67,14 @@ export default function QuickAddProduto({ tipo, aoFinalizar, aoFechar }: Props) 
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[300] flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden border border-white/20">
+    <div role="dialog" aria-modal="true" aria-labelledby="quickadd_title" className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[300] flex items-center justify-center p-4">
+      <div role="document" className="bg-white w-full max-w-md rounded-[24px] shadow-2xl overflow-hidden border border-white/20">
         <div className="p-6 space-y-4">
           <header className="flex justify-between items-center">
-            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tighter">
+            <h2 id="quickadd_title" className="text-lg font-black text-slate-900 uppercase tracking-tighter">
               Novo {tipo === "lente" ? "Produto" : "Tratamento"}
             </h2>
-            <button onClick={aoFechar} className="p-2 hover:bg-slate-100 rounded-full transition-all">
+            <button onClick={aoFechar} aria-label="Fechar" className="p-2 hover:bg-slate-100 rounded-full transition-all">
               <X size={18} />
             </button>
           </header>
@@ -120,10 +120,13 @@ export default function QuickAddProduto({ tipo, aoFinalizar, aoFechar }: Props) 
 
 function Input({ label, value, onChange, type = "text", placeholder }: any) {
   const isNumber = type === "number";
+  const id = `quickadd_${String(label || "input").toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')}`;
   return (
     <div className="space-y-2">
-      <label className="text-xs font-black uppercase text-slate-400 tracking-widest">{label}</label>
+      <label htmlFor={id} className="text-xs font-black uppercase text-slate-400 tracking-widest">{label}</label>
       <input
+        id={id}
+        name={id}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
         type={isNumber ? "text" : type}

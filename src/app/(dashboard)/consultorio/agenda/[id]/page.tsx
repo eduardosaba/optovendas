@@ -308,7 +308,7 @@ export default function AgendaExternaDetalhePage() {
                                   </button>
 
                                   {menuComunicacaoId === String(paciente.id) && (
-                                    <div className="absolute right-0 top-12 w-44 bg-white rounded-lg shadow-lg border border-slate-100 z-50">
+                                    <div className="absolute right-0 top-12 w-full sm:w-44 max-w-[92vw] bg-white rounded-lg shadow-lg border border-slate-100 z-50">
                                       <a
                                         href={`/comunicacao?pacienteId=${paciente.id}&nome=${encodeURIComponent(paciente.nome_completo || '')}&fone=${encodeURIComponent(paciente.celular || '')}`}
                                         className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"

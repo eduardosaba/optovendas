@@ -353,7 +353,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
   function SearchItem({ href, title, sub, icon, color = "bg-slate-100 text-slate-500" }: any) {
     return (
-      <Link href={href} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-all group">
+      <Link href={href} role="option" aria-label={`${title} • ${sub}`} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-all group">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-xl ${color} group-hover:scale-110 transition-transform`}>
             {icon}
@@ -369,8 +369,8 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
-      <div className="flex items-center justify-between gap-3">
+    <header className="sticky top-0 left-0 right-0 w-full z-40 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:px-8 overflow-x-hidden">
+      <div className="flex items-center justify-between gap-3 max-w-full overflow-x-hidden">
         <div ref={containerBuscaRef} className="relative hidden w-full max-w-md md:block">
           <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2">
             {moduleLogoUrl && (
@@ -380,18 +380,23 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             )}
             <Search size={18} className="text-slate-400" />
             <input
-            ref={inputBuscaRef}
-            placeholder="Buscar paciente, OS ou venda..."
-            value={busca}
-            onFocus={() => setBuscaAberta(true)}
-            onChange={(e) => setBusca(e.target.value)}
-            className="w-full bg-transparent text-sm font-medium text-slate-600 outline-none"
-          />
+              id="buscar"
+              name="buscar"
+              aria-label="Buscar paciente, OS ou venda"
+              aria-controls="dropdown-busca"
+              aria-expanded={buscaAberta}
+              ref={inputBuscaRef}
+              placeholder="Buscar paciente, OS ou venda..."
+              value={busca}
+              onFocus={() => setBuscaAberta(true)}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full bg-transparent text-sm font-medium text-slate-600 outline-none"
+            />
             <kbd className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400">Ctrl+K</kbd>
           </div>
 
           {buscaAberta && (
-            <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
+            <div id="dropdown-busca" role="listbox" aria-label="Resultados da busca" className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
               {/* DROPDOWN INTELIGENTE */}
               {(resultadoBusca.length > 0 || resultadosDB.pacientes.length > 0 || resultadosDB.vendas.length > 0 || resultadosDB.estoque.length > 0 || resultadosDB.financeiro.length > 0) ? (
                 <div className="space-y-3">
@@ -400,7 +405,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                     <div className="mb-2">
                       <p className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Páginas e Funções</p>
                       {resultadoBusca.map((item) => (
-                        <SearchItem key={item.id} href={item.rota} title={item.titulo} sub={item.subtitulo} icon={<Monitor size={14} />} />
+                                        <SearchItem key={item.id} href={item.rota} title={item.titulo} sub={item.subtitulo} icon={<Monitor size={14} />} />
                       ))}
                     </div>
                   )}
@@ -577,7 +582,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             </button>
 
             {notificationsOpen && (
-              <div ref={notifRef} className="absolute left-1/2 transform -translate-x-1/2 mt-2 w-96 max-w-[92vw] rounded-2xl border border-slate-100 bg-white shadow-2xl z-50 p-2">
+              <div ref={notifRef} className="absolute left-1/2 transform -translate-x-1/2 mt-2 w-full sm:w-96 max-w-[92vw] rounded-2xl border border-slate-100 bg-white shadow-2xl z-50 p-2">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-50">
                   <p className="text-sm font-black">Notificações</p>
                   <button className="text-xs text-slate-400" onClick={() => { setNotificationsData({ parcelas: [], vendas: [] }); setNotificationsOpen(false); }}>Fechar</button>
@@ -654,7 +659,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   onClick={() => setMenuAberto(false)}
                 />
 
-                <div className="absolute right-0 z-20 mt-3 w-64 rounded-[28px] border border-slate-50 bg-white p-3 shadow-2xl shadow-slate-200">
+                <div className="absolute right-0 z-20 mt-3 w-full sm:w-64 max-w-[92vw] rounded-[28px] border border-slate-50 bg-white p-3 shadow-2xl shadow-slate-200">
                   <div className="mb-2 border-b border-slate-50 p-4">
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Nivel de Acesso</p>
                     <div className="flex items-center gap-2 text-xs font-black italic text-cyan-600">

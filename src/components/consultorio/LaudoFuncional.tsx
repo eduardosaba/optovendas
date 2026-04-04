@@ -286,8 +286,11 @@ export default function LaudoFuncional({ pacienteId }: { pacienteId: string }) {
       </section>
 
       <div className="space-y-4">
-        <label className="text-xs font-black uppercase text-slate-400 ml-2">Conclusão Clínica e Conduta</label>
+        <label htmlFor="laudo_conclusao" className="text-xs font-black uppercase text-slate-400 ml-2">Conclusão Clínica e Conduta</label>
         <textarea
+          id="laudo_conclusao"
+          name="laudo_conclusao"
+          aria-label="Conclusão clínica e conduta"
           className="w-full bg-slate-50 border-none rounded-[32px] p-8 font-medium text-slate-700 shadow-inner focus:ring-2 focus:ring-blue-500 h-40 transition-all italic"
           placeholder="Descreva as observações finais, diagnóstico e conduta recomendada..."
           onChange={(e) => setDados({ ...dados, conclusao: e.target.value })}
@@ -331,12 +334,18 @@ function GridInputs({ prefix, dados, setDados }: any) {
           <div key={outerKey} className="contents">
             <div className={`flex items-center justify-center font-black rounded-xl text-xs ${olho === 'OD' ? 'bg-blue-50 text-blue-600' : 'bg-slate-900 text-white'}`}>{olho}</div>
             <input
+              id={`${keyL}`}
+              name={`${keyL}`}
+              aria-label={`${prefix.toUpperCase()} ${olho} Visão Longe`}
               value={dados[keyL] ?? ""}
               className="bg-slate-50 rounded-2xl p-4 text-center font-black text-slate-700 focus:ring-2 focus:ring-blue-500 border-none shadow-inner"
               placeholder="20/--"
               onChange={(e) => setDados({ ...dados, [keyL]: maskAv(e.target.value) })}
             />
             <input
+              id={`${keyP}`}
+              name={`${keyP}`}
+              aria-label={`${prefix.toUpperCase()} ${olho} Visão Perto`}
               value={dados[keyP] ?? ""}
               className="bg-slate-50 rounded-2xl p-4 text-center font-black text-slate-700 focus:ring-2 focus:ring-blue-500 border-none shadow-inner"
               placeholder="J--"
@@ -354,13 +363,17 @@ function LinhaTeste({ titulo, value, onChange }: any) {
   return (
     <div className="flex justify-between items-center py-4 border-b border-slate-50 last:border-none group">
       <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">{titulo}</span>
-      <div className="flex bg-slate-50 p-1 rounded-xl">
+        <div className="flex bg-slate-50 p-1 rounded-xl">
         <button 
           onClick={() => onChange("sem_alteracao")}
+          aria-pressed={!isAlt}
+          aria-label={`${titulo} - Normal`}
           className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!isAlt ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}
         > Normal </button>
         <button 
           onClick={() => onChange("com_alteracao")}
+          aria-pressed={isAlt}
+          aria-label={`${titulo} - Alterado`}
           className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${isAlt ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400'}`}
         > Alterado </button>
       </div>

@@ -20,6 +20,9 @@ export default function PasswordField({
   return (
     <div className="relative">
       <input
+        id="password_field"
+        name="password_field"
+        aria-label={placeholder}
         type={showPassword ? "text" : "password"}
         required={required}
         placeholder={placeholder}
@@ -31,6 +34,7 @@ export default function PasswordField({
         type="button"
         onClick={() => setShowPassword((v) => !v)}
         aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+        aria-pressed={showPassword}
         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
       >
         {showPassword ? (

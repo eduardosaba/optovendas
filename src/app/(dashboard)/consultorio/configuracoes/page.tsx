@@ -297,8 +297,10 @@ export default function ConfigUnidadePage() {
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
           <div className="md:col-span-2">
-            <label className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Nome Fantasia</label>
+            <label htmlFor="nome_fantasia" className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Nome Fantasia</label>
             <input
+              id="nome_fantasia"
+              name="nome_fantasia"
               placeholder="Nome da Clinica"
               value={dadosClinica.nome_fantasia}
               onChange={(e) => setDadosClinica((prev) => ({ ...prev, nome_fantasia: e.target.value }))}
@@ -307,8 +309,10 @@ export default function ConfigUnidadePage() {
           </div>
 
           <div>
-            <label className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Telefone</label>
+            <label htmlFor="telefone_clinica" className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Telefone</label>
             <PatternFormat
+              id="telefone_clinica"
+              name="telefone_clinica"
               format="(##) #####-####"
               mask="_"
               placeholder="Telefone"
@@ -320,8 +324,10 @@ export default function ConfigUnidadePage() {
           </div>
 
           <div>
-            <label className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">CNPJ / CPF</label>
+            <label htmlFor="cnpj_cpf" className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">CNPJ / CPF</label>
             <PatternFormat
+              id="cnpj_cpf"
+              name="cnpj_cpf"
               format={(dadosClinica.cnpj_cpf || "").length > 11 ? "##.###.###/####-##" : "###.###.###-##"}
               mask="_"
               placeholder="CNPJ/CPF"
@@ -333,8 +339,10 @@ export default function ConfigUnidadePage() {
           </div>
 
           <div className="md:col-span-2">
-            <label className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Razao Social</label>
+            <label htmlFor="razao_social" className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Razao Social</label>
             <input
+              id="razao_social"
+              name="razao_social"
               placeholder="Razao Social"
               value={config.razao_social || ""}
               onChange={(e) => setConfig((prev) => ({ ...prev, razao_social: e.target.value }))}
@@ -343,8 +351,10 @@ export default function ConfigUnidadePage() {
           </div>
 
           <div>
-            <label className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Endereco Completo</label>
+            <label htmlFor="endereco_completo" className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Endereco Completo</label>
             <input
+              id="endereco_completo"
+              name="endereco_completo"
               placeholder="Endereco Completo"
               value={config.endereco_completo || ""}
               onChange={(e) => setConfig((prev) => ({ ...prev, endereco_completo: e.target.value }))}
@@ -356,19 +366,24 @@ export default function ConfigUnidadePage() {
             <label className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">Logo da clinica (URL)</label>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <input
+                id="logomarca_url"
+                name="logomarca_url"
                 placeholder="Logo da clinica (URL)"
                 value={dadosClinica.logomarca_url || ""}
                 onChange={(e) => setDadosClinica((prev) => ({ ...prev, logomarca_url: e.target.value }))}
                 className="flex-1 rounded-[20px] border-none bg-slate-50 p-4 font-bold text-slate-700 focus:ring-2 focus:ring-blue-500"
               />
               <div className="flex w-full sm:w-auto gap-2 flex-wrap">
-                <label className="w-full sm:w-auto text-center cursor-pointer rounded-[14px] bg-white border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
+                <label htmlFor="logo_file" className="w-full sm:w-auto text-center cursor-pointer rounded-[14px] bg-white border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50">
                   {enviandoLogo ? "Enviando..." : "Selecionar arquivo"}
                   <input
+                    id="logo_file"
+                    name="logo_file"
                     type="file"
                     accept="image/*"
                     onChange={(e) => void onSelecionarLogo(e.target.files?.[0])}
                     className="hidden"
+                    aria-label="Selecionar arquivo de logo da clinica"
                   />
                 </label>
                 <button
