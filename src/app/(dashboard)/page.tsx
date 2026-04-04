@@ -84,27 +84,26 @@ export default function DashboardPrincipalPage() {
         const ctx = await resolveClinicaContext();
         const hoje = new Date().toISOString().slice(0, 10);
 
-        const agendaRes = await supabase
-          .from("agenda_externa")
-          .select("id")
-          .eq("clinica_id", ctx.clinicaId)
-          .in("status", ["Confirmado", "Concluido"])
-          .gte("data_atendimento", hoje)
-          .order("data_atendimento", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        // Contar atendimentos agendados para a data de hoje
+        const atendimentosRes = await supabase
+          .from("agenda_pacientes")
+          .select("id", { count: "exact", head: true })
+          .eq("agenda_externa.clinica_id", ctx.clinicaId)
+          .eq("agenda_externa.data_atendimento", hoje);
 
-        if (agendaRes.error) throw agendaRes.error;
-        const agendaId = (agendaRes.data as { id?: string } | null)?.id;
+        if (atendimentosRes.error) throw atendimentosRes.error;
 
-        if (!agendaId) {
-          if (active) setKpis({ atendimentosHoje: "0", pacientesFila: "0" });
-          return;
-        }
+        // Contar pacientes na fila (pendentes) — hoje e com status diferente de 'Concluido'
+        const filaRes = await supabase
+          .from("agenda_pacientes")
+          .select("id", { count: "exact", head: true })
+          .eq("agenda_externa.clinica_id", ctx.clinicaId)
+          .eq("agenda_externa.data_atendimento", hoje)
+          .not("status", "eq", "Concluido");
 
-        const cntRes = await supabase.from("agenda_pacientes").select("*", { count: "exact", head: true }).eq("agenda_id", agendaId);
-        if (cntRes.error) throw cntRes.error;
-        if (active) setKpis({ atendimentosHoje: String(cntRes.count ?? 0), pacientesFila: String(cntRes.count ?? 0) });
+        if (filaRes.error) throw filaRes.error;
+
+        if (active) setKpis({ atendimentosHoje: String(atendimentosRes.count ?? 0), pacientesFila: String(filaRes.count ?? 0) });
       } catch {
         if (active) setKpis({ atendimentosHoje: "0", pacientesFila: "0" });
       }

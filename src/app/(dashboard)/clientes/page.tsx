@@ -29,6 +29,8 @@ export default function ListaClientesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletingName, setDeletingName] = useState("");
   const [deleteAlsoAnamnese, setDeleteAlsoAnamnese] = useState(false);
+  const [depsLoading, setDepsLoading] = useState(false);
+  const [dependencies, setDependencies] = useState<{ anamnese: any[]; vendas: any[]; ordens: any[]; receitas: any[] }>({ anamnese: [], vendas: [], ordens: [], receitas: [] });
   const toast = useToast();
 
   useEffect(() => {
@@ -49,33 +51,95 @@ export default function ListaClientesPage() {
   function openConfirm(id: string, nome?: string) {
     setDeletingId(id);
     setDeletingName(nome || "");
+    // carregar dependências para mostrar na UI
+    void (async () => {
+      setDepsLoading(true);
+      try {
+        const [{ data: anamnese }, { data: vendas }, { data: receitas }] = await Promise.all([
+          supabase.from('anamnese').select('id, criado_em, resumo').eq('paciente_id', id),
+          supabase.from('vendas').select('id, numero_os, criado_em, status_financeiro').eq('paciente_id', id).order('criado_em', { ascending: false }),
+          supabase.from('receitas_optometricas').select('id, criado_em, obs').eq('paciente_id', id).order('criado_em', { ascending: false }),
+        ]);
+
+        let ordens: any[] = [];
+        try {
+          const vendaIds = (vendas || []).map((v: any) => v.id).filter(Boolean);
+          if (vendaIds.length) {
+            const { data: ord } = await supabase.from('ordens_servico').select('id, numero_os, status_os, venda_id').in('venda_id', vendaIds);
+            ordens = ord || [];
+          }
+        } catch (e) {
+          ordens = [];
+        }
+
+        setDependencies({ anamnese: anamnese || [], vendas: vendas || [], ordens, receitas: receitas || [] });
+      } catch (e) {
+        console.warn('Erro ao carregar dependencias do paciente', e);
+        setDependencies({ anamnese: [], vendas: [], ordens: [], receitas: [] });
+      } finally {
+        setDepsLoading(false);
+      }
+    })();
+
     setConfirmOpen(true);
   }
 
   async function handleConfirmDelete() {
     if (!deletingId) return;
     try {
-      if (deleteAlsoAnamnese) {
-        const { error: delAnError } = await supabase.from("anamnese").delete().eq("paciente_id", deletingId);
+      // Verifica dependências comuns antes de tentar excluir para dar feedback claro
+      const checks = await Promise.all([
+        supabase.from('anamnese').select('id', { count: 'exact', head: true }).eq('paciente_id', deletingId),
+        supabase.from('vendas').select('id', { count: 'exact', head: true }).eq('paciente_id', deletingId),
+        supabase.from('ordens_servico').select('id', { count: 'exact', head: true }).or(`venda_id.eq.${deletingId},paciente_id.eq.${deletingId}`),
+        supabase.from('receitas_optometricas').select('id', { count: 'exact', head: true }).eq('paciente_id', deletingId),
+      ]);
+
+      const anamneseCount = (checks[0].count as number) || 0;
+      const vendasCount = (checks[1].count as number) || 0;
+      // ordens_servico check may be imprecise depending on schema; handle defensively
+      const ordensCount = (checks[2].count as number) || 0;
+      const receitasCount = (checks[3].count as number) || 0;
+
+      // Se existirem vínculos além de anamnese, impedir exclusão e informar o usuário
+      const vendasCountNow = dependencies.vendas.length;
+      const ordensCountNow = dependencies.ordens.length;
+      const anamneseCountNow = dependencies.anamnese.length;
+
+      const blockingDeps: string[] = [];
+      if (vendasCountNow > 0) blockingDeps.push(`${vendasCountNow} venda(s)`);
+      if (ordensCountNow > 0) blockingDeps.push(`${ordensCountNow} OS(s)`);
+      if (dependencies.receitas.length > 0) blockingDeps.push(`${dependencies.receitas.length} receita(s) optométrica(s)`);
+
+      if (blockingDeps.length > 0) {
+        toast?.error?.(`Não é possível excluir o paciente: existem registros dependentes (${blockingDeps.join(', ')}). Remova ou desassocie-os primeiro.`);
+        console.warn('Delete blocked by dependencies:', { vendasCount: vendasCountNow, ordensCount: ordensCountNow, anamneseCount: anamneseCountNow });
+        return;
+      }
+
+      // Se somente anamnese existe e usuário marcou a opção, apagar anamnese primeiro
+      if (anamneseCountNow > 0 && deleteAlsoAnamnese) {
+        const { error: delAnError } = await supabase.from('anamnese').delete().eq('paciente_id', deletingId);
         if (delAnError) {
-          toast?.error?.("Erro ao excluir anamnese vinculada. Operação cancelada.");
-          console.error("Erro ao deletar anamnese antes de paciente:", delAnError);
+          toast?.error?.('Erro ao excluir anamnese vinculada. Operação cancelada.');
+          console.error('Erro ao deletar anamnese antes de paciente:', delAnError);
           return;
         }
       }
 
-      const { error } = await supabase.from("pacientes").delete().eq("id", deletingId);
+      const { error } = await supabase.from('pacientes').delete().eq('id', deletingId);
       if (error) {
-        const msg = typeof (error as any).code === "string" && ((error as any).code === "23503" || (error as any).message?.includes("violates"))
+        const errAny = error as any;
+        const msg = (typeof errAny.code === 'string' && (errAny.code === '23503' || (errAny.message || '').includes('violates')))
           ? 'Não é possível excluir o paciente: existem registros dependentes (ex: anamnese). Remova ou desassocie-os primeiro.'
           : 'Erro ao excluir cliente.';
         toast?.error?.(msg);
-        console.error('Delete cliente error:', error);
+        console.error('Delete cliente error:', error, { errCode: errAny.code, errMessage: errAny.message, errHint: errAny.hint, errDetails: errAny.details });
         return;
       }
 
       setClientes((s) => s.filter((p) => p.id !== deletingId));
-      toast?.success?.("Cliente excluído");
+      toast?.success?.('Cliente excluído');
     } catch (err) {
       console.error(err);
       toast?.error?.("Erro ao excluir cliente");
@@ -84,6 +148,7 @@ export default function ListaClientesPage() {
       setDeletingId(null);
       setDeletingName("");
       setDeleteAlsoAnamnese(false);
+        setDependencies({ anamnese: [], vendas: [], ordens: [], receitas: [] });
     }
   }
 
@@ -165,7 +230,7 @@ export default function ListaClientesPage() {
                     <span className="w-1 h-1 bg-slate-200 rounded-full" />
                     <p className="text-[10px] font-bold text-slate-400 uppercase">{cliente.cpf || "CPF não informado"}</p>
                 </div>
-                <div className="mt-2">
+                <div className="mt-5">
                   <span className="inline-flex bg-slate-50 text-slate-400 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-tighter">
                     {cliente.cidade_atendimento || "Geral"}
                   </span>
@@ -214,12 +279,134 @@ export default function ListaClientesPage() {
         confirmText="Excluir"
         cancelText="Cancelar"
         onConfirm={handleConfirmDelete}
-        onCancel={() => { setConfirmOpen(false); setDeleteAlsoAnamnese(false); }}
+        onCancel={() => { setConfirmOpen(false); setDeleteAlsoAnamnese(false); setDependencies({ anamnese: [], vendas: [], ordens: [], receitas: [] }); }}
       >
-        <label className="inline-flex items-center gap-3">
-          <input type="checkbox" checked={deleteAlsoAnamnese} onChange={(e) => setDeleteAlsoAnamnese(e.target.checked)} />
-          <span className="text-sm text-slate-600">Excluir também anamnese vinculada</span>
-        </label>
+        <div className="space-y-3">
+          {depsLoading ? (
+            <p className="text-sm text-slate-500">Carregando registros dependentes...</p>
+          ) : (
+            <div className="space-y-4">
+              {/* Anamnese */}
+              {dependencies.anamnese.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-black">Anamnese ({dependencies.anamnese.length})</h4>
+                  <div className="mt-2 space-y-2">
+                    {dependencies.anamnese.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-md">
+                        <div className="text-sm text-slate-600">{a.resumo || new Date(a.criado_em).toLocaleDateString()}</div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={async () => {
+                            if (!confirm('Confirma excluir esta anamnese?')) return;
+                            try {
+                              const { error } = await supabase.from('anamnese').delete().eq('id', a.id);
+                              if (error) throw error;
+                              setDependencies((d) => ({ ...d, anamnese: d.anamnese.filter(x => x.id !== a.id) }));
+                              toast?.success?.('Anamnese excluída');
+                            } catch (e) {
+                              console.error('Erro ao excluir anamnese:', e);
+                              toast?.error?.('Erro ao excluir anamnese');
+                            }
+                          }} className="px-3 py-1 text-xs bg-rose-50 text-rose-600 rounded-md">Excluir</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Vendas */}
+              {dependencies.vendas.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-black">Vendas ({dependencies.vendas.length})</h4>
+                  <div className="mt-2 space-y-2">
+                    {dependencies.vendas.map((v) => (
+                      <div key={v.id} className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-md">
+                        <div className="text-sm text-slate-600 truncate">OS: {v.numero_os || v.id} • {new Date(v.criado_em).toLocaleDateString()} • {v.status_financeiro || ''}</div>
+                        <div className="flex items-center gap-2">
+                          <a href={`/otica/vendas/${v.id}/visualizar`} className="text-xs px-3 py-1 bg-white border rounded-md">Ver</a>
+                          <button onClick={async () => {
+                            if (!confirm('Confirma excluir esta venda? Isso pode falhar se existirem dependências adicionais.')) return;
+                            try {
+                              const { error } = await supabase.from('vendas').delete().eq('id', v.id);
+                              if (error) throw error;
+                              setDependencies((d) => ({ ...d, vendas: d.vendas.filter(x => x.id !== v.id), ordens: d.ordens.filter(o => o.venda_id !== v.id) }));
+                              toast?.success?.('Venda excluída');
+                            } catch (e) {
+                              console.error('Erro ao excluir venda:', e);
+                              toast?.error?.('Erro ao excluir venda');
+                            }
+                          }} className="px-3 py-1 text-xs bg-rose-50 text-rose-600 rounded-md">Excluir</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Ordens de Serviço */}
+              {dependencies.ordens.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-black">Ordens de Serviço ({dependencies.ordens.length})</h4>
+                  <div className="mt-2 space-y-2">
+                    {dependencies.ordens.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-md">
+                        <div className="text-sm text-slate-600">OS {o.numero_os || o.id} • {o.status_os || ''}</div>
+                        <div className="flex items-center gap-2">
+                          <a href={`/otica/os/${o.id}`} className="text-xs px-3 py-1 bg-white border rounded-md">Ver</a>
+                          <button onClick={async () => {
+                            if (!confirm('Confirma excluir esta OS?')) return;
+                            try {
+                              const { error } = await supabase.from('ordens_servico').delete().eq('id', o.id);
+                              if (error) throw error;
+                              setDependencies((d) => ({ ...d, ordens: d.ordens.filter(x => x.id !== o.id) }));
+                              toast?.success?.('Ordem de serviço excluída');
+                            } catch (e) {
+                              console.error('Erro ao excluir OS:', e);
+                              toast?.error?.('Erro ao excluir OS');
+                            }
+                          }} className="px-3 py-1 text-xs bg-rose-50 text-rose-600 rounded-md">Excluir</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+                {/* Receitas Optométricas */}
+                {dependencies.receitas.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-black">Receitas Optométricas ({dependencies.receitas.length})</h4>
+                    <div className="mt-2 space-y-2">
+                      {dependencies.receitas.map((r) => (
+                        <div key={r.id} className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-md">
+                          <div className="text-sm text-slate-600 truncate">{r.obs || new Date(r.criado_em).toLocaleDateString()}</div>
+                          <div className="flex items-center gap-2">
+                            <a href={`/otica/receitas/${r.id}`} className="text-xs px-3 py-1 bg-white border rounded-md">Ver</a>
+                            <button onClick={async () => {
+                              if (!confirm('Confirma excluir esta receita optométrica?')) return;
+                              try {
+                                const { error } = await supabase.from('receitas_optometricas').delete().eq('id', r.id);
+                                if (error) throw error;
+                                setDependencies((d) => ({ ...d, receitas: d.receitas.filter(x => x.id !== r.id) }));
+                                toast?.success?.('Receita excluída');
+                              } catch (e) {
+                                console.error('Erro ao excluir receita optométrica:', e);
+                                toast?.error?.('Erro ao excluir receita');
+                              }
+                            }} className="px-3 py-1 text-xs bg-rose-50 text-rose-600 rounded-md">Excluir</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {dependencies.anamnese.length === 0 && dependencies.vendas.length === 0 && dependencies.ordens.length === 0 && (
+                <p className="text-sm text-slate-500">Sem registros dependentes.</p>
+              )}
+            </div>
+          )}
+        </div>
       </ConfirmDialog>
     </div>
   );

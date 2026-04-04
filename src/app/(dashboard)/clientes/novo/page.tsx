@@ -29,15 +29,12 @@ function FormularioCliente() {
 
   const initialForm = {
     nome_completo: "",
-    apelido: "",
     cpf: "",
-    rg: "",
     data_nascimento: "",
     celular: "",
     email: "",
     cidade_atendimento: "",
     endereco: "",
-    bairro: "",
     observacoes: "",
   };
 
@@ -76,11 +73,33 @@ function FormularioCliente() {
 
     setLoading(true);
     try {
-      const payload = { ...form, clinica_id: clinicaId };
-      
-      const { error } = await supabase
-        .from("pacientes")
-        .upsert(payload, { onConflict: "id" });
+      const raw = { ...form, clinica_id: clinicaId } as Record<string, any>;
+      // Apenas enviar campos conhecidos para evitar erros de schema no PostgREST
+      const allowedFields = [
+        "id",
+        "nome_completo",
+        "apelido",
+        "cpf",
+        "rg",
+        "data_nascimento",
+        "celular",
+        "email",
+        "cidade_atendimento",
+        "endereco",
+        "observacoes",
+        "clinica_id",
+      ];
+
+      const payload: Record<string, any> = {};
+      for (const k of Object.keys(raw)) {
+        if (!allowedFields.includes(k)) continue;
+        // evitar enviar strings vazias (colunas ausentes no schema podem causar 400)
+        const v = raw[k];
+        if (typeof v === 'string' && v.trim() === '') continue;
+        payload[k] = v;
+      }
+
+      const { error } = await supabase.from("pacientes").upsert(payload, { onConflict: "id" });
 
       if (error) throw error;
 
@@ -122,19 +141,23 @@ function FormularioCliente() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
-              <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Nome Completo</label>
-              <input
-                type="text"
-                value={(form as any).nome_completo}
-                onChange={(e) => setForm({ ...form, nome_completo: e.target.value })}
-                className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500"
-                placeholder="Ex: João da Silva Santos"
-              />
+                  <label htmlFor="nome_completo" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Nome Completo</label>
+                  <input
+                    id="nome_completo"
+                    name="nome_completo"
+                    type="text"
+                    value={(form as any).nome_completo}
+                    onChange={(e) => setForm({ ...form, nome_completo: e.target.value })}
+                    className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-700 focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Ex: João da Silva Santos"
+                  />
             </div>
 
             <div>
-              <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">CPF</label>
+              <label htmlFor="cpf" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">CPF</label>
               <PatternFormat
+                id="cpf"
+                name="cpf"
                 format="###.###.###-##"
                 value={(form as any).cpf}
                 onValueChange={(vals: any) => setForm({ ...form, cpf: vals.value })}
@@ -144,8 +167,10 @@ function FormularioCliente() {
             </div>
 
             <div>
-              <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Data de Nascimento</label>
+              <label htmlFor="data_nascimento" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Data de Nascimento</label>
               <input
+                id="data_nascimento"
+                name="data_nascimento"
                 type="date"
                 value={(form as any).data_nascimento}
                 onChange={(e) => setForm({ ...form, data_nascimento: e.target.value })}
@@ -164,8 +189,10 @@ function FormularioCliente() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">WhatsApp / Celular</label>
+              <label htmlFor="celular" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">WhatsApp / Celular</label>
               <PatternFormat
+                id="celular"
+                name="celular"
                 format="(##) #####-####"
                 value={(form as any).celular}
                 onValueChange={(vals: any) => setForm({ ...form, celular: vals.value })}
@@ -175,8 +202,10 @@ function FormularioCliente() {
             </div>
 
             <div>
-              <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Cidade de Atendimento (Rota)</label>
+              <label htmlFor="cidade_atendimento" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Cidade de Atendimento (Rota)</label>
               <input
+                id="cidade_atendimento"
+                name="cidade_atendimento"
                 type="text"
                 value={(form as any).cidade_atendimento}
                 onChange={(e) => setForm({ ...form, cidade_atendimento: e.target.value })}
@@ -186,8 +215,10 @@ function FormularioCliente() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Endereço Completo</label>
+              <label htmlFor="endereco" className="ml-2 text-[10px] font-black uppercase text-slate-400 mb-2 block">Endereço Completo</label>
               <input
+                id="endereco"
+                name="endereco"
                 type="text"
                 value={(form as any).endereco}
                 onChange={(e) => setForm({ ...form, endereco: e.target.value })}

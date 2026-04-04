@@ -195,9 +195,9 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     if (!clinicaId) return;
     setNotificationsLoading(true);
     try {
-      const [parcelasRes, vendasRes] = await Promise.all([
+        const [parcelasRes, vendasRes] = await Promise.all([
         supabase.from('financeiro_parcelas').select('id,valor_parcela,data_vencimento,status,paciente_id').eq('clinica_id', clinicaId).order('data_vencimento', { ascending: false }).limit(5),
-        supabase.from('vendas').select('id,valor_total,criado_em,localidade_venda').eq('clinica_id', clinicaId).order('criado_em', { ascending: false }).limit(5),
+        supabase.from('vendas').select('id,valor_total,criado_em,localidade_venda,pacientes(nome_completo),ordens_servico(numero_os)').eq('clinica_id', clinicaId).order('criado_em', { ascending: false }).limit(5),
       ]);
       setNotificationsData({ parcelas: parcelasRes.data || [], vendas: vendasRes.data || [] });
       const atrasadas = (parcelasRes.data || []).filter((p: any) => p.status !== 'pago' && new Date(p.data_vencimento) < new Date()).length;
@@ -233,14 +233,14 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             .or(`nome_completo.ilike.%${termo}%,cpf.ilike.%${termo}%`)
             .limit(3),
 
-          // 2) Vendas por localidade ou id parcial
-          supabase
-            .from("vendas")
-            .select("id, valor_total, localidade_venda, criado_em, perfis (nome)")
-            .eq("clinica_id", clinicaId)
-            .or(`localidade_venda.ilike.%${termo}%,id.ilike.%${termo}%`)
-            .order("criado_em", { ascending: false })
-            .limit(2),
+            // 2) Vendas por localidade ou id parcial (inclui paciente e OS)
+            supabase
+              .from("vendas")
+              .select("id, valor_total, localidade_venda, criado_em, pacientes (nome_completo), ordens_servico (numero_os)")
+              .eq("clinica_id", clinicaId)
+              .or(`localidade_venda.ilike.%${termo}%,id.ilike.%${termo}%`)
+              .order("criado_em", { ascending: false })
+              .limit(2),
 
           // 3) Estoque de armações
           supabase
@@ -419,16 +419,25 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                       {resultadosDB.vendas.length > 0 && (
                         <div className="mb-2 border-t border-slate-50 pt-2">
                           <p className="px-4 py-2 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Vendas</p>
-                          {resultadosDB.vendas.map((v) => (
-                            <SearchItem 
-                              key={v.id} 
-                              href={`/otica/vendas/${v.id}`} 
-                              title={`Venda ${v.id}`} 
-                              sub={`${v.localidade_venda || '-'} • R$ ${Number(v.valor_total ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})}`} 
-                              icon={<FileText size={14}/>} 
-                              color="bg-indigo-50 text-indigo-600" 
-                            />
-                          ))}
+                          {resultadosDB.vendas.map((v) => {
+                            const clienteNome = v.pacientes?.[0]?.nome_completo || v.cliente_nome || null;
+                            const osNum = v.ordens_servico?.[0]?.numero_os || null;
+                            const parts = [] as string[];
+                            if (osNum) parts.push(`OS: ${osNum}`);
+                            if (clienteNome) parts.push(`Cliente: ${clienteNome}`);
+                            parts.push(`R$ ${Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+                            const sub = parts.join(' • ');
+                            return (
+                              <SearchItem
+                                key={v.id}
+                                href={`/otica/vendas/${v.id}/visualizar`}
+                                title={`Venda ${v.id}`}
+                                sub={sub}
+                                icon={<FileText size={14} />}
+                                color="bg-indigo-50 text-indigo-600"
+                              />
+                            );
+                          })}
                         </div>
                       )}
 
@@ -589,14 +598,22 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   <hr className="my-2" />
                   <p className="text-[10px] font-black text-indigo-600 uppercase mb-2">Vendas</p>
                   {!notificationsLoading && notificationsData.vendas.length === 0 && <p className="text-xs text-slate-400">Nenhuma venda recente.</p>}
-                  {!notificationsLoading && notificationsData.vendas.map((v: any) => (
-                    <Link key={v.id} href={`/otica/vendas/${v.id}`} onClick={() => setNotificationsOpen(false)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
-                      <div className="flex-1">
-                        <p className="text-sm font-bold">R$ {Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        <p className="text-[10px] text-slate-400">{new Date(v.criado_em).toLocaleDateString('pt-BR')} • {v.localidade_venda || '-'}</p>
-                      </div>
-                    </Link>
-                  ))}
+                  {!notificationsLoading && notificationsData.vendas.map((v: any) => {
+                    const clienteNome = v.pacientes?.[0]?.nome_completo || v.cliente_nome || null;
+                    const osNum = v.ordens_servico?.[0]?.numero_os || null;
+                    const parts: string[] = [];
+                    if (osNum) parts.push(`OS: ${osNum}`);
+                    if (clienteNome) parts.push(`Cliente: ${clienteNome}`);
+                    parts.push(v.localidade_venda || '-');
+                    return (
+                      <Link key={v.id} href={`/otica/vendas/${v.id}/visualizar`} onClick={() => setNotificationsOpen(false)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
+                        <div className="flex-1">
+                          <p className="text-sm font-bold">R$ {Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-[10px] text-slate-400">{new Date(v.criado_em).toLocaleDateString('pt-BR')} • {parts.join(' • ')}</p>
+                        </div>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -80,6 +80,12 @@ export default function DashboardLayout({
   const mainRef = useRef<HTMLDivElement | null>(null);
   const shortcutsPosRef = useRef<{ x: number; y: number } | null>(null);
 
+  // Toggle para desabilitar temporariamente barras fixas enquanto repensamos o layout
+  // Restaurado: habilitar barras fixas para mostrar sidebar (mas por enquanto ocultar bottom-nav)
+  const useFixedBars = true;
+  // Controla apenas a bottom navigation móvel
+  const showBottomNav = false;
+
   useEffect(() => {
     async function initLayout() {
       setMounted(true);
@@ -302,16 +308,18 @@ export default function DashboardLayout({
         <SyncProvider>
           <div className="min-h-screen bg-transparent">
           <KeyboardShortcuts />
-        <FocusContext.Consumer>
+          <FocusContext.Consumer>
           {(ctx) =>
-            ctx?.isFocusMode ? null : (
+            ctx?.isFocusMode || !useFixedBars ? null : (
               <aside className="fixed left-3 top-5 hidden h-[calc(100vh-40px)] w-64 flex-col rounded-[40px] border border-slate-100 bg-white/95 p-5 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)] backdrop-blur md:flex">
                 <div className="mb-10 flex items-center gap-3">
-                  {logoSistema ? (
-                    <img src={logoSistema} alt={nomeSistema || "OptoVendas"} className="h-24 w-auto object-contain" />
-                  ) : (
-                    <h1 className="text-2xl font-black tracking-tight text-slate-900" style={{ color: corPrimaria }}>{nomeSistema || "OptoVendas"}</h1>
-                  )}
+                  <Link href="/dashboard" className="inline-flex items-center">
+                    {logoSistema ? (
+                      <img src={logoSistema} alt={nomeSistema || "OptoVendas"} className="h-24 w-auto object-contain" />
+                    ) : (
+                      <h1 className="text-2xl font-black tracking-tight text-slate-900" style={{ color: corPrimaria }}>{nomeSistema || "OptoVendas"}</h1>
+                    )}
+                  </Link>
                 </div>
 
                 <nav className="flex-1 overflow-y-auto space-y-2 pr-2">
@@ -529,7 +537,7 @@ export default function DashboardLayout({
           }
         </FocusContext.Consumer>
 
-        {ctx?.isFocusMode ? null : (
+        {ctx?.isFocusMode || !showBottomNav ? null : (
           <nav className="fixed bottom-0 left-0 right-0 z-40 grid grid-cols-4 border-t border-slate-200/80 bg-white/95 backdrop-blur md:hidden shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.05)]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
 
             {/* 1. INÍCIO (Inteligente) */}
