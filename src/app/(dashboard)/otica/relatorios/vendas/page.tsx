@@ -80,7 +80,7 @@ export default function RelatorioVendasPage() {
       
       const matchCidade = cidadeFiltro === "todas" || v.localidade_venda === cidadeFiltro || cliente?.cidade_atendimento === cidadeFiltro;
       
-      const dataVenda = new Date(v.criado_em).toISOString().split('T')[0];
+      const dataVenda = (v.data_venda || v.dataVenda || v.criado_em) ? new Date(v.data_venda || v.dataVenda || v.criado_em).toISOString().split('T')[0] : '';
       const matchData = (!dataInicio || dataVenda >= dataInicio) && (!dataFim || dataVenda <= dataFim);
 
       return matchBusca && matchCidade && matchData;
@@ -202,7 +202,7 @@ export default function RelatorioVendasPage() {
               ) : vendasFiltradas.map((v) => (
                 <tr key={v.id} className={`group hover:bg-slate-50/80 transition-all ${v.status_financeiro === 'cancelado' ? 'opacity-60 bg-slate-50/30' : ''}`}>
                   <td className="px-8 py-6">
-                    <p className="font-black text-sm text-slate-800">{new Date(v.criado_em).toLocaleDateString('pt-BR')}</p>
+                    <p className="font-black text-sm text-slate-800">{new Date(v.data_venda || v.dataVenda || v.criado_em).toLocaleDateString('pt-BR')}</p>
                     <p className="text-[10px] font-bold text-cyan-600 uppercase">OS #{v.ordens_servico?.[0]?.numero_os || 'N/D'}</p>
                   </td>
                   <td className="px-8 py-6">

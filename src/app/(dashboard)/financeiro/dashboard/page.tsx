@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   ArrowUpRight,
   Calendar,
-  CheckCircle2,
   Clock,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -83,22 +82,30 @@ function diasAtraso(vencimento: string) {
 export default function DashboardFinanceiroPage() {
   const [rows, setRows] = useState<InstallmentRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(""); // formato YYYY-MM
   const [origem, setOrigem] = useState<"todos" | "interno" | "externo">("todos");
+  const [fluxo, setFluxo] = useState<any[]>([]);
 
   useEffect(() => {
     async function carregar() {
       setLoading(true);
       try {
         const ctx = await resolveClinicaContext();
-        const { data } = await supabase
-          .from("installments")
-          .select("id, valor_parcela, vencimento, status, pago_em, payments(vendas(localidade_venda))")
-          .eq("clinica_id", ctx.clinicaId)
-          .order("vencimento", { ascending: true });
+        const [{ data: instData }, { data: fluxoData }] = await Promise.all([
+          supabase
+            .from("installments")
+            .select("id, valor_parcela, vencimento, status, pago_em, payments(vendas(localidade_venda))")
+            .eq("clinica_id", ctx.clinicaId)
+            .order("vencimento", { ascending: true }),
+          supabase
+            .from("fluxo_caixa")
+            .select("valor, tipo, localidade, criado_em, data_movimento")
+            .eq("clinica_id", ctx.clinicaId)
+            .order("criado_em", { ascending: false }),
+        ]);
 
-        setRows((data as InstallmentRow[]) ?? []);
+        setRows((instData as InstallmentRow[]) ?? []);
+        setFluxo(fluxoData || []);
       } finally {
         setLoading(false);
       }
@@ -115,11 +122,25 @@ export default function DashboardFinanceiroPage() {
 
     let aReceberMes = 0;
     let vencidosTotal = 0;
-    let recebidoHoje = 0;
+    let recebidoPeriodo = 0;
 
     let c1a10 = 0;
     let c11a30 = 0;
     let c31Mais = 0;
+
+    // define período a partir do filtro de mês (ou mês atual quando vazio)
+    let periodStart: Date;
+    let periodEnd: Date;
+    if (selectedMonth) {
+      const [yStr, mStr] = selectedMonth.split('-');
+      const y = Number(yStr || ano);
+      const m = Number(mStr || (mes + 1));
+      periodStart = new Date(y, m - 1, 1, 0, 0, 0);
+      periodEnd = new Date(y, m, 0, 23, 59, 59);
+    } else {
+      periodStart = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      periodEnd = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59);
+    }
 
     rows.forEach((r) => {
       const pay = Array.isArray(r.payments) ? r.payments[0] : r.payments;
@@ -128,8 +149,8 @@ export default function DashboardFinanceiroPage() {
       const origemOk = origem === "todos" || (origem === "externo" ? isExterno : !isExterno);
 
       const vencDate = new Date(r.vencimento);
-      const inicioOk = !dataInicio || vencDate >= new Date(`${dataInicio}T00:00:00`);
-      const fimOk = !dataFim || vencDate <= new Date(`${dataFim}T23:59:59`);
+      const inicioOk = vencDate >= periodStart;
+      const fimOk = vencDate <= periodEnd;
       if (!origemOk || !inicioOk || !fimOk) return;
 
       const valor = toNumber(r.valor_parcela);
@@ -152,22 +173,37 @@ export default function DashboardFinanceiroPage() {
 
       if (r.pago_em) {
         const pagoEm = new Date(r.pago_em);
-        if (pagoEm.toDateString() === hoje.toDateString()) {
-          recebidoHoje += valor;
+        if (!Number.isNaN(pagoEm.getTime()) && pagoEm >= periodStart && pagoEm <= periodEnd) {
+          recebidoPeriodo += valor;
         }
       }
     });
 
-    return { aReceberMes, vencidosTotal, recebidoHoje, c1a10, c11a30, c31Mais };
-  }, [rows, dataInicio, dataFim, origem]);
+    // soma entradas em fluxo_caixa no mesmo período
+    fluxo.forEach((f) => {
+      const tipo = (f.tipo || '').toString();
+      if (tipo !== 'entrada') return;
+      const dateStr = f.criado_em || f.data_movimento || f.data_movimento;
+      const d = new Date(dateStr);
+      if (Number.isNaN(d.getTime())) return;
+      if (d >= periodStart && d <= periodEnd) {
+        recebidoPeriodo += Number(f.valor || 0);
+      }
+    });
+
+    return { aReceberMes, vencidosTotal, recebidos: recebidoPeriodo, c1a10, c11a30, c31Mais };
+  }, [rows, selectedMonth, origem, fluxo]);
 
   const resumoFiltro = useMemo(() => {
     const partes: string[] = [];
     if (origem !== "todos") partes.push(origem === "externo" ? "Atendimento externo" : "Atendimento interno");
-    if (dataInicio) partes.push(`De ${new Date(`${dataInicio}T00:00:00`).toLocaleDateString("pt-BR")}`);
-    if (dataFim) partes.push(`Ate ${new Date(`${dataFim}T00:00:00`).toLocaleDateString("pt-BR")}`);
+    if (selectedMonth) {
+      const [y, m] = selectedMonth.split('-').map(Number);
+      const label = new Date(y, (m || 1) - 1, 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+      partes.push(`Mês ${label}`);
+    }
     return partes.length > 0 ? partes.join(" • ") : "Sem filtro ativo";
-  }, [origem, dataInicio, dataFim]);
+  }, [origem, selectedMonth]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
@@ -192,20 +228,11 @@ export default function DashboardFinanceiroPage() {
 
       <section className="grid grid-cols-1 items-end gap-3 rounded-[28px] border border-slate-100 bg-white p-5 shadow-sm md:grid-cols-4">
         <div>
-          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Data inicio</p>
+          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Mês</p>
           <input
-            type="date"
-            value={dataInicio}
-            onChange={(e) => setDataInicio(e.target.value)}
-            className="w-full rounded-xl border-none bg-slate-50 p-3 text-xs font-black text-slate-700"
-          />
-        </div>
-        <div>
-          <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Data fim</p>
-          <input
-            type="date"
-            value={dataFim}
-            onChange={(e) => setDataFim(e.target.value)}
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
             className="w-full rounded-xl border-none bg-slate-50 p-3 text-xs font-black text-slate-700"
           />
         </div>
@@ -224,8 +251,7 @@ export default function DashboardFinanceiroPage() {
         <button
           type="button"
           onClick={() => {
-            setDataInicio("");
-            setDataFim("");
+            setSelectedMonth("");
             setOrigem("todos");
           }}
           className="rounded-xl bg-slate-100 px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-600 hover:bg-slate-200"
@@ -253,9 +279,14 @@ export default function DashboardFinanceiroPage() {
           highlight
         />
         <IndicatorCard
-          label="Recebido Hoje"
-          value={brl(indicadores.recebidoHoje)}
-          icon={<CheckCircle2 className="text-emerald-500" />}
+          label="Recebidos"
+          value={brl(indicadores.recebidos)}
+          icon={
+            <svg className="text-emerald-500" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" strokeWidth="1.5" fill="none" />
+              <path d="M9 12.5l1.8 1.8L15 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            </svg>
+          }
           bgColor="bg-emerald-50"
         />
         <div className="rounded-[40px] border border-slate-50 p-8 shadow-sm bg-white">

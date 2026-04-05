@@ -70,6 +70,8 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   const formatBRL = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
   const nomeArquivo = `carne_vendas_${((pacienteInfo?.nome_completo) || data.cliente?.nome_completo || data.clienteManualNome || 'cliente').replace(/\s/g,'').replace(/[^\w-]/g,'')}.pdf`;
 
+  // (dataVenda moved to Step1Cliente)
+
   const { parcelas } = useMemo(() => {
     if (data.financeiro?.formaSaldo === 'crediario') {
       // IMPORTANTE: usar o valor líquido (após desconto) para gerar o cronograma
@@ -401,6 +403,31 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
         },
         parcelas: parcelas || [],
       };
+
+      // Localidade da venda: preferir campo explícito, senão cidade do cliente/manual
+      const localidadeVenda = (data as any).localidade_venda || (data as any).localidade || (data as any).financeiro?.localidade || data.cliente?.cidade_atendimento || data.clienteManualCidade || null;
+      if (localidadeVenda) (payload as any).localidade_venda = localidadeVenda;
+
+      // Determina status_pagamento e metodo_pagamento para compatibilidade e conciliação
+      const formaEntrada = data.financeiro?.formaEntrada || null;
+      const formaSaldo = data.financeiro?.formaSaldo || null;
+      let statusPagamentoCalculado = statusFinanceiroCalculado;
+      // Se a venda foi realizada via cartão (crédito ou débito) considerar como pago imediatamente
+      if (formaEntrada === 'debito' || formaEntrada === 'cartao' || formaSaldo === 'cartao') {
+        statusPagamentoCalculado = 'pago';
+      } else if (valorEntrada > 0 && formaSaldo === 'crediario') {
+        // Entrada dada e saldo em crediário -> parcial
+        statusPagamentoCalculado = 'pago_parcial';
+      } else if (saldoRestante <= 0) {
+        statusPagamentoCalculado = 'pago';
+      } else if (valorEntrada <= 0 && saldoRestante > 0) {
+        statusPagamentoCalculado = 'pendente';
+      }
+
+      // Escolhe método de pagamento preferencial: entrada primeiro, senão saldo
+      const metodoPagamento = formaEntrada || formaSaldo || null;
+      (payload as any).status_pagamento = statusPagamentoCalculado;
+      (payload as any).metodo_pagamento = metodoPagamento;
 
       // Incluir detalhes da OS para que o endpointFinalize os persista em ordens_servico
       const armacaoIdPayload = (data as any).armacaoId || (data as any).armacao_id || null;
@@ -771,6 +798,8 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
       {/* COLUNA DIREITA: DOCUMENTOS E ANEXOS */}
       <div className="space-y-6">
         {/* DOCUMENTAÇÃO */}
+        {/* dataVenda input moved to Step1Cliente */}
+
         <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-4">
            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-2"><Signature className="text-blue-500"/> Documentação</h2>
            

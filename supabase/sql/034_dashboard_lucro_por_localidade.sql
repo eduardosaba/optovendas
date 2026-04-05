@@ -18,7 +18,12 @@ BEGIN
   RETURN QUERY
   WITH receitas AS (
     SELECT
-      NULLIF(BTRIM(COALESCE(v.localidade_venda, p.cidade_atendimento, '')), '') AS loc,
+      CASE
+        WHEN lower(BTRIM(COALESCE(v.localidade_venda, ''))) NOT IN ('', 'geral') THEN BTRIM(v.localidade_venda)
+        WHEN lower(BTRIM(COALESCE(v.localidade, ''))) NOT IN ('', 'geral') THEN BTRIM(v.localidade)
+        WHEN lower(BTRIM(COALESCE(p.cidade_atendimento, ''))) NOT IN ('', 'geral') THEN BTRIM(p.cidade_atendimento)
+        ELSE NULL
+      END AS loc,
       SUM(COALESCE(v.valor_final, v.valor_total, 0))::DECIMAL AS valor
     FROM vendas v
     LEFT JOIN pacientes p ON p.id = v.paciente_id
@@ -28,7 +33,10 @@ BEGIN
   ),
   despesas AS (
     SELECT
-      NULLIF(BTRIM(COALESCE(cp.localidade, '')), '') AS loc,
+      CASE
+        WHEN lower(BTRIM(COALESCE(cp.localidade, ''))) NOT IN ('', 'geral') THEN BTRIM(cp.localidade)
+        ELSE NULL
+      END AS loc,
       SUM(COALESCE(cp.valor_total, 0))::DECIMAL AS valor
     FROM contas_a_pagar cp
     WHERE cp.clinica_id = p_clinica_id

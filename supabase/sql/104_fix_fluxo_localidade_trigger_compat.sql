@@ -11,6 +11,9 @@ AS $$
 DECLARE
   v_valor NUMERIC(12,2);
   v_localidade TEXT;
+  v_numero_os TEXT;
+  v_paciente_nome TEXT;
+  v_descricao TEXT;
 BEGIN
   v_valor := COALESCE(NEW.valor_final, NEW.valor_total, 0);
 
@@ -24,6 +27,19 @@ BEGIN
     to_jsonb(NEW)->>'localidade_venda',
     'Geral'
   );
+
+  v_numero_os := COALESCE(to_jsonb(NEW)->>'numero_os_manual', to_jsonb(NEW)->>'numero_os', '');
+  SELECT p.nome_completo INTO v_paciente_nome FROM pacientes p WHERE p.id = (to_jsonb(NEW)->>'paciente_id')::uuid;
+
+  IF v_numero_os IS NOT NULL AND trim(v_numero_os) <> '' AND v_paciente_nome IS NOT NULL THEN
+    v_descricao := format('Entrada venda OS #%s — %s', v_numero_os, v_paciente_nome);
+  ELSIF v_numero_os IS NOT NULL AND trim(v_numero_os) <> '' THEN
+    v_descricao := format('Entrada venda OS #%s', v_numero_os);
+  ELSIF v_paciente_nome IS NOT NULL THEN
+    v_descricao := format('Entrada venda — %s', v_paciente_nome);
+  ELSE
+    v_descricao := 'Entrada automatica gerada pela venda';
+  END IF;
 
   INSERT INTO fluxo_caixa (
     clinica_id,
@@ -40,7 +56,7 @@ BEGIN
     'entrada',
     'venda_automatica',
     NEW.id,
-    'Entrada automatica gerada pela venda',
+    v_descricao,
     v_valor,
     v_localidade,
     CURRENT_DATE

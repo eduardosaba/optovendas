@@ -18,11 +18,11 @@ import { NumericFormat } from 'react-number-format';
 type LancamentoPendente = {
   id: string;
   data_movimento: string;
-  valor_bruto: number;
-  valor: number;
-  descricao: string;
-  localidade: string;
-  conta_id: string;
+  valor_bruto?: number | null;
+  valor?: number | null;
+  descricao?: string | null;
+  localidade?: string | null;
+  conta_id?: string | null;
 };
 
 export default function ConciliacaoPage() {
@@ -31,6 +31,8 @@ export default function ConciliacaoPage() {
   const [lancamentos, setLancamentos] = useState<LancamentoPendente[]>([]);
   const [itemSelecionado, setItemSelecionado] = useState<LancamentoPendente | null>(null);
   const [valorLiquido, setValorLiquido] = useState<number>(0);
+  const [contas, setContas] = useState<Array<{ id: string; descricao?: string; saldo_atual?: number }>>([]);
+  const [selectedContaId, setSelectedContaId] = useState<string | null>(null);
 
   useEffect(() => { carregarPendencias(); }, []);
 
@@ -38,15 +40,56 @@ export default function ConciliacaoPage() {
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
-      const { data, error } = await supabase
-        .from("fluxo_caixa")
-        .select("*")
-        .eq("clinica_id", ctx.clinicaId)
-        .eq("status_conciliacao", "pendente")
-        .order("data_movimento", { ascending: true });
+      const [fluxoRes, contasRes] = await Promise.all([
+        supabase
+          .from("fluxo_caixa")
+          .select("*")
+          .eq("clinica_id", ctx.clinicaId)
+          .eq("status_conciliacao", "pendente")
+          .order("data_movimento", { ascending: true }),
+        supabase.from("conta_corrente").select("id, descricao, saldo_atual").eq("clinica_id", ctx.clinicaId),
+      ]);
 
-      if (error) throw error;
-      setLancamentos(data || []);
+      if (fluxoRes.error) throw fluxoRes.error;
+      const fluxos = fluxoRes.data || [];
+      setLancamentos(fluxos);
+
+      // tentar enriquecer descrições com dados da venda/OS/cliente quando disponíveis
+      try {
+        const vendaIds = Array.from(new Set(fluxos.map((f: any) => f.venda_id).filter(Boolean)));
+        if (vendaIds.length > 0) {
+          const { data: vendasData } = await supabase
+            .from("vendas")
+            .select("id, ordens_servico(numero_os), pacientes(nome_completo, apelido)")
+            .in("id", vendaIds);
+
+          const vendaMap: Record<string, any> = {};
+          (vendasData || []).forEach((v: any) => { vendaMap[v.id] = v; });
+
+          setLancamentos((prev: any) => (prev || []).map((it: any) => {
+            const v = vendaMap[it.venda_id];
+            if (!v) return it;
+            const os = v.ordens_servico?.[0]?.numero_os;
+            const paciente = Array.isArray(v.pacientes) ? v.pacientes[0] : v.pacientes;
+            const nome = paciente?.nome_completo || paciente?.nome || "";
+            const apelido = paciente?.apelido || "";
+            const nomeDisplay = apelido || nome || null;
+
+            const parts: string[] = [];
+            if (os) parts.push(`OS: ${os}`);
+            if (nomeDisplay) parts.push(`Cliente: ${nomeDisplay}`);
+
+            const existing = it.descricao ? String(it.descricao).trim() : "";
+            const combined = parts.length > 0 ? `${parts.join(" • ")}${existing ? " • " + existing : ""}` : existing || it.descricao;
+            return { ...it, descricao: combined };
+          }));
+        }
+      } catch (e) {
+        // não bloquear a listagem por falha no enriquecimento
+        console.warn("Falha ao enriquecer descrições de conciliação:", e);
+      }
+      setContas(contasRes.data || []);
+      if (!selectedContaId && (contasRes.data || []).length > 0) setSelectedContaId((contasRes.data || [])[0].id);
     } catch {
       toast.error("Erro ao carregar pendências de cartão.");
     } finally {
@@ -56,33 +99,56 @@ export default function ConciliacaoPage() {
 
   async function confirmarConciliacao() {
     if (!itemSelecionado || valorLiquido <= 0) return;
-    const taxa = Number((itemSelecionado.valor_bruto - valorLiquido).toFixed(2));
+    const bruto = Number(itemSelecionado.valor_bruto ?? itemSelecionado.valor ?? 0);
+    const taxa = Number((bruto - valorLiquido).toFixed(2));
     if (taxa < 0) {
       toast.info("O valor líquido não pode ser maior que o bruto.");
       return;
     }
 
     try {
-      const { error: errorFluxo } = await supabase
-        .from("fluxo_caixa")
-        .update({ valor: valorLiquido, taxa_cartao: taxa, status_conciliacao: "concluido" })
-        .eq("id", itemSelecionado.id);
+      const contaIdToUse = selectedContaId || itemSelecionado.conta_id || null;
+
+      // preencher metodo_pagamento se disponível no lançamento ou usar 'cartao' como fallback
+      const metodo = (itemSelecionado as any).metodo_pagamento || 'cartao';
+
+      // determinar localidade: preferir a localidade do item, senão usar a descrição ou a conta como fallback
+      let localidadeToUse = itemSelecionado.localidade || null;
+      if (!localidadeToUse) {
+        const desc = (itemSelecionado.descricao || '').toString();
+        if (desc.includes('•')) localidadeToUse = desc.split('•')[0].trim();
+      }
+      if (!localidadeToUse && contaIdToUse) {
+        // tentativa leve: buscar descrição da conta já carregada
+        const found = (contas || []).find((c) => c.id === contaIdToUse);
+        if (found) localidadeToUse = found.descricao || null;
+      }
+
+      const updatePayload: any = {
+        valor: valorLiquido,
+        taxa_cartao: taxa,
+        status_conciliado: true,
+        status_conciliacao: 'concluido', // compatibilidade legada
+        conta_id: contaIdToUse,
+        metodo_pagamento: metodo,
+      };
+      if (localidadeToUse) updatePayload.localidade = localidadeToUse;
+
+      const { error: errorFluxo } = await supabase.from('fluxo_caixa').update(updatePayload).eq('id', itemSelecionado.id);
       if (errorFluxo) throw errorFluxo;
 
-      const { data: conta } = await supabase
-        .from("conta_corrente")
-        .select("saldo_atual")
-        .eq("id", itemSelecionado.conta_id)
-        .single();
-
-      const novoSaldo = (conta?.saldo_atual || 0) + valorLiquido;
-      await supabase.from("conta_corrente").update({ saldo_atual: novoSaldo }).eq("id", itemSelecionado.conta_id);
+      if (contaIdToUse) {
+        const { data: conta } = await supabase.from('conta_corrente').select('saldo_atual').eq('id', contaIdToUse).single();
+        const novoSaldo = (conta?.saldo_atual || 0) + valorLiquido;
+        await supabase.from('conta_corrente').update({ saldo_atual: novoSaldo }).eq('id', contaIdToUse);
+      }
 
       toast.success(`Conciliado! Taxa de ${brl(taxa)} registrada.`);
       setItemSelecionado(null);
       carregarPendencias();
-    } catch {
-      toast.error("Erro ao processar conciliação.");
+    } catch (err) {
+      console.error('Erro na conciliação:', err);
+      toast.error('Erro ao processar conciliação.');
     }
   }
 
@@ -114,7 +180,7 @@ export default function ConciliacaoPage() {
             lancamentos.map((item) => (
               <button
                 key={item.id}
-                onClick={() => { setItemSelecionado(item); setValorLiquido(Number(item.valor_bruto || item.valor || 0)); }}
+                onClick={() => { setItemSelecionado(item); setValorLiquido(Number(item.valor_bruto || item.valor || 0)); setSelectedContaId(item.conta_id || (contas[0]?.id ?? null)); }}
                 className={`w-full flex items-center justify-between p-6 bg-white rounded-[32px] border transition-all hover:shadow-md ${itemSelecionado?.id === item.id ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-50'}`}
               >
                 <div className="flex items-center gap-4">
@@ -138,6 +204,19 @@ export default function ConciliacaoPage() {
                 <div>
                   <label className="text-[10px] font-black uppercase text-slate-500">Valor Bruto da Venda</label>
                   <p className="text-2xl font-black">{brl(Number(itemSelecionado.valor_bruto || itemSelecionado.valor || 0))}</p>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500">Conta de Destino</label>
+                  <select
+                    value={selectedContaId ?? (itemSelecionado.conta_id ?? "")}
+                    onChange={(e) => setSelectedContaId(e.target.value)}
+                    className="w-full p-2 rounded border mt-2 text-slate-800"
+                  >
+                    {(contas.length ? contas : [{ id: itemSelecionado.conta_id || '', descricao: 'Conta' }]).map((c) => (
+                      <option key={c.id} value={c.id}>{c.descricao || c.id}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

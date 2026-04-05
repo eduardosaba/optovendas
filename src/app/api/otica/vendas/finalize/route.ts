@@ -167,6 +167,8 @@ export async function POST(request: Request) {
         localidade_venda: localidade_venda || financeiro?.cidade || 'Geral',
         // Persistir também na coluna `localidade` (algumas versões do schema usam esse nome)
         localidade: localidade_venda || cliente?.cidade_atendimento || body.clienteManualCidade || body.cliente_manual_cidade || financeiro?.cidade || 'Geral',
+        // data real da venda (opcional) — aceita data_venda ou dataVenda do frontend
+        data_venda: body.data_venda || body.dataVenda || (body.criado_em ? (String(body.criado_em).split('T')[0]) : null),
         status_financeiro: statusFinanceiroFinal,
         status_pagamento: statusPagamentoFinal,
         // campo status padrão (compatibilidade com sync endpoint)

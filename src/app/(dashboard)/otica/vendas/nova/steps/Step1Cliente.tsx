@@ -182,6 +182,16 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
           </button>
         </div>
 
+        <div className="mt-4">
+          <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Data da Venda (opcional)</label>
+          <input
+            type="date"
+            value={data.dataVenda || ''}
+            onChange={(e) => onChange({ ...data, dataVenda: e.target.value })}
+            className="mt-2 w-full bg-slate-50 rounded-[20px] p-4 font-bold text-slate-700"
+          />
+        </div>
+
         {!data.vendaManual ? (
           <>
             <div className="space-y-2">

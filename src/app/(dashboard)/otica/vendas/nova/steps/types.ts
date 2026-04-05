@@ -89,6 +89,7 @@ export type ReceitaManualData = {
 
 export type VendaData = {
   id?: string;
+  dataVenda?: string;
   vendaManual: boolean;
   clienteManualNome: string;
   clienteManualCpf: string;

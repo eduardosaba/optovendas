@@ -53,7 +53,7 @@ export default function ClienteHistoricoPage() {
 
   const resumoFinanceiro = useMemo(() => {
     const validas = vendas.filter(v => v.status_financeiro !== 'cancelado');
-    const total = validas.reduce((acc, v) => acc + Number(v.valor_total || 0), 0);
+    const total = validas.reduce((acc, v) => acc + Number(v.valor_final || 0), 0);
     const pendentes = validas.filter(v => v.status_financeiro === 'pendente').length;
     return { total, pendentes };
   }, [vendas]);
@@ -120,11 +120,11 @@ export default function ClienteHistoricoPage() {
                            </span>
                         </div>
                         <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
-                          Venda em: {new Date(v.criado_em).toLocaleDateString()} • {v.tipo_fechamento}
+                          Venda em: {new Date(v.criado_em).toLocaleDateString()} • {v.tipo_fechamento} • {v.localidade || v.localidade_venda || '---'}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-black text-slate-900">{brl(v.valor_total)}</p>
+                        <p className="text-lg font-black text-slate-900">{brl(Number(v.valor_final || 0))}</p>
                         <Link href={`/otica/vendas/${v.id}/visualizar`} className="text-[10px] font-black text-cyan-600 uppercase hover:underline">Ver Detalhes</Link>
                       </div>
                     </div>

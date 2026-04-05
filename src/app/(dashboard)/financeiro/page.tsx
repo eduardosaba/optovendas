@@ -16,6 +16,7 @@ import {
   Target,
   Wallet,
   TrendingUp,
+  CheckCircle2,
   Percent,
 } from "lucide-react";
 import { ReactNode } from "react";
@@ -54,6 +55,8 @@ export default function FinanceiroPage() {
   const [consultasCount, setConsultasCount] = useState(0);
   const [valorVendasMes, setValorVendasMes] = useState(0);
   const [fluxoCaixa, setFluxoCaixa] = useState<any[]>([]);
+  const [vendasMesData, setVendasMesData] = useState<any[]>([]);
+  const [vendasForRanking, setVendasForRanking] = useState<any[]>([]);
 
   useEffect(() => {
     async function carregarIndicadores() {
@@ -64,11 +67,20 @@ export default function FinanceiroPage() {
         // Formata sem milissegundos para compatibilidade com PostgREST
         const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('.')[0] + 'Z';
         async function countSince(tableName: string) {
-          // tenta `criado_em` e faz fallback para `created_at` caso a coluna não exista no esquema remoto
-          // build a fresh query for each attempt to avoid stacking filters
+          // tenta `data_venda` para vendas e faz fallback para `criado_em`/`created_at` caso as colunas não existam
+          if (tableName === 'vendas') {
+            let res = await supabase.from(tableName).select('id', { count: 'exact' }).eq('clinica_id', ctx.clinicaId).gte('data_venda', primeiroDiaMes);
+            if (res.error && /data_venda|column .* does not exist/i.test(String(res.error.message || res.error))) {
+              res = await supabase.from(tableName).select('id', { count: 'exact' }).eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes);
+              if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
+                res = await supabase.from(tableName).select('id', { count: 'exact' }).eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes);
+              }
+            }
+            return res;
+          }
+
           let res = await supabase.from(tableName).select('id', { count: 'exact' }).eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes);
           if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
-            // rebuild the query and try the standard `created_at` column
             res = await supabase.from(tableName).select('id', { count: 'exact' }).eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes);
           }
           return res;
@@ -90,27 +102,28 @@ export default function FinanceiroPage() {
         setConsultasCount(consultasRes?.count || 0);
         setFluxoCaixa(fluxoRes.data || []);
 
-        // soma do valor total vendido no mês — tenta colunas diferentes e evita erro se alguma coluna não existir
-        let vendasMesData: any[] = [];
-
-        // tentativa 1: buscar 'valor_total' (com fallback de 'criado_em' -> 'created_at')
-        let res: any = await supabase.from('vendas').select('valor_total,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes);
-        if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
-          res = await supabase.from('vendas').select('valor_total,created_at').eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes);
-        }
-        if (!res.error && res.data) vendasMesData = res.data;
-
-        // tentativa 2: se não encontrou registros, tentar coluna 'valor' (alguns schemas usam esse campo)
-        if ((!vendasMesData || vendasMesData.length === 0)) {
-          let res2: any = await supabase.from('vendas').select('valor,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes);
-          if (res2.error && /criado_em|column .* does not exist/i.test(String(res2.error.message || res2.error))) {
-            res2 = await supabase.from('vendas').select('valor,created_at').eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes);
+        // soma do valor final vendido no mês — usar estritamente `valor_final`
+        let vendasMesDataLocal: any[] = [];
+        let res: any = await supabase.from('vendas').select('valor_final,data_venda,criado_em,localidade,localidade_venda').eq('clinica_id', ctx.clinicaId).gte('data_venda', primeiroDiaMes);
+        if (res.error && /data_venda|column .* does not exist/i.test(String(res.error.message || res.error))) {
+          res = await supabase.from('vendas').select('valor_final,criado_em,localidade,localidade_venda').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes);
+          if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
+            res = await supabase.from('vendas').select('valor_final,created_at,localidade,localidade_venda').eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes);
           }
-          if (!res2.error && res2.data) vendasMesData = res2.data;
         }
+        if (!res.error && res.data) vendasMesDataLocal = res.data;
 
-        const somaVendas = (vendasMesData || []).reduce((s: number, r: any) => s + Number(r.valor_total ?? r.valor ?? 0), 0);
+        setVendasMesData(vendasMesDataLocal || []);
+        const somaVendas = (vendasMesDataLocal || []).reduce((s: number, r: any) => s + Number(r.valor_final ?? 0), 0);
         setValorVendasMes(somaVendas || 0);
+
+        // busca fallback para ranking: últimas 500 vendas (sem filtro de mês)
+        try {
+          const allVendasRes = await supabase.from('vendas').select('id,valor_final,data_venda,criado_em,localidade,localidade_venda').eq('clinica_id', ctx.clinicaId).order('data_venda', { ascending: false }).limit(500);
+          if (!allVendasRes.error && allVendasRes.data) setVendasForRanking(allVendasRes.data || []);
+        } catch (e) {
+          // ignore fallback errors
+        }
 
       } catch {
         toast.error("Erro ao carregar inteligência financeira.");
@@ -157,14 +170,42 @@ export default function FinanceiroPage() {
       }
     });
 
-    // Ranking de Cidades (Mapa da Mina)
+    // Ranking de Cidades (Mapa da Mina) — ignorar localidade vazia ou placeholder 'Geral'
     const cidadesMap: Record<string, number> = {};
-    fluxoCaixa.forEach(f => {
-      const loc = f.localidade || "Não Identificado";
+    fluxoCaixa.forEach((f) => {
+      const raw = (f.localidade ?? "").toString().trim();
+      const locLower = raw.toLowerCase();
+      if (!raw || locLower === "geral") return; // pular entradas sem localidade útil
+      const loc = raw;
       const val = Number(f.valor || 0);
+      const tipo = (f.tipo || "").toString().toLowerCase();
       if (!cidadesMap[loc]) cidadesMap[loc] = 0;
-      cidadesMap[loc] += f.tipo === 'entrada' ? val : -val;
+      cidadesMap[loc] += tipo === "entrada" ? val : -val;
     });
+
+    // Também agregar pelas vendas do mês — algumas entradas podem não ter localidade no fluxo_caixa
+    (vendasMesData || []).forEach((v) => {
+      const raw = (v.localidade ?? v.localidade_venda ?? "").toString().trim();
+      const locLower = raw.toLowerCase();
+      if (!raw || locLower === "geral") return;
+      const val = Number(v.valor_final || 0);
+      const loc = raw;
+      if (!cidadesMap[loc]) cidadesMap[loc] = 0;
+      cidadesMap[loc] += val;
+    });
+
+    // Se ainda não tiver cidades, usar fallback de vendas recentes (sem filtro por mês)
+    if (Object.keys(cidadesMap).length === 0) {
+      (vendasForRanking || []).forEach((v) => {
+        const raw = (v.localidade ?? v.localidade_venda ?? "").toString().trim();
+        const locLower = raw.toLowerCase();
+        if (!raw || locLower === "geral") return;
+        const val = Number(v.valor_final || 0);
+        const loc = raw;
+        if (!cidadesMap[loc]) cidadesMap[loc] = 0;
+        cidadesMap[loc] += val;
+      });
+    }
 
     const ranking = Object.entries(cidadesMap)
       .map(([cidade, lucro]) => ({ cidade, lucro }))
@@ -187,7 +228,8 @@ export default function FinanceiroPage() {
       qtdInadimplentes,
       valorVendidoMes,
     };
-  }, [installments, contasPagar, vendasCount, consultasCount, fluxoCaixa, valorVendasMes]);
+  }, [installments, contasPagar, vendasCount, consultasCount, fluxoCaixa, valorVendasMes, vendasMesData]);
+  
 
   return (
     <div className="mx-auto max-w-7xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
@@ -311,6 +353,14 @@ export default function FinanceiroPage() {
               desc="Resumo mensal por cidade com ranking de lucro líquido."
               icon={<Target size={24} />}
               colorClass="bg-emerald-800"
+            />
+
+            <MenuCard
+              href="/financeiro/conciliacao"
+              title="Conciliação de Recebimentos"
+              desc="Registrar valor líquido recebido após taxas e reconciliar com o caixa."
+              icon={<CheckCircle2 size={24} />}
+              colorClass="bg-cyan-600"
             />
 
             <MenuCard

@@ -60,6 +60,10 @@ export default function VisualizarVendaPage() {
 
   const os = venda.ordens_servico?.[0];
 
+  const subtotal = Number(venda.valor_total || 0);
+  const desconto = Number(venda.desconto || 0);
+  const totalLiquido = subtotal - desconto;
+
   return (
     <div className="mx-auto max-w-5xl p-6 md:p-10 space-y-8 animate-in fade-in duration-700 pb-20">
       
@@ -81,6 +85,9 @@ export default function VisualizarVendaPage() {
           <button onClick={() => window.print()} className="flex-1 md:flex-none p-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-xs uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
             <Printer size={18} /> Imprimir
           </button>
+          <Link href={`/financeiro/conciliacao?vendaId=${vendaId}`} className="flex-1 md:flex-none p-4 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-xs uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+            <CheckCircle2 size={18} /> Concilia
+          </Link>
           <Link href={`/otica/vendas/${vendaId}/editar`} className="flex-1 md:flex-none p-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase hover:bg-cyan-600 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-2">
             <Edit3 size={18} /> Editar Venda
           </Link>
@@ -177,18 +184,18 @@ export default function VisualizarVendaPage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center border-b border-white/10 pb-4">
                 <span className="text-xs text-slate-400 font-bold uppercase">Subtotal</span>
-                <span className="font-bold">{(Number(venda.valor_total) + Number(venda.desconto || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="font-bold">{subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
               
               <div className="flex justify-between items-center border-b border-white/10 pb-4">
                 <span className="text-xs text-rose-400 font-bold uppercase">Desconto</span>
-                <span className="font-bold text-rose-400">- {Number(venda.desconto || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                <span className="font-bold text-rose-400">- {desconto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
               </div>
 
               <div className="flex justify-between items-center pt-2">
                 <span className="text-sm font-black uppercase text-cyan-400">Total Líquido</span>
                 <span className="text-2xl font-black text-emerald-400">
-                  {Number(venda.valor_total).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {totalLiquido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
               </div>
             </div>
