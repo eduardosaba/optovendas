@@ -16,6 +16,7 @@ type ConsultaCidade = {
 type VendaCidade = {
   localidade_venda?: string | null;
   valor_total?: number | null;
+  valor_final?: number | null;
 };
 
 type LinhaRanking = {
@@ -116,7 +117,7 @@ export default function RankingCidadesPage() {
         faturamentoTotal: 0,
       };
       linha.vendasRealizadas += 1;
-      linha.faturamentoTotal += Number(v.valor_total || 0);
+      linha.faturamentoTotal += Number(v.valor_final ?? v.valor_total ?? 0);
       mapa.set(cidade, linha);
     }
 

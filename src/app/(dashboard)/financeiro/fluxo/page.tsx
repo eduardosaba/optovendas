@@ -42,8 +42,14 @@ function brl(v: number) {
 
 function parseDate(value?: string | null) {
   if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
+  // Extrai a parte de data se a string começar com YYYY-MM-DD (cobre '2025-10-31' e '2025-10-31T...')
+  const dateMatch = String(value).match(/^(\d{4}-\d{2}-\d{2})/);
+  if (dateMatch) {
+    const [y, m, d] = dateMatch[1].split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 function getCategoria(mov: FluxoRow) {
@@ -88,7 +94,7 @@ function exportarCsv(rows: FluxoRow[]) {
 export default function FluxoCaixaPage() {
   const [movimentacoes, setMovimentacoes] = useState<FluxoRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtroData, setFiltroData] = useState(new Date().toISOString().split("T")[0]);
+  const [filtroData, setFiltroData] = useState("");
   const [filtroBusca, setFiltroBusca] = useState("");
   const toast = useToast();
 
@@ -141,7 +147,8 @@ export default function FluxoCaixaPage() {
     return movimentacoesFiltradas.reduce(
       (acc, mov) => {
         const v = Number(mov.valor || 0);
-        if ((mov.tipo || "").toLowerCase() === "entrada") acc.entradas += v;
+        const tipo = (mov.tipo || "").toLowerCase().trim();
+        if (tipo === "entrada") acc.entradas += v;
         else acc.saidas += v;
         return acc;
       },

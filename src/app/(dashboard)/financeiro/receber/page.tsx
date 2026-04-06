@@ -23,13 +23,15 @@ import { NumericFormat } from 'react-number-format';
 
 type ParcelaRow = {
   id: string;
-  payment_id?: string;
+  venda_id?: string;
+  paciente_id?: string;
   numero_parcela: number;
   valor_parcela: number;
-  vencimento: string;
+  data_vencimento: string;
   status: string;
   localidade?: string;
-  payments?: any;
+  venda?: any;
+  paciente?: any;
 };
 
 function brl(v: number) {
@@ -45,6 +47,11 @@ function montarLinkWhatsapp(numero: string, mensagem: string) {
   if (!onlyDigits) return "";
   const withDdi = onlyDigits.startsWith("55") ? onlyDigits : `55${onlyDigits}`;
   return `https://wa.me/${withDdi}?text=${encodeURIComponent(mensagem)}`;
+}
+
+function pickOne<T = any>(value: any): T | null {
+  if (Array.isArray(value)) return (value[0] as T) || null;
+  return (value as T) || null;
 }
 
 export default function ReceberPage() {
@@ -98,29 +105,59 @@ export default function ReceberPage() {
 
   async function buscarDados(cid: string) {
     const { data, error } = await supabase
-      .from("installments")
+      .from("financeiro_parcelas")
       .select(`
         *,
-        payments (
-          metodo,
-          vendas (id, localidade_venda, ordens_servico (numero_os)),
-          pacientes (nome_completo, cidade_atendimento, celular)
+        venda:venda_id (
+          id,
+          localidade
+        ),
+        paciente:paciente_id (
+          nome_completo,
+          cidade_atendimento,
+          celular
         )
       `)
       .eq("clinica_id", cid)
       .in("status", ["pendente", "atrasado"])
-      .order("vencimento", { ascending: true });
+      .order("data_vencimento", { ascending: true });
 
     if (error) throw error;
-    setRows(data || []);
+
+    const baseRows = (data || []) as any[];
+    const vendaIds = Array.from(new Set(baseRows.map((r) => r.venda_id).filter(Boolean)));
+
+    let osByVendaId = new Map<string, any>();
+    if (vendaIds.length > 0) {
+      const { data: osData } = await supabase
+        .from('ordens_servico')
+        .select('venda_id, numero_os')
+        .in('venda_id', vendaIds);
+
+      osByVendaId = new Map((osData || []).map((o: any) => [o.venda_id, o]));
+    }
+
+    const normalized = baseRows.map((r: any) => {
+      const os = osByVendaId.get(r.venda_id);
+      const venda = pickOne(r.venda) || {};
+      return {
+        ...r,
+        venda: {
+          ...venda,
+          ordens_servico: os ? [{ numero_os: os.numero_os }] : [],
+        },
+      };
+    });
+
+    setRows(normalized);
   }
 
   const filtradas = useMemo(() => {
     return rows.filter((r) => {
-      const paciente = Array.isArray(r.payments?.pacientes) ? r.payments.pacientes[0] : r.payments?.pacientes;
-      const vendasRel = Array.isArray(r.payments?.vendas) ? r.payments.vendas[0] : r.payments?.vendas;
+      const paciente = pickOne(r.paciente);
+      const vendasRel = pickOne(r.venda);
       const nomeMatch = (paciente?.nome_completo || "").toLowerCase().includes(busca.toLowerCase());
-      const cidadeObtida = vendasRel?.localidade_venda || paciente?.cidade_atendimento || "Não informada";
+      const cidadeObtida = (vendasRel as any)?.localidade_venda || vendasRel?.localidade || paciente?.cidade_atendimento || "Não informada";
       const cidadeMatch = cidadeFiltro === "todas" || cidadeObtida === cidadeFiltro;
       return nomeMatch && cidadeMatch;
     });
@@ -128,9 +165,9 @@ export default function ReceberPage() {
 
   const listaCidades = useMemo(() => {
     const cidades = rows.map((r) => {
-      const vendasRel = Array.isArray(r.payments?.vendas) ? r.payments.vendas[0] : r.payments?.vendas;
-      const paciente = Array.isArray(r.payments?.pacientes) ? r.payments.pacientes[0] : r.payments?.pacientes;
-      return vendasRel?.localidade_venda || paciente?.cidade_atendimento;
+      const vendasRel = pickOne(r.venda);
+      const paciente = pickOne(r.paciente);
+      return (vendasRel as any)?.localidade_venda || vendasRel?.localidade || paciente?.cidade_atendimento;
     }).filter(Boolean);
     return Array.from(new Set(cidades));
   }, [rows]);
@@ -151,32 +188,34 @@ export default function ReceberPage() {
 
     setBaixandoId(parcelaSelecionada.id);
     const hoje = new Date().toISOString().slice(0, 10);
-    const paciente = Array.isArray(parcelaSelecionada.payments?.pacientes) ? parcelaSelecionada.payments.pacientes[0] : parcelaSelecionada.payments?.pacientes;
-    const vendasRel = Array.isArray(parcelaSelecionada.payments?.vendas) ? parcelaSelecionada.payments.vendas[0] : parcelaSelecionada.payments?.vendas;
-    const osNum = vendasRel?.ordens_servico?.[0]?.numero_os || '';
+    const paciente = pickOne(parcelaSelecionada.paciente);
+    const vendasRel = pickOne(parcelaSelecionada.venda);
+    const osRel = pickOne(vendasRel?.ordens_servico);
+    const osNum = osRel?.numero_os || '';
 
     try {
       const valorOriginal = Number(parcelaSelecionada.valor_parcela || 0);
       const diferenca = valorOriginal - Number(valorRecebido || 0);
 
       // 1. Atualiza a parcela atual como paga com o valor recebido
-      await supabase.from('installments').update({
+      await supabase.from('financeiro_parcelas').update({
         status: 'pago',
-        pago_em: hoje,
-        valor_pago: valorRecebido,
-        metodo_pagamento: metodoRecebimento,
+        data_pagamento: hoje,
+        forma_recebimento: metodoRecebimento,
       }).eq('id', parcelaSelecionada.id);
 
       // 2. Se for baixa parcial, cria parcela residual
       if (diferenca > 0.01) {
-        await supabase.from('installments').insert({
+        await supabase.from('financeiro_parcelas').insert({
           clinica_id: clinicaId,
-          payment_id: (parcelaSelecionada as any).payment_id,
+          venda_id: (parcelaSelecionada as any).venda_id || vendasRel?.id || null,
+          paciente_id: (parcelaSelecionada as any).paciente_id || paciente?.id || null,
           numero_parcela: parcelaSelecionada.numero_parcela,
           valor_parcela: diferenca,
-          vencimento: parcelaSelecionada.vencimento,
+          data_vencimento: parcelaSelecionada.data_vencimento,
           status: 'pendente',
-          descricao_interna: `Saldo devedor da parcela original de R$ ${valorOriginal}`,
+          localidade: (vendasRel as any)?.localidade_venda || vendasRel?.localidade || paciente?.cidade_atendimento || null,
+          forma_recebimento: null,
         });
       }
 
@@ -196,7 +235,7 @@ export default function ReceberPage() {
         descricao: `Receb. Parc ${parcelaSelecionada.numero_parcela} - ${paciente?.nome_completo}${osNum ? ` • OS ${osNum}` : ''}`,
         origem: 'crediario',
         metodo_pagamento: metodoRecebimento,
-        localidade: vendasRel?.localidade_venda || paciente?.cidade_atendimento,
+        localidade: (vendasRel as any)?.localidade_venda || vendasRel?.localidade || paciente?.cidade_atendimento,
         observacao: observacao,
         status_conciliado: false,
         data_movimento: hoje,
@@ -208,7 +247,16 @@ export default function ReceberPage() {
       await supabase.from('conta_corrente').update({ saldo_atual: novoSaldo }).eq('id', contaSelecionada);
 
       // prepara recibo
-      setDadosRecibo({ parcela: { ...parcelaSelecionada, valor_parcela: valorRecebido }, cliente: paciente, clinica: clinicaData });
+      setDadosRecibo({
+        parcela: {
+          ...parcelaSelecionada,
+          valor_parcela: valorRecebido,
+          // Compatibilidade com componentes legados que esperam `vencimento`
+          vencimento: parcelaSelecionada.data_vencimento,
+        },
+        cliente: paciente,
+        clinica: clinicaData,
+      });
       setShowModalRecibo(true);
       setShowModalBaixa(false);
       setRows((prev) => prev.filter((p) => p.id !== parcelaSelecionada.id));
@@ -222,7 +270,7 @@ export default function ReceberPage() {
   }
 
   function cobrarViaWhatsapp(row: ParcelaRow) {
-    const paciente = Array.isArray(row.payments?.pacientes) ? row.payments.pacientes[0] : row.payments?.pacientes;
+    const paciente = pickOne(row.paciente);
     const nome = paciente?.nome_completo || "cliente";
     const numero = paciente?.celular;
     if (!numero) return toast.info("Paciente sem telefone cadastrado para WhatsApp.");
@@ -290,8 +338,9 @@ export default function ReceberPage() {
           <div className="p-12 text-center bg-white rounded-[40px] border border-dashed border-slate-200"><p className="font-bold text-slate-400">Nenhuma parcela para esta rota/filtro.</p></div>
         ) : (
           filtradas.map((p) => {
-            const paciente = Array.isArray(p.payments?.pacientes) ? p.payments.pacientes[0] : p.payments?.pacientes;
-            const atrasada = new Date(p.vencimento) < new Date();
+            const paciente = pickOne(p.paciente);
+            const venda = pickOne(p.venda);
+            const atrasada = new Date(p.data_vencimento) < new Date();
 
             return (
               <div key={p.id} className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-white rounded-[32px] border border-slate-50 shadow-sm hover:shadow-md transition-all">
@@ -300,8 +349,8 @@ export default function ReceberPage() {
                   <div>
                     <h4 className="font-black text-slate-800">{paciente?.nome_completo}</h4>
                     <div className="flex flex-wrap gap-3 mt-1">
-                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><Calendar size={12} /> {new Date(p.vencimento).toLocaleDateString('pt-BR')}</span>
-                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><MapPin size={12} /> {(Array.isArray(p.payments?.vendas) ? p.payments.vendas[0]?.localidade_venda : p.payments?.vendas?.localidade_venda) || paciente?.cidade_atendimento}</span>
+                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><Calendar size={12} /> {new Date(p.data_vencimento).toLocaleDateString('pt-BR')}</span>
+                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><MapPin size={12} /> {(venda as any)?.localidade_venda || venda?.localidade || paciente?.cidade_atendimento}</span>
                     </div>
                   </div>
                 </div>

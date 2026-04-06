@@ -18,6 +18,7 @@ type VendaPendente = {
   id: string;
   criado_em?: string | null;
   valor_total?: number | null;
+  valor_final?: number | null;
   saldo_restante?: number | null;
   localidade_venda?: string | null;
   tipo_fechamento?: string | null;
@@ -215,7 +216,7 @@ export default function VendasPendentesPage() {
                       Venda #{venda.id.slice(0, 8)} • {paciente?.cidade_atendimento || venda.localidade_venda || "Local nao informado"}
                     </p>
                     <p className="text-xs font-bold text-slate-600">
-                      Total: R$ {Number(venda.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} • Saldo: R$ {Number(venda.saldo_restante || venda.valor_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      Total: R$ {Number(venda.valor_final ?? venda.valor_total ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} • Saldo: R$ {Number(venda.saldo_restante ?? venda.valor_final ?? venda.valor_total ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                     </p>
                     <p className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500">
                       <CalendarClock size={13} /> {venda.criado_em ? new Date(venda.criado_em).toLocaleDateString("pt-BR") : "Data indisponivel"}

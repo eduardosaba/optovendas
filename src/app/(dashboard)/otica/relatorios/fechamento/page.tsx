@@ -64,19 +64,77 @@ export default function FechamentoCaixaPage() {
       const deStr = de.toISOString().slice(0, 10);
       const ateStr = ate.toISOString().slice(0, 10);
 
-      let query: any = supabase
+      // buscar lançamentos do fluxo, incluindo referencia_id para evitar duplicatas
+      const fluxoQ = await supabase
         .from("fluxo_caixa")
-        .select("*")
+        .select("id,valor, tipo, localidade, referencia_id, origem, metodo_pagamento, descricao, data_movimento")
         .eq("clinica_id", ctx.clinicaId)
         .gte("data_movimento", deStr)
         .lte("data_movimento", ateStr)
         .eq("tipo", "entrada")
         .neq("status_conciliacao", "pendente");
 
-      const { data, error } = await query;
+      if (fluxoQ.error) throw fluxoQ.error;
+      const fluxoData = fluxoQ.data || [];
 
-      if (error) throw error;
-      setMovimentacoes(data || []);
+      // buscar vendas no intervalo (prefere data_venda, depois criado_em, depois created_at)
+      let vendasIntervalo: any[] = [];
+      try {
+        let vr: any = await supabase
+          .from('vendas')
+          .select('id,valor_final,data_venda,criado_em,localidade,localidade_venda,metodo_pagamento,tipo_fechamento,pacientes(nome_completo),ordens_servico(numero_os)')
+          .eq('clinica_id', ctx.clinicaId)
+          .gte('data_venda', deStr)
+          .lte('data_venda', ateStr)
+          .order('data_venda', { ascending: false });
+
+        if (vr.error && /data_venda|column .* does not exist/i.test(String(vr.error.message || vr.error))) {
+          vr = await supabase
+            .from('vendas')
+            .select('id,valor_final,criado_em,localidade,localidade_venda,metodo_pagamento,tipo_fechamento,pacientes(nome_completo),ordens_servico(numero_os)')
+            .eq('clinica_id', ctx.clinicaId)
+            .gte('criado_em', deStr)
+            .lte('criado_em', ateStr)
+            .order('criado_em', { ascending: false });
+
+          if (vr.error && /criado_em|column .* does not exist/i.test(String(vr.error.message || vr.error))) {
+            vr = await supabase
+              .from('vendas')
+              .select('id,valor_final,created_at,localidade,localidade_venda,metodo_pagamento,tipo_fechamento,pacientes(nome_completo),ordens_servico(numero_os)')
+              .eq('clinica_id', ctx.clinicaId)
+              .gte('created_at', deStr)
+              .lte('created_at', ateStr)
+              .order('created_at', { ascending: false });
+          }
+        }
+
+        if (!vr.error && vr.data) vendasIntervalo = vr.data;
+      } catch (e) {
+        // ignore vendas error and fallback to fluxo only
+      }
+
+      // evitar duplicatas: identificar vendas que já têm lançamento no fluxo via referencia_id
+      const fluxoRefs = new Set((fluxoData || []).map((f: any) => String(f.referencia_id)));
+      const vendasAsMov = (vendasIntervalo || []).map((v: any) => {
+      const paciente = v.pacientes && v.pacientes[0] ? v.pacientes[0].nome_completo : null;
+      const os = (v.ordens_servico && v.ordens_servico[0] ? v.ordens_servico[0].numero_os : null) || v.numero_os || v.numero_os_manual || null;
+      const descricao = os ? `Venda OS #${os} — ${paciente || ''}` : paciente ? `Venda — ${paciente}` : 'Venda';
+        return {
+          id: `v-${v.id}`,
+          descricao,
+          localidade: v.localidade || v.localidade_venda || '',
+          tipo: 'venda',
+          metodo_pagamento: v.metodo_pagamento || v.tipo_fechamento || null,
+          valor: v.valor_final || 0,
+          origem: 'venda',
+          referencia_id: v.id,
+          data_movimento: v.data_venda || v.criado_em || v.created_at || null,
+        };
+      }).filter((mv: any) => !fluxoRefs.has(String(mv.referencia_id)));
+
+      // mesclar: primeiro registros oficiais do fluxo, depois vendas que faltavam
+      const merged = (fluxoData || []).concat(vendasAsMov);
+      setMovimentacoes(merged || []);
     } catch {
       toast.error("Erro ao carregar dados de fechamento.");
     } finally {
@@ -238,6 +296,36 @@ export default function FechamentoCaixaPage() {
     }
   }
 
+  async function handleFecharDia() {
+    setLoading(true);
+    try {
+      const ctx = await resolveClinicaContext();
+      const payload = {
+        clinica_id: ctx.clinicaId,
+        data: dataFiltro,
+        resumo: {
+          dinheiro: resumo.dinheiro,
+          pix: resumo.pix,
+          cartao: resumo.cartao,
+          outros: resumo.outros,
+          total: resumo.total,
+        },
+        criado_em: new Date().toISOString(),
+      } as any;
+
+      const { error } = await supabase.from('fechamentos_rota').insert([payload]);
+      if (error) {
+        toast.error('Falha ao registrar fechamento. Verifique a migration no banco.');
+      } else {
+        toast.success('Fechamento registrado com sucesso.');
+      }
+    } catch (e) {
+      toast.error('Erro ao registrar fechamento.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl p-6 md:p-10 space-y-8 animate-in fade-in duration-700 pb-20">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
@@ -332,8 +420,8 @@ export default function FechamentoCaixaPage() {
             <p className="text-sm text-slate-500 leading-relaxed mb-6 font-medium">
               Confira se o valor em dinheiro vivo no bolso coincide com o total de <strong>{brl(resumo.dinheiro)}</strong>.
             </p>
-            <button className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-emerald-100">
-              Validar e Fechar Dia
+            <button onClick={handleFecharDia} disabled={loading} className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-emerald-100 disabled:opacity-60">
+              {loading ? 'Fechando...' : 'Validar e Fechar Dia'}
             </button>
           </div>
 

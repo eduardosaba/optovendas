@@ -13,6 +13,8 @@ import {
   ChevronRight,
   ClipboardList,
   TrendingUp,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import { MessageCircle } from 'lucide-react';
 import { enviarZap } from '@/lib/whatsapp-service';
@@ -26,9 +28,9 @@ export default function PacienteRichFichaPage() {
   const params = useParams<{ slug: string }>();
   const [loading, setLoading] = useState(true);
   const [paciente, setPaciente] = useState<any | null>(null);
-  const [historico, setHistorico] = useState<any>({ vendas: [], receitas: [], anexos: [], termos: [] });
+  const [historico, setHistorico] = useState<any>({ vendas: [], receitas: [], anexos: [], termos: [], financeiro: [] });
   const [erro, setErro] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'geral' | 'clinico' | 'vendas' | 'arquivos'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'clinico' | 'vendas' | 'financeiro' | 'arquivos'>('geral');
   const [showComMenu, setShowComMenu] = useState(false);
 
   const dadosGrafico = useMemo(() => {
@@ -72,23 +74,24 @@ export default function PacienteRichFichaPage() {
 
         async function fetchHistoricoCompat(table: string, pacienteId: string) {
           if (table === 'vendas') {
+            const selectStr = '*, ordens_servico(numero_os,status_os), pagamentos(*)';
             let res = await supabase
               .from('vendas')
-              .select('*, ordens_servico(numero_os,status_os)')
+              .select(selectStr)
               .eq('paciente_id', pacienteId)
               .order('criado_em', { ascending: false });
 
             if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
               res = await supabase
                 .from('vendas')
-                .select('*, ordens_servico(numero_os,status_os)')
+                .select(selectStr)
                 .eq('paciente_id', pacienteId)
                 .order('created_at', { ascending: false });
             }
             if (res.error && /created_at|column .* does not exist/i.test(String(res.error.message || res.error))) {
               res = await supabase
                 .from('vendas')
-                .select('*, ordens_servico(numero_os,status_os)')
+                .select(selectStr)
                 .eq('paciente_id', pacienteId)
                 .order('id', { ascending: false });
             }
@@ -135,12 +138,29 @@ export default function PacienteRichFichaPage() {
         setPaciente(currentPaciente);
 
         // 2. Buscar Todo o Ecossistema do Paciente (Receitas, Vendas, Arquivos, Termos)
-        const [rRes, vRes, aRes, tRes] = await Promise.all([
+        const [rRes, vResRaw, aRes, tRes, fRes] = await Promise.all([
           supabase.from('receitas_optometricas').select('*').eq('paciente_id', currentPaciente.id).order('data_exame', { ascending: false }),
           fetchHistoricoCompat('vendas', currentPaciente.id),
           fetchHistoricoCompat('paciente_arquivos', currentPaciente.id),
-          fetchHistoricoCompat('termos_aceite', currentPaciente.id)
+          fetchHistoricoCompat('termos_aceite', currentPaciente.id),
+          supabase
+            .from('fluxo_caixa')
+            .select('*, vendas(id, numero_os_manual, ordens_servico(numero_os))')
+            .eq('clinica_id', ctx.clinicaId)
+            .order('data_movimento', { ascending: false })
         ]);
+
+        let vRes = vResRaw;
+        if (!vRes?.error && (!vRes?.data || vRes.data.length === 0) && currentPaciente?.nome_completo) {
+          const fallbackByNome = await supabase
+            .from('vendas')
+            .select('*, ordens_servico(numero_os,status_os), pagamentos(*)')
+            .eq('paciente_nome', currentPaciente.nome_completo)
+            .order('id', { ascending: false });
+          if (!fallbackByNome.error && fallbackByNome.data?.length) {
+            vRes = fallbackByNome as any;
+          }
+        }
 
         // Normaliza campos de receitas retornadas: algumas instalações usam nomes diferentes
         const normalizeReceita = (row: any) => {
@@ -183,11 +203,15 @@ export default function PacienteRichFichaPage() {
           };
         };
 
+        const vendasIds = (vRes.data || []).map((v: any) => v.id);
+        const financeiroFiltrado = (fRes.data || []).filter((f: any) => vendasIds.includes(f.venda_id));
+
         setHistorico({
           receitas: (rRes.data || []).map(normalizeReceita),
           vendas: vRes.data || [],
           anexos: aRes.data || [],
-          termos: tRes.data || []
+          termos: tRes.data || [],
+          financeiro: financeiroFiltrado,
         });
 
         // imprimirReceita precisa de contexto da clínica; carregamos aqui em memória leve
@@ -328,7 +352,7 @@ export default function PacienteRichFichaPage() {
             <div className="space-y-4">
               <div>
                 <p className="text-[10px] opacity-60 uppercase font-bold">Total em Compras</p>
-                <p className="text-2xl font-black text-cyan-400">R$ {historico.vendas.reduce((acc: number, v: any) => acc + Number(v.valor_total || 0), 0).toLocaleString('pt-BR')}</p>
+                <p className="text-2xl font-black text-cyan-400">{historico.vendas.reduce((acc: number, v: any) => acc + Number(v.valor_final ?? v.valor_total ?? 0), 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
               </div>
               <div className="flex justify-between items-end border-t border-white/10 pt-4">
                 <div>
@@ -349,6 +373,7 @@ export default function PacienteRichFichaPage() {
             <TabBtn active={activeTab === 'geral'} onClick={() => setActiveTab('geral')} label="Timeline" icon={<Calendar size={14}/>} />
             <TabBtn active={activeTab === 'clinico'} onClick={() => setActiveTab('clinico')} label="Clínico" icon={<FileText size={14}/>} />
             <TabBtn active={activeTab === 'vendas'} onClick={() => setActiveTab('vendas')} label="Vendas & OS" icon={<ShoppingBag size={14}/>} />
+            <TabBtn active={activeTab === 'financeiro'} onClick={() => setActiveTab('financeiro')} label="Financeiro" icon={<Wallet size={14}/>} />
             <TabBtn active={activeTab === 'arquivos'} onClick={() => setActiveTab('arquivos')} label="Documentos" icon={<Paperclip size={14}/>} />
           </div>
 
@@ -378,12 +403,12 @@ export default function PacienteRichFichaPage() {
               {historico.vendas.map((v: any) => (
                 <TimelineItem 
                   key={v.id}
-                  title={`Venda Realizada - OS #${v.ordens_servico?.[0]?.numero_os || 'N/D'}`}
+                  title={`Venda Realizada - OS #${v.ordens_servico?.[0]?.numero_os || v.numero_os || v.numero_os_manual || 'N/D'}`}
                   date={formatDateSafe(v.criado_em || v.created_at)}
                   type="venda"
                   status={v.status_financeiro}
                   icon={<ShoppingBag className="text-emerald-500" />}
-                  link={`/clientes/${paciente.id}/historico`}
+                  link={`/otica/vendas/${v.id}/visualizar`}
                 />
               ))}
             </div>
@@ -406,7 +431,7 @@ export default function PacienteRichFichaPage() {
               ) : (
                 <div className="space-y-3">
                   {historico.vendas.map((v: any) => {
-                    const numeroOS = v.ordens_servico?.[0]?.numero_os || 'N/D';
+                    const numeroOS = v.ordens_servico?.[0]?.numero_os || v.numero_os || v.numero_os_manual || 'N/D';
                     return (
                       <div key={v.id} className="bg-white p-5 rounded-[28px] border border-slate-100 shadow-sm flex items-center justify-between gap-4">
                         <div>
@@ -418,9 +443,80 @@ export default function PacienteRichFichaPage() {
                           <p className="text-sm font-black text-emerald-700">
                             {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v.valor_final ?? v.valor_total ?? 0))}
                           </p>
-                          <Link href={`/clientes/${paciente.id}/historico`} className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase text-cyan-600 hover:text-cyan-800">
+                          <Link href={`/otica/vendas/${v.id}/visualizar`} className="mt-2 inline-flex items-center gap-1 text-[10px] font-black uppercase text-cyan-600 hover:text-cyan-800">
                             Ver venda <ChevronRight size={12} />
                           </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'financeiro' && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center justify-between px-2">
+                <h2 className="text-xl font-black text-slate-800 tracking-tight">Histórico de Pagamentos</h2>
+                <div className="flex gap-2">
+                  <span className="flex items-center gap-1 text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md uppercase">
+                    <CheckCircle2 size={10}/> Conciliado
+                  </span>
+                  <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-md uppercase">
+                    <Clock size={10}/> Pendente
+                  </span>
+                </div>
+              </div>
+
+              {historico.financeiro.length === 0 ? (
+                <div className="p-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+                  <Wallet size={48} className="mx-auto text-slate-100 mb-4" />
+                  <p className="font-bold text-slate-400 italic">Nenhum registro financeiro encontrado.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {historico.financeiro.map((f: any) => {
+                    const conciliado = Boolean(f.conciliado || f.status_conciliacao === 'concluido');
+                    const numeroOsFinanceiro =
+                      f.vendas?.ordens_servico?.[0]?.numero_os ||
+                      f.vendas?.numero_os_manual ||
+                      'S/N';
+
+                    return (
+                      <div key={f.id} className="bg-white p-5 rounded-[30px] border border-slate-100 shadow-sm relative overflow-hidden group hover:border-emerald-200 transition-all">
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${conciliado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2.5 rounded-xl ${f.tipo === 'entrada' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                              {f.tipo === 'entrada' ? <TrendingUp size={18}/> : <X size={18}/>}
+                            </div>
+                            <div>
+                              <p className="font-black text-slate-800 text-xs uppercase">{f.descricao || 'Recebimento'}</p>
+                              <p className="text-[10px] font-bold text-slate-400">
+                                {formatDateSafe(f.data_movimento || f.criado_em || f.created_at)} • {f.metodo_pagamento || f.forma_pagamento || 'N/D'}
+                              </p>
+                            </div>
+                          </div>
+                          {conciliado ? (
+                            <CheckCircle2 size={16} className="text-emerald-500" />
+                          ) : (
+                            <Clock size={16} className="text-amber-500 animate-pulse" />
+                          )}
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                          <div>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Origem</p>
+                            <p className="text-[10px] font-bold text-slate-600">OS #{numeroOsFinanceiro}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Valor</p>
+                            <p className="font-black text-slate-900">
+                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(f.valor || 0))}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     );

@@ -16,7 +16,8 @@ import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
 
 type LinhaLucratividade = {
-  cidade: string;
+  cidade?: string;
+  localidade?: string;
   total_receita: number;
   total_despesa: number;
   lucro_liquido: number;
@@ -61,7 +62,8 @@ export default function LucratividadeRotaPage() {
       });
 
       if (error) throw error;
-      setDados(((data as LinhaLucratividade[]) || []).filter((i) => (i.cidade || "").trim() !== ""));
+      const rows = ((data as LinhaLucratividade[]) || []).filter((i) => ((i.cidade || i.localidade || "") as string).trim() !== "");
+      setDados(rows);
     } catch (err) {
       const e = err as Error;
       toast.error(`Falha ao carregar lucratividade por cidade: ${e.message}`);
@@ -75,7 +77,16 @@ export default function LucratividadeRotaPage() {
     void carregar();
   }, [competencia]);
 
-  const top = dados[0] || null;
+  const cityName = (row: Partial<LinhaLucratividade>) => ((row.cidade || row.localidade || '') as string).trim();
+
+  const displayDados = dados.filter(d => {
+    const name = cityName(d).toLowerCase();
+    return name !== '' && name !== 'geral';
+  });
+
+  const top = displayDados[0] || null;
+
+  const cidadesCount = displayDados.length;
 
   const maxAbsLucro = useMemo(() => {
     const max = dados.reduce((acc, row) => Math.max(acc, Math.abs(Number(row.lucro_liquido || 0))), 0);
@@ -125,7 +136,7 @@ export default function LucratividadeRotaPage() {
               </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300">
                 <Map size={14} />
-                {dados.length} cidade(s)
+                {cidadesCount} cidade(s)
               </div>
             </div>
 
@@ -133,17 +144,19 @@ export default function LucratividadeRotaPage() {
               <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cidade mais lucrativa</p>
                 <div className="mt-2 flex items-center justify-between gap-4">
-                  <p className="text-2xl font-black uppercase tracking-tight">{top.cidade}</p>
+                  <p className="text-2xl font-black uppercase tracking-tight">{top ? cityName(top) : ''}</p>
                   <p className="text-xl font-black text-emerald-400">{brl(Number(top.lucro_liquido || 0))}</p>
                 </div>
               </div>
             ) : null}
 
+            
+
             <div className="space-y-5">
-              {dados.length === 0 ? (
+              {displayDados.length === 0 ? (
                 <p className="text-sm font-bold italic text-slate-400">Sem dados para a competencia selecionada.</p>
               ) : (
-                dados.slice(0, 7).map((item, idx) => {
+                displayDados.slice(0, 7).map((item, idx) => {
                   const lucro = Number(item.lucro_liquido || 0);
                   const width = Math.max(4, Math.round((Math.abs(lucro) / maxAbsLucro) * 100));
                   const positivo = lucro >= 0;
@@ -151,7 +164,7 @@ export default function LucratividadeRotaPage() {
                   return (
                     <div key={`${item.cidade}-${idx}`} className="space-y-2">
                       <div className="flex justify-between text-xs font-black uppercase tracking-widest opacity-80">
-                        <span>{item.cidade}</span>
+                        <span>{cityName(item) || '---'}</span>
                         <span>{brl(lucro)}</span>
                       </div>
                       <div className="h-3 bg-white/10 rounded-full overflow-hidden">
@@ -182,19 +195,19 @@ export default function LucratividadeRotaPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {dados.map((item, idx) => {
+                  {displayDados.map((item, idx) => {
                     const lucro = Number(item.lucro_liquido || 0);
                     const margem = Number(item.margem_percentual || 0);
                     const positivo = lucro >= 0;
 
                     return (
-                      <tr key={`${item.cidade}-${idx}`} className="group hover:bg-slate-50/50 transition-all">
+                      <tr key={`${cityName(item) || 'cidade'}-${idx}`} className="group hover:bg-slate-50/50 transition-all">
                         <td className="p-8 text-center">
                           <span className={`w-8 h-8 rounded-lg flex items-center justify-center mx-auto font-black text-xs ${idx === 0 ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400"}`}>
                             {idx + 1}o
                           </span>
                         </td>
-                        <td className="p-8 font-black text-slate-800 uppercase tracking-tighter">{item.cidade}</td>
+                        <td className="p-8 font-black text-slate-800 uppercase tracking-tighter">{cityName(item)}</td>
                         <td className="p-8 font-bold text-emerald-600">{brl(Number(item.total_receita || 0))}</td>
                         <td className="p-8 font-bold text-rose-500">{brl(Number(item.total_despesa || 0))}</td>
                         <td className="p-8">
@@ -215,18 +228,18 @@ export default function LucratividadeRotaPage() {
 
             {/* Mobile: cards (mais legível em tela pequena) */}
             <div className="md:hidden p-4 space-y-3">
-              {dados.length === 0 ? (
+              {displayDados.length === 0 ? (
                 <p className="text-sm font-bold italic text-slate-400">Sem dados para a competencia selecionada.</p>
               ) : (
-                dados.map((item, idx) => {
+                displayDados.map((item, idx) => {
                   const lucro = Number(item.lucro_liquido || 0);
                   const margem = Number(item.margem_percentual || 0);
                   const positivo = lucro >= 0;
                   return (
-                    <div key={`${item.cidade}-card-${idx}`} className="bg-white p-4 rounded-xl border shadow-sm">
+                    <div key={`${cityName(item) || 'cidade'}-card-${idx}`} className="bg-white p-4 rounded-xl border shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-sm font-black uppercase tracking-wider">{item.cidade}</div>
+                          <div className="text-sm font-black uppercase tracking-wider">{cityName(item)}</div>
                           <div className="text-xs text-slate-500 mt-1">Receita: <span className="font-bold text-emerald-600">{brl(Number(item.total_receita || 0))}</span></div>
                           <div className="text-xs text-slate-500">Custos: <span className="font-bold text-rose-500">{brl(Number(item.total_despesa || 0))}</span></div>
                         </div>

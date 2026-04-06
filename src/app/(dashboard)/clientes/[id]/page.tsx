@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -30,6 +30,11 @@ export default function PacienteRichFichaPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'geral' | 'clinico' | 'vendas' | 'arquivos'>('geral');
   const [showComMenu, setShowComMenu] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewBlobRef = useRef<Blob | null>(null);
 
   const dadosGrafico = useMemo(() => {
     return [...(historico.receitas || [])]
@@ -139,6 +144,27 @@ export default function PacienteRichFichaPage() {
           fetchHistoricoCompat('termos_aceite', currentPaciente.id)
         ]);
 
+        // Se não retornou vendas por paciente_id, tentar fallback por paciente_nome (caso a referência seja textual)
+        let vendasData = vRes.data || [];
+        if ((vendasData.length === 0) && currentPaciente.nome_completo) {
+          try {
+            const nameFallback = String(currentPaciente.nome_completo).trim();
+            if (nameFallback) {
+              const fallback = await supabase
+                .from('vendas')
+                .select('*, ordens_servico(numero_os,status_os)')
+                .ilike('paciente_nome', `%${nameFallback}%`)
+                .order('criado_em', { ascending: false });
+              if (!fallback.error && Array.isArray(fallback.data) && fallback.data.length > 0) {
+                vendasData = fallback.data;
+              }
+            }
+          } catch (e) {
+            // não bloquear exibição se fallback falhar
+            console.warn('fallback vendas por nome falhou', e);
+          }
+        }
+
         const normalizeReceita = (row: any) => {
           if (!row) return row;
           let dnp_od = row.dnp_od ?? null;
@@ -179,7 +205,7 @@ export default function PacienteRichFichaPage() {
 
         setHistorico({
           receitas: (rRes.data || []).map(normalizeReceita),
-          vendas: vRes.data || [],
+          vendas: vendasData,
           anexos: aRes.data || [],
           termos: tRes.data || []
         });
@@ -200,6 +226,63 @@ export default function PacienteRichFichaPage() {
     }
     loadFullData();
   }, [id]);
+
+  // Gera preview da receita e abre modal com blob URL
+  async function handleImprimirReceita(item: any) {
+    try {
+      setPreviewError(null);
+      setPreviewLoading(true);
+      const cached: any = (typeof window !== 'undefined' ? (window as any).__optovendas_clinica_cache : null) || null;
+      let clinica = { nome_fantasia: 'Clínica', logomarca_url: null, config_unidade: null, cor_primaria: null };
+      if (cached) clinica = { ...clinica, ...cached };
+
+      const receitaPdfData: any = {
+        pacientes: { nome_completo: item.paciente_nome || item.pacientes?.nome_completo || 'Paciente' },
+        idade_paciente: item.idade_paciente || null,
+        data_exame: item.data_exame || item.created_at || item.criado_em || new Date().toISOString(),
+        od_esferico: item.od_esferico ?? item.longe_od_esferico ?? null,
+        od_cilindrico: item.od_cilindrico ?? item.longe_od_cilindrico ?? null,
+        od_eixo: item.od_eixo ?? item.longe_od_eixo ?? null,
+        od_av: item.od_av ?? null,
+        oe_esferico: item.oe_esferico ?? item.longe_oe_esferico ?? null,
+        oe_cilindrico: item.oe_cilindrico ?? item.longe_oe_cilindrico ?? null,
+        oe_eixo: item.oe_eixo ?? item.longe_oe_eixo ?? null,
+        oe_av: item.oe_av ?? null,
+        adicao: item.adicao ?? item.perto_adicao ?? null,
+        dp_dnp: item.dp_dnp ?? item.dnp ?? null,
+        miopia: !!item.miopia,
+        astigmatismo: !!item.astigmatismo,
+        hipermetropia: !!item.hipermetropia,
+        presbiopia: !!item.presbiopia,
+        tipo_lente: item.tipo_lente ?? null,
+        tratamento_lente: item.tratamento_lente ?? null,
+        nota_rodape: item.nota_rodape ?? item.observacoes ?? null,
+      };
+
+      const doc = <ReceitaPdf dados={receitaPdfData} clinica={clinica as any} />;
+      const blob = await pdf(doc).toBlob();
+      const url = URL.createObjectURL(blob);
+      previewBlobRef.current = blob;
+      setPreviewUrl(url);
+      setPreviewOpen(true);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('imprimirReceita error', e);
+      setPreviewError('Falha ao gerar PDF da receita. Veja console para detalhes.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function closePreview() {
+    setPreviewOpen(false);
+    if (previewUrl) {
+      try { URL.revokeObjectURL(previewUrl); } catch (e) {}
+    }
+    setPreviewUrl(null);
+    previewBlobRef.current = null;
+    setPreviewError(null);
+  }
 
   if (loading) return <div className="p-20 text-center animate-pulse font-black text-slate-400 uppercase tracking-widest">Carregando Ficha Completa...</div>;
   if (erro || !paciente) return <div className="p-20 text-center text-rose-500 font-bold">{erro}</div>;
@@ -305,6 +388,24 @@ export default function PacienteRichFichaPage() {
         </div>
         <div className="lg:col-span-2 space-y-6">{/* ... */}</div>
       </div>
+      {/* Modal de preview de receita (blob URL) */}
+      {previewOpen && previewUrl && (
+        <div role="dialog" aria-modal="true" aria-label="Preview da receita" className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/50" onClick={closePreview} />
+          <div className="relative w-[90%] h-[90%] bg-white rounded-xl shadow-lg overflow-hidden z-60">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-black">Preview da Receita</h3>
+              <div className="flex items-center gap-2">
+                <a href={previewUrl} download={`receita-${paciente?.nome_completo || 'paciente'}.pdf`} className="px-3 py-2 bg-cyan-600 text-white rounded-lg font-black text-sm">Baixar</a>
+                <button onClick={closePreview} aria-label="Fechar preview" className="px-3 py-2 bg-slate-100 rounded-lg">Fechar</button>
+              </div>
+            </div>
+            <div className="w-full h-full">
+              <iframe src={previewUrl} title="Preview da Receita" className="w-full h-full border-0" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

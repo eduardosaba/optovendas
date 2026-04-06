@@ -61,7 +61,18 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
 
   const totalGeral = Number(data.financeiro?.total || 0);
   const valorEntrada = Number(data.financeiro?.valorEntrada || 0);
-  const subtotal = totalGeral;
+  const valorDescontoComboRaw = Number((data as any).valor_desconto_combo || 0);
+  const valorDescontoCombo = Math.max(0, valorDescontoComboRaw);
+  const comboAcréscimo = Math.max(0, -valorDescontoComboRaw);
+  const comboPreco = Number(comboInfo?.preco_fechado ?? 0);
+  const temComboAplicado = Boolean((data as any).comboId || (data as any).combo_aplicado_id);
+  const subtotalPorCalculoCombo = Math.max(0, totalGeral - valorDescontoComboRaw);
+  // Se houver combo aplicado, usar o preço fechado do combo como subtotal;
+  // caso contrário, usar o total calculado anteriormente.
+  const subtotal = temComboAplicado
+    ? (comboInfo?.preco_fechado != null ? comboPreco : subtotalPorCalculoCombo)
+    : totalGeral;
+  // O subtotal já representa o valor final do combo; aplicar aqui só o desconto manual adicional.
   const totalComDesconto = Math.max(0, subtotal - Number(descontoManual || 0));
   const saldoRestante = Math.max(0, totalComDesconto - valorEntrada);
   const qtdParcelasAtual = Math.max(1, Number(data.financeiro?.qtdParcelas || (data.financeiro?.formaSaldo === 'crediario' ? 3 : 1)));
@@ -70,15 +81,27 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   const formatBRL = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
   const nomeArquivo = `carne_vendas_${((pacienteInfo?.nome_completo) || data.cliente?.nome_completo || data.clienteManualNome || 'cliente').replace(/\s/g,'').replace(/[^\w-]/g,'')}.pdf`;
 
+  // (dataVenda moved to Step1Cliente)
+
+  // AJUSTE NA MEMOIZAÇÃO DAS PARCELAS PARA GARANTIR INTEGRIDADE
   const { parcelas } = useMemo(() => {
     if (data.financeiro?.formaSaldo === 'crediario') {
-      // IMPORTANTE: usar o valor líquido (após desconto) para gerar o cronograma
-      return gerarCronogramaCobranca(
+      const cronograma = gerarCronogramaCobranca(
         totalComDesconto,
         valorEntrada,
         Number(data.financeiro.qtdParcelas),
         data.financeiro?.primeiroVencimento
       );
+
+      // Mapeia as parcelas garantindo que o status inicial seja pendente
+      // O venda_id será preenchido pelo backend durante a transaction
+      return {
+        parcelas: (cronograma as any).parcelas.map((p: any) => ({
+          ...p,
+          status: 'pendente',
+          clinica_id: (data as any).clinicaId || null
+        }))
+      };
     }
     return { parcelas: [] };
   }, [totalComDesconto, valorEntrada, data.financeiro?.qtdParcelas, data.financeiro?.primeiroVencimento, data.financeiro?.formaSaldo]);
@@ -303,7 +326,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   }
 
   // --- FINALIZAÇÃO ---
-  async function finalizar(tipo: 'normal' | 'pendente', skipAutorizacaoCheck = false) {
+  async function finalizar(tipo: 'normal' | 'pendente' = 'normal', skipAutorizacaoCheck = false) {
     if (loading) return;
     if (tipo === 'normal' && !data.assinatura) return toast.error("Colha a assinatura de compra.");
     
@@ -337,70 +360,123 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
       const qtdParcelas = Number(data.financeiro?.qtdParcelas || 1);
       const valorParcela = qtdParcelas > 0 ? Number((saldoRestante / qtdParcelas).toFixed(2)) : 0;
 
+      // Para crediario, enviar parcelas com metadados completos.
+      // O backend deve vincular ao venda_id apos criar a venda.
+      const parcelasFormatadas = (data.financeiro?.formaSaldo === 'crediario')
+        ? parcelas.map((p: any) => ({
+            numero_parcela: Number(p.numero_parcela || 0),
+            valor_parcela: Number(p.valor_parcela || 0),
+            data_vencimento: p.data_vencimento,
+            status: 'pendente',
+            clinica_id: ctx.clinicaId,
+            paciente_id: data.pacienteId || (data as any).cliente?.id || (data as any).cliente_id || null,
+          }))
+        : [];
+
       const payload = {
         id: (data as any).id || undefined,
         clinica_id: ctx.clinicaId,
-        paciente_id: data.pacienteId || null,
-        receita_id: (data as any).receitaId || null,
-        usa_num_manual: !!(data as any).usaNumManual,
+        // Fallbacks para evitar envio sem paciente em casos de venda manual/migração
+        paciente_id: data.pacienteId || (data as any).cliente?.id || (data as any).cliente_id || null,
+        receita_id: (data as any).receitaId || (data as any).receita_id || null,
         numero_os_manual: (data as any).numeroOsManual || null,
+        vendaManual: !!(data as any).vendaManual,
+        clienteManualNome: (data as any).clienteManualNome || null,
+        clienteManualCpf: (data as any).clienteManualCpf || null,
+        clienteManualCidade: (data as any).clienteManualCidade || null,
         cliente: {
-          nome_completo: (data as any).cliente?.nome_completo || data.clienteManualNome || null,
+          nome_completo: (data as any).cliente?.nome_completo || (data as any).clienteManualNome || null,
         },
 
-        // Totais
+        // Valores Financeiros
         valor_total: subtotal,
-        desconto: Number(descontoManual || 0) + Number((data as any).valor_desconto_combo || 0),
+        desconto: Number(descontoManual || 0),
         valor_final: totalComDesconto,
-
-        // Regras de Armação e Termos
-        armacao_propria: !!data.armacaoPropria,
-        termo_quebra_aceito: !!data.termoQuebraAceito,
-        assinatura_arma_responsabilidade: (data as any).assinaturaArmacaoCliente || null,
-
-        // Financeiro Detalhado (colunas da tabela vendas)
         valor_entrada: Number(valorEntrada || 0),
-        forma_entrada: data.financeiro?.formaEntrada || null,
+        forma_entrada: data.financeiro?.formaEntrada || 'dinheiro',
         saldo_restante: saldoRestante,
         metodo_pagamento: data.financeiro?.formaSaldo || null,
 
-        // Parcelamento
-        qtd_parcelas_venda: qtdParcelas,
-        valor_parcela_venda: valorParcela,
+        // Dados de Parcelamento (Crucial para financeiro_parcelas)
+        qtd_parcelas_venda: Number(data.financeiro?.qtdParcelas || 1),
+        valor_parcela_venda: Number((saldoRestante / Number(data.financeiro?.qtdParcelas || 1)).toFixed(2)),
         primeiro_vencimento_venda: data.financeiro?.primeiroVencimento || null,
 
-        // Combos e Autorizações
-        combo_aplicado_id: (data as any).comboId || (data as any).combo_aplicado_id || null,
-        valor_desconto_combo: (data as any).valor_desconto_combo || 0,
-        valor_desconto_manual: Number(descontoManual || 0),
-        autorizado_por_id: autorizadorId || null,
-        justificativa_desconto: justificativaDesconto || null,
+        // Array de Parcelas Detalhado para o Backend
+        parcelas: parcelasFormatadas,
 
-        // Assinaturas e Fotos
-        assinatura: (data as any).assinaturaFinal || data.assinatura || null,
-        pupilometro_foto_url: (data as any).pupilometroFotoMedidaStorageUrl || (data as any).pupilometro_foto_url || null,
+        // Sinalizadores para lancamento financeiro imediato
+        registrar_caixa: Number(valorEntrada || 0) > 0,
+        conta_destino_id: data.financeiro?.contaDestinoId || null,
 
-        // Ao finalizar a venda, colocar a OS em 'Aguardando' para permitir
-        // preencher dados e escolher laboratório antes de enviar para produção.
-        status_os: 'Aguardando',
-        status_financeiro: statusFinanceiroCalculado,
-
-        // Mantém estruturas legadas para compatibilidade com o backend
+        // Mantém estrutura usada no backend para decidir geração automática das parcelas
         financeiro_detalhe: {
           entrada: {
             valor: Number(valorEntrada || 0),
             forma: data.financeiro?.formaEntrada || 'dinheiro',
-            conta_id: data.financeiro?.contaDestinoId || null
+            conta_id: data.financeiro?.contaDestinoId || null,
           },
           saldo: {
             valor: saldoRestante,
             forma: data.financeiro?.formaSaldo || null,
-            qtd_parcelas: qtdParcelas,
-            primeiro_vencimento: data.financeiro?.primeiroVencimento || null
-          }
+            qtd_parcelas: Number(data.financeiro?.qtdParcelas || 1),
+            primeiro_vencimento: data.financeiro?.primeiroVencimento || null,
+          },
         },
-        parcelas: parcelas || [],
+
+        // Metadados e Status
+        status_os: 'Aguardando',
+        status_financeiro: statusFinanceiroCalculado,
+
+        // Detalhes da OS (Para a tabela ordens_servico)
+        os_detalhe: {
+          receita_id: (data as any).receitaId || (data as any).receita_id || null,
+          armacao_id: (data as any).armacaoId || null,
+          armacao_modelo: armacaoLabel || (data as any).armacao_modelo || null,
+          material_lente: (data as any).lenteId || lenteLabel || null,
+          previsao_entrega: (data as any).previsao_entrega || data.financeiro?.primeiroVencimento || null,
+        }
       };
+
+      // Localidade da venda: preferir campo explícito, senão cidade do paciente (busca em memória ou no DB), senão cliente/manual
+      let pacienteCidade = pacienteInfo?.cidade_atendimento || null;
+      if (!pacienteCidade && data.pacienteId) {
+        try {
+          const { data: pac } = await supabase.from('pacientes').select('cidade_atendimento').eq('id', data.pacienteId).maybeSingle();
+          pacienteCidade = (pac as any)?.cidade_atendimento || null;
+        } catch (e) {
+          // falha ao buscar paciente — manter fallback abaixo
+        }
+      }
+
+      const localidadeVenda = (data as any).localidade_venda || (data as any).localidade || (data as any).financeiro?.localidade || pacienteCidade || data.cliente?.cidade_atendimento || data.clienteManualCidade || null;
+      if (localidadeVenda) (payload as any).localidade_venda = localidadeVenda;
+
+      // Incluir data da venda quando fornecida no Step1Cliente
+      if ((data as any).dataVenda || (data as any).data_venda) {
+        (payload as any).data_venda = (data as any).dataVenda || (data as any).data_venda;
+      }
+
+      // Determina status_pagamento e metodo_pagamento para compatibilidade e conciliação
+      const formaEntrada = data.financeiro?.formaEntrada || null;
+      const formaSaldo = data.financeiro?.formaSaldo || null;
+      let statusPagamentoCalculado = statusFinanceiroCalculado;
+      // Se a venda foi realizada via cartão (crédito ou débito) considerar como pago imediatamente
+      if (formaEntrada === 'debito' || formaEntrada === 'cartao' || formaSaldo === 'cartao') {
+        statusPagamentoCalculado = 'pago';
+      } else if (valorEntrada > 0 && formaSaldo === 'crediario') {
+        // Entrada dada e saldo em crediário -> parcial
+        statusPagamentoCalculado = 'pago_parcial';
+      } else if (saldoRestante <= 0) {
+        statusPagamentoCalculado = 'pago';
+      } else if (valorEntrada <= 0 && saldoRestante > 0) {
+        statusPagamentoCalculado = 'pendente';
+      }
+
+      // Escolhe método de pagamento preferencial: entrada primeiro, senão saldo
+      const metodoPagamento = formaEntrada || formaSaldo || null;
+      (payload as any).status_pagamento = statusPagamentoCalculado;
+      (payload as any).metodo_pagamento = metodoPagamento;
 
       // Incluir detalhes da OS para que o endpointFinalize os persista em ordens_servico
       const armacaoIdPayload = (data as any).armacaoId || (data as any).armacao_id || null;
@@ -518,6 +594,17 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
     };
   }, [/* dependencies intentionally empty to keep binding stable */]);
 
+  // Fallback: responde ao evento global para abrir/acionar finalização
+  // (isso garante que o botão do footer em `page.tsx` funcione)
+  const finalizarRef = useRef<((tipo: 'normal' | 'pendente', skipAutorizacaoCheck?: boolean) => Promise<void>) | null>(null);
+  useEffect(() => { finalizarRef.current = finalizar; }, [finalizar]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => { if (finalizarRef.current) void finalizarRef.current('normal'); };
+    window.addEventListener('opv:openFinalizeModal', handler as EventListener);
+    return () => window.removeEventListener('opv:openFinalizeModal', handler as EventListener);
+  }, []);
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 animate-in fade-in pb-20">
       
@@ -557,7 +644,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
            <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 rounded-2xl text-center border border-slate-100">
                   <p className="text-[10px] font-black text-slate-400 uppercase">Total</p>
-                  <p className="text-xl font-black text-slate-700">{formatBRL(totalGeral)}</p>
+                  <p className="text-xl font-black text-slate-700">{formatBRL(subtotal)}</p>
                 </div>
                 <div className="p-4 bg-emerald-50 rounded-2xl text-center border border-emerald-100">
                   <p className="text-[10px] font-black text-emerald-600 uppercase">A Receber</p>
@@ -602,6 +689,12 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
               </div>
               {descontoManual > 0 && (
                 <span className="text-[10px] font-black bg-rose-50 text-rose-600 px-2 py-1 rounded-lg uppercase">-{((descontoManual / (subtotal || 1)) * 100).toFixed(1)}%</span>
+              )}
+              {valorDescontoCombo > 0 && !comboInfo?.preco_fechado && (
+                <div className="mt-2 text-sm text-rose-600 font-black">Desconto do Combo: -{formatBRL(valorDescontoCombo)}</div>
+              )}
+              {comboAcréscimo > 0 && (
+                <div className="mt-2 text-sm text-amber-600 font-black">Acréscimo do Combo: +{formatBRL(comboAcréscimo)}</div>
               )}
             </div>
 
@@ -771,6 +864,8 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
       {/* COLUNA DIREITA: DOCUMENTOS E ANEXOS */}
       <div className="space-y-6">
         {/* DOCUMENTAÇÃO */}
+        {/* dataVenda input moved to Step1Cliente */}
+
         <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-4">
            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 mb-2"><Signature className="text-blue-500"/> Documentação</h2>
            
