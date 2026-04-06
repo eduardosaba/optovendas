@@ -195,11 +195,43 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     if (!clinicaId) return;
     setNotificationsLoading(true);
     try {
-        const [parcelasRes, vendasRes] = await Promise.all([
+      const [parcelasRes, vendasRes] = await Promise.all([
         supabase.from('financeiro_parcelas').select('id,valor_parcela,data_vencimento,status,paciente_id').eq('clinica_id', clinicaId).order('data_vencimento', { ascending: false }).limit(5),
-        supabase.from('vendas').select('id,valor_total,criado_em,localidade_venda,pacientes(nome_completo),ordens_servico(numero_os)').eq('clinica_id', clinicaId).order('criado_em', { ascending: false }).limit(5),
+        supabase.from('vendas').select('id,paciente_id,valor_total,valor_final,criado_em,localidade_venda,pacientes(nome_completo),ordens_servico(numero_os),numero_os_manual').eq('clinica_id', clinicaId).order('criado_em', { ascending: false }).limit(5),
       ]);
-      setNotificationsData({ parcelas: parcelasRes.data || [], vendas: vendasRes.data || [] });
+
+      const vendas = (vendasRes.data || []) as any[];
+      const pacienteIdsVendas = Array.from(
+        new Set(vendas.map((v) => v?.paciente_id).filter(Boolean))
+      ) as string[];
+
+      let nomesPacientesPorId = new Map<string, string>();
+      if (pacienteIdsVendas.length > 0) {
+        const pacientesRes = await supabase
+          .from('pacientes')
+          .select('id,apelido,nome_completo')
+          .eq('clinica_id', clinicaId)
+          .in('id', pacienteIdsVendas);
+
+        if (pacientesRes.error) {
+          console.warn('notifications: pacientes error', pacientesRes.error, pacientesRes);
+        } else {
+          nomesPacientesPorId = new Map(
+            (pacientesRes.data || []).map((p: any) => [p.id, p.apelido || p.nome_completo || ''])
+          );
+        }
+      }
+
+      const vendasEnriquecidas = vendas.map((v) => ({
+        ...v,
+        cliente_notificacao_nome:
+          nomesPacientesPorId.get(v.paciente_id) ||
+          v.pacientes?.[0]?.nome_completo ||
+          v.cliente_nome ||
+          null,
+      }));
+
+      setNotificationsData({ parcelas: parcelasRes.data || [], vendas: vendasEnriquecidas });
       const atrasadas = (parcelasRes.data || []).filter((p: any) => p.status !== 'pago' && new Date(p.data_vencimento) < new Date()).length;
       if (atrasadas > 0) toast.info(`${atrasadas} parcela(s) vencida(s)`);
     } catch (err) {
@@ -213,7 +245,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     let active = true;
 
     async function pesquisar() {
-        const termo = (busca || "").trim();
+      const termo = (busca || "").trim();
       if (!termo || termo.length < 2 || !clinicaId) {
         setResultadoBusca([]);
         setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
@@ -222,45 +254,53 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
       setBuscando(true);
       try {
-        // sanitize search term to avoid injecting invalid tokens into PostgREST filters
-        const safeTerm = termo.replace(/[%()']/g, "").trim();
+        // Sanitiza e padroniza o termo para reduzir erros de filtro no PostgREST.
+        const safeTerm = termo.replace(/[%_,()']/g, "").trim();
+        if (!safeTerm || safeTerm.length < 2) {
+          setResultadoBusca([]);
+          setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
+          return;
+        }
+
+        const pattern = `%${safeTerm}%`;
         const [pacientesRes, vendasRes, armacoesRes, lentesRes, parcelasRes] = await Promise.all([
           // 1) Pacientes por nome ou CPF
           supabase
             .from("pacientes")
             .select("id, nome_completo, cpf, cidade_atendimento")
             .eq("clinica_id", clinicaId)
-            .or(`nome_completo.ilike.%${termo}%,cpf.ilike.%${termo}%`)
+            .or(`nome_completo.ilike.${pattern},cpf.ilike.${pattern}`)
             .limit(3),
 
-            // 2) Vendas por localidade ou id parcial (inclui paciente e OS)
+            // 2) Vendas por localidade, id parcial ou numero OS manual (inclui paciente e OS)
             supabase
               .from("vendas")
-              .select("id, valor_total, localidade_venda, criado_em, pacientes (nome_completo), ordens_servico (numero_os)")
+              .select("id, paciente_id, valor_total, valor_final, localidade_venda, localidade, numero_os_manual, criado_em, pacientes (nome_completo), ordens_servico (numero_os)")
               .eq("clinica_id", clinicaId)
-              .or(`localidade_venda.ilike.%${termo}%,id.ilike.%${termo}%`)
+              // Evitar `id.ilike` (UUID) pois pode quebrar a query em alguns ambientes.
+              .or(`numero_os_manual.ilike.${pattern},localidade_venda.ilike.${pattern},localidade.ilike.${pattern}`)
               .order("criado_em", { ascending: false })
-              .limit(2),
+              .limit(5),
 
           // 3) Estoque de armações
           supabase
             .from("estoque_armacoes")
             .select("id, marca, modelo, referencia, quantidade_atual, preco_venda")
-            .or(`marca.ilike.%${termo}%,modelo.ilike.%${termo}%,referencia.ilike.%${termo}%`)
+            .or(`marca.ilike.${pattern},modelo.ilike.${pattern},referencia.ilike.${pattern}`)
             .limit(3),
 
           // 4) Lentes no catálogo
           supabase
             .from("otica_lentes")
             .select("id, tipo, material, tratamento, preco_base")
-            .or(`tipo.ilike.%${termo}%,material.ilike.%${termo}%`)
+            .or(`tipo.ilike.${pattern},material.ilike.${pattern}`)
             .limit(2),
 
           // 5) Parcelas pendentes (installments)
           // usar tabela correta `financeiro_parcelas`
           supabase
             .from("financeiro_parcelas")
-            .select("id, valor_parcela, vencimento, paciente_id")
+            .select("id, valor_parcela, data_vencimento, paciente_id")
             .eq("status", "atrasado")
             .limit(2),
         ]);
@@ -279,6 +319,36 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
         const lentes = (lentesRes.data ?? []) as Array<any>;
         const parcelas = (parcelasRes.data ?? []) as Array<any>;
 
+        const pacienteIdsVendas = Array.from(
+          new Set(vendas.map((v) => v?.paciente_id).filter(Boolean))
+        ) as string[];
+        let nomesPacientesPorId = new Map<string, string>();
+
+        if (pacienteIdsVendas.length > 0) {
+          const pacientesVendasRes = await supabase
+            .from("pacientes")
+            .select("id, apelido, nome_completo")
+            .eq("clinica_id", clinicaId)
+            .in("id", pacienteIdsVendas);
+
+          if (pacientesVendasRes.error) {
+            console.warn('search: pacientes vendas error', pacientesVendasRes.error, pacientesVendasRes);
+          } else {
+            nomesPacientesPorId = new Map(
+              (pacientesVendasRes.data ?? []).map((p: any) => [p.id, p.apelido || p.nome_completo || ""])
+            );
+          }
+        }
+
+        const vendasEnriquecidas = vendas.map((v) => ({
+          ...v,
+          cliente_busca_nome:
+            nomesPacientesPorId.get(v.paciente_id) ||
+            v.pacientes?.[0]?.nome_completo ||
+            v.cliente_nome ||
+            null,
+        }));
+
         const features = [
           { id: 'feat-vendas', titulo: 'Vendas', subtitulo: 'Abrir painel de vendas', rota: '/otica/vendas' },
           { id: 'feat-nova-venda', titulo: 'Nova Venda', subtitulo: 'Iniciar nova venda', rota: '/otica/vendas/nova' },
@@ -288,7 +358,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
         const termoNormalizado2 = safeTerm.toLowerCase();
         const featureMatches = (features as any[]).filter(f => f.titulo.toLowerCase().includes(termoNormalizado2) || f.subtitulo.toLowerCase().includes(termoNormalizado2));
 
-        setResultadosDB({ pacientes, vendas, estoque: [...armacoes, ...lentes], financeiro: parcelas });
+        setResultadosDB({ pacientes, vendas: vendasEnriquecidas, estoque: [...armacoes, ...lentes], financeiro: parcelas });
         setResultadoBusca(featureMatches.map((f) => ({ id: f.id, tipo: 'feature' as any, titulo: f.titulo, subtitulo: f.subtitulo, rota: f.rota })));
       } catch {
         if (active) {
@@ -369,8 +439,8 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
   }
 
   return (
-    <header className="sticky top-0 left-0 right-0 w-full z-40 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:px-8 overflow-x-hidden">
-      <div className="flex items-center justify-between gap-3 max-w-full overflow-x-hidden">
+    <header className="sticky top-0 left-0 right-0 w-full z-[80] border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:px-8 overflow-visible">
+      <div className="flex items-center justify-between gap-3 max-w-full overflow-visible">
         <div ref={containerBuscaRef} className="relative hidden w-full max-w-md md:block">
           <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2">
             {moduleLogoUrl && (
@@ -396,7 +466,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
           </div>
 
           {buscaAberta && (
-            <div id="dropdown-busca" role="listbox" aria-label="Resultados da busca" className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
+            <div id="dropdown-busca" role="listbox" aria-label="Resultados da busca" className="absolute left-0 right-0 top-[calc(100%+8px)] z-[120] max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
               {/* DROPDOWN INTELIGENTE */}
               {(resultadoBusca.length > 0 || resultadosDB.pacientes.length > 0 || resultadosDB.vendas.length > 0 || resultadosDB.estoque.length > 0 || resultadosDB.financeiro.length > 0) ? (
                 <div className="space-y-3">
@@ -425,18 +495,19 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                         <div className="mb-2 border-t border-slate-50 pt-2">
                           <p className="px-4 py-2 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Vendas</p>
                           {resultadosDB.vendas.map((v) => {
-                            const clienteNome = v.pacientes?.[0]?.nome_completo || v.cliente_nome || null;
-                            const osNum = v.ordens_servico?.[0]?.numero_os || null;
+                                const clienteNome = v.cliente_busca_nome || null;
+                            const osNum = v.ordens_servico?.[0]?.numero_os || v.numero_os || v.numero_os_manual || null;
+                                const tituloVenda = clienteNome || (osNum ? `OS ${osNum}` : "Venda");
                             const parts = [] as string[];
                             if (osNum) parts.push(`OS: ${osNum}`);
-                            if (clienteNome) parts.push(`Cliente: ${clienteNome}`);
-                            parts.push(`R$ ${Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+                                if (!clienteNome) parts.push("Cliente não identificado");
+                            parts.push(`R$ ${Number(v.valor_final ?? v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
                             const sub = parts.join(' • ');
                             return (
                               <SearchItem
                                 key={v.id}
                                 href={`/otica/vendas/${v.id}/visualizar`}
-                                title={`Venda ${v.id}`}
+                                    title={tituloVenda}
                                 sub={sub}
                                 icon={<FileText size={14} />}
                                 color="bg-indigo-50 text-indigo-600"
@@ -582,7 +653,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             </button>
 
             {notificationsOpen && (
-              <div ref={notifRef} className="absolute left-1/2 transform -translate-x-1/2 mt-2 w-full sm:w-96 max-w-[92vw] rounded-2xl border border-slate-100 bg-white shadow-2xl z-50 p-2">
+              <div ref={notifRef} className="absolute left-1/2 transform -translate-x-1/2 mt-2 w-full sm:w-96 max-w-[92vw] rounded-2xl border border-slate-100 bg-white shadow-2xl z-[120] p-2">
                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-50">
                   <p className="text-sm font-black">Notificações</p>
                   <button className="text-xs text-slate-400" onClick={() => { setNotificationsData({ parcelas: [], vendas: [] }); setNotificationsOpen(false); }}>Fechar</button>
@@ -604,16 +675,16 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   <p className="text-[10px] font-black text-indigo-600 uppercase mb-2">Vendas</p>
                   {!notificationsLoading && notificationsData.vendas.length === 0 && <p className="text-xs text-slate-400">Nenhuma venda recente.</p>}
                   {!notificationsLoading && notificationsData.vendas.map((v: any) => {
-                    const clienteNome = v.pacientes?.[0]?.nome_completo || v.cliente_nome || null;
-                    const osNum = v.ordens_servico?.[0]?.numero_os || null;
+                    const clienteNome = v.cliente_notificacao_nome || null;
+                    const osNum = v.ordens_servico?.[0]?.numero_os || v.numero_os || v.numero_os_manual || null;
                     const parts: string[] = [];
                     if (osNum) parts.push(`OS: ${osNum}`);
-                    if (clienteNome) parts.push(`Cliente: ${clienteNome}`);
+                    if (clienteNome) parts.push(clienteNome);
                     parts.push(v.localidade_venda || '-');
                     return (
                       <Link key={v.id} href={`/otica/vendas/${v.id}/visualizar`} onClick={() => setNotificationsOpen(false)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
                         <div className="flex-1">
-                          <p className="text-sm font-bold">R$ {Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                          <p className="text-sm font-bold">{clienteNome || 'Cliente'}</p>
                           <p className="text-[10px] text-slate-400">{new Date(v.criado_em).toLocaleDateString('pt-BR')} • {parts.join(' • ')}</p>
                         </div>
                       </Link>

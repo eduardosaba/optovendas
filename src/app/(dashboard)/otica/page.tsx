@@ -76,13 +76,17 @@ export default function OticaPage() {
         const isoHoje = hoje.toISOString().split(".")[0] + "Z";
 
         async function carregarVendasHoje() {
-          const res = await supabase
-            .from("vendas")
-            .select("valor_final, valor_total")
-            .eq("clinica_id", ctx.clinicaId)
-            .gte("criado_em", isoHoje);
+              const todayDate = hoje.toISOString().slice(0,10);
+              // Preferir vendas cuja `data_venda` seja hoje; quando `data_venda` for NULL,
+              // considerar vendas criadas hoje (criado_em >= isoHoje). Evita contabilizar
+              // vendas com data_venda antiga que foram apenas registradas/criadas hoje.
+              const res = await supabase
+                .from("vendas")
+                .select("valor_final, valor_total, data_venda, criado_em")
+                .eq("clinica_id", ctx.clinicaId)
+                .or(`data_venda.eq.${todayDate},and(data_venda.is.null,criado_em.gte.${isoHoje})`);
 
-          return res.error ? [] : res.data ?? [];
+              return res.error ? [] : res.data ?? [];
         }
 
         const [vendasRows, osRes, estoqueRes, inadRes] = await Promise.all([
@@ -100,7 +104,7 @@ export default function OticaPage() {
             .order("atualizado_em", { ascending: false })
             .limit(4),
           supabase
-            .from("installments")
+            .from("financeiro_parcelas")
             .select("valor_parcela")
             .eq("clinica_id", ctx.clinicaId)
             .eq("status", "atrasado"),
@@ -206,6 +210,7 @@ export default function OticaPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-4">
         <StatCard
           label="Vendas Hoje"
+          hint="Conta por data_venda quando disponível"
           value={metrics.vendasHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           icon={<TrendingUp size={20} className="text-emerald-500" />}
           color="emerald"

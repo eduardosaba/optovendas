@@ -163,7 +163,6 @@ function NovaVendaStepperContent() {
     previsaoEntrega: "",
     dataEncomenda: new Date().toISOString().slice(0, 10),
     statusOS: "Laboratorio",
-    usaNumManual: false,
     numeroOsManual: "",
     termoQuebraAceito: false,
     assinatura: "",
@@ -301,9 +300,9 @@ function NovaVendaStepperContent() {
             previsaoEntrega: os?.previsao_entrega || prev.previsaoEntrega,
             financeiro: {
               ...prev.financeiro,
-              total: Number(venda.valor_total || prev.financeiro.total || 0),
+              total: Number(venda.valor_final ?? venda.valor_total ?? prev.financeiro.total ?? 0),
               valorEntrada: Number(venda.valor_entrada || prev.financeiro.valorEntrada || 0),
-              saldoRestante: Number(venda.saldo_restante || venda.valor_total || prev.financeiro.saldoRestante || 0),
+              saldoRestante: Number(venda.saldo_restante ?? venda.valor_final ?? venda.valor_total ?? prev.financeiro.saldoRestante ?? 0),
               metodo: venda.metodo_pagamento || prev.financeiro.metodo,
             },
             medidas: {
@@ -440,16 +439,10 @@ function NovaVendaStepperContent() {
       return;
     }
 
-    const numeroFinal = vendaData.usaNumManual
-      ? vendaData.numeroOsManual.trim()
-      : gerarNumeroOSAutomatico();
-
-    if (!numeroFinal) {
-      toast.info("Informe o número manual da OS ou use geração automática.");
-      return;
-    }
+    const numeroFinal = vendaData.numeroOsManual.trim() || gerarNumeroOSAutomatico();
 
     setSalvando(true);
+    let vendaIdCriadaNestaTentativa: string | null = null;
     try {
       const {
         data: { user },
@@ -503,7 +496,11 @@ function NovaVendaStepperContent() {
         receitaIdFinal = receitaManualRes.data.id;
       }
 
-      const valorTotal = Number(vendaData.financeiro.total || 0);
+      const valorBase = Number(vendaData.financeiro.total || 0);
+      const valorDescontoComboRaw = Number((vendaData as any).valor_desconto_combo || (vendaData as any).valorDescontoCombo || 0);
+      const temComboAplicado = Boolean((vendaData as any).comboId || (vendaData as any).combo_aplicado_id);
+      // Em combo, o total da venda deve ser o preço fechado do combo.
+      const valorTotal = temComboAplicado ? Math.max(0, valorBase - valorDescontoComboRaw) : valorBase;
       const tipoFechamento = vendaData.financeiro.tipoFechamento || "entrada_crediario";
       const valorEntrada = Math.max(0, Math.min(valorTotal, Number(vendaData.financeiro.valorEntrada || 0)));
       const saldoRestante = Math.max(0, Number((valorTotal - valorEntrada).toFixed(2)));
@@ -567,6 +564,8 @@ function NovaVendaStepperContent() {
           console.error("vendaRes error:", insertRes.error);
           throw new Error(insertRes.error?.message ?? "Falha ao criar venda.");
         }
+
+        vendaIdCriadaNestaTentativa = insertRes.data.id;
       }
 
       // Persistência de anexos
@@ -584,9 +583,14 @@ function NovaVendaStepperContent() {
         if (typeof vendaData.status_medida !== 'undefined') payload.status_medida = vendaData.status_medida;
         
         if (Object.keys(payload).length > 0) {
+          const sessionRes = await supabase.auth.getSession();
+          const accessToken = sessionRes.data.session?.access_token;
           await fetch('/api/otica/vendas/update-attachments', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            },
             body: JSON.stringify({ venda_id: vendaRes.data.id, ...payload }),
           }).catch(err => console.warn('Falha ao persistir anexos:', err));
         }
@@ -642,7 +646,7 @@ function NovaVendaStepperContent() {
               status: 'pendente',
               localidade: localidadeVendaFinal,
             }));
-            await supabase.from('installments').insert(payloadParcelas);
+            await supabase.from('financeiro_parcelas').insert(payloadParcelas);
           }
         }
 
@@ -692,20 +696,37 @@ function NovaVendaStepperContent() {
         setStep(4);
       }
     } catch (err) {
+      // Segurança contra persistência parcial: se a venda foi criada nesta tentativa
+      // e alguma etapa posterior falhar, remove os registros dependentes.
+      if (vendaIdCriadaNestaTentativa) {
+        try {
+          await supabase.from('financeiro_parcelas').delete().eq('venda_id', vendaIdCriadaNestaTentativa);
+          await supabase.from('ordens_servico').delete().eq('venda_id', vendaIdCriadaNestaTentativa);
+          await supabase.from('fluxo_caixa').delete().eq('referencia_id', vendaIdCriadaNestaTentativa);
+          await supabase.from('vendas').delete().eq('id', vendaIdCriadaNestaTentativa);
+        } catch (rollbackErr) {
+          console.warn('Rollback de venda parcial falhou:', rollbackErr);
+        }
+      }
       toast.error(`Erro ao salvar: ${(err as Error).message}`);
     } finally {
       setSalvando(false);
     }
   }, [clinicaId, vendaData, pacientes, receitaSelecionada, lenteSelecionada, armacaoSelecionada, tipoArmacaoSelecionado, pacienteCidadeAtendimento, toast, criarParcelasCrediario]);
 
-  // Exposição da função para o objeto window
+  // Exposição da função legado para o objeto window
+  // Na etapa 4, quem deve registrar `__opv_finalize` é o Step4Fechamento
+  // (fluxo novo via endpoint /api/otica/vendas/finalize).
   useEffect(() => {
+    if (step === 4) return;
     const win = window as OPVWindow;
     win.__opv_finalize = finalizarVenda;
     return () => {
-      delete win.__opv_finalize;
+      if (win.__opv_finalize === finalizarVenda) {
+        delete win.__opv_finalize;
+      }
     };
-  }, [finalizarVenda]);
+  }, [finalizarVenda, step]);
 
   function nextStep() {
     // Adicionar lógica de validação aqui se necessário

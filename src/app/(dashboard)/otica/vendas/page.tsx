@@ -86,7 +86,7 @@ export default function AcompanhamentoVendasPage() {
       v.localidade_venda || v.pacientes?.cidade_atendimento || "Geral",
       v.status_financeiro,
       v.tipo_fechamento,
-      (Number(v.valor_total) || 0).toFixed(2).replace('.', ',')
+      (Number(v.valor_final ?? v.valor_total) || 0).toFixed(2).replace('.', ',')
     ]);
 
     // Montagem do CSV com BOM para o Excel entender UTF-8 (acentos em PT-BR)
@@ -128,7 +128,7 @@ export default function AcompanhamentoVendasPage() {
            <div className="hidden md:flex bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
               <div className="px-4 py-1 text-center">
                  <p className="text-[9px] font-black text-slate-400 uppercase">Total do Filtro</p>
-                 <p className="text-lg font-black text-emerald-600">R$ {vendasFiltradas.reduce((acc, v) => acc + (v.valor_total || 0), 0).toFixed(2)}</p>
+                 <p className="text-lg font-black text-emerald-600">R$ {vendasFiltradas.reduce((acc, v) => acc + Number(v.valor_final ?? v.valor_total ?? 0), 0).toFixed(2)}</p>
               </div>
            </div>
         </div>
@@ -206,7 +206,7 @@ export default function AcompanhamentoVendasPage() {
                    </div>
                 </td>
                 <td className="px-8 py-6">
-                   <p className="text-sm font-black text-slate-900">R$ {Number(v.valor_total).toFixed(2)}</p>
+                   <p className="text-sm font-black text-slate-900">R$ {Number(v.valor_final ?? v.valor_total).toFixed(2)}</p>
                 </td>
                 <td className="px-8 py-6 text-right pr-12">
                    <Link 

@@ -69,7 +69,7 @@ export default function ConciliacaoPage() {
           setLancamentos((prev: any) => (prev || []).map((it: any) => {
             const v = vendaMap[it.venda_id];
             if (!v) return it;
-            const os = v.ordens_servico?.[0]?.numero_os;
+            const os = v.ordens_servico?.[0]?.numero_os || v.numero_os || v.numero_os_manual || null;
             const paciente = Array.isArray(v.pacientes) ? v.pacientes[0] : v.pacientes;
             const nome = paciente?.nome_completo || paciente?.nome || "";
             const apelido = paciente?.apelido || "";
@@ -141,6 +141,34 @@ export default function ConciliacaoPage() {
         const { data: conta } = await supabase.from('conta_corrente').select('saldo_atual').eq('id', contaIdToUse).single();
         const novoSaldo = (conta?.saldo_atual || 0) + valorLiquido;
         await supabase.from('conta_corrente').update({ saldo_atual: novoSaldo }).eq('id', contaIdToUse);
+      }
+
+      // Sincronizar status em `vendas` se este lançamento referenciar uma venda
+      try {
+        const vendaId = (itemSelecionado as any).venda_id || (itemSelecionado as any).referencia_id || null;
+        if (vendaId) {
+          // Somar valores conciliados (concluido) para a venda
+          const { data: lancs } = await supabase
+            .from('fluxo_caixa')
+            .select('valor, status_conciliacao, status_conciliado')
+            .eq('referencia_id', vendaId)
+            .in('status_conciliacao', ['concluido'])
+            .or('status_conciliado.eq.true');
+
+          const totalConciliado = (lancs || []).reduce((s: number, l: any) => s + Number(l.valor || 0), 0);
+
+          const { data: vendaData } = await supabase.from('vendas').select('id, valor_final, valor_total').eq('id', vendaId).single();
+          const alvo = vendaData?.valor_final ?? vendaData?.valor_total ?? null;
+          if (alvo != null) {
+            if (totalConciliado >= Number(alvo || 0) - 0.01) {
+              await supabase.from('vendas').update({ status_financeiro: 'pago' }).eq('id', vendaId);
+            } else if (totalConciliado > 0) {
+              await supabase.from('vendas').update({ status_financeiro: 'pago_parcial' }).eq('id', vendaId);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('conciliacao: falha ao sincronizar status de venda', e);
       }
 
       toast.success(`Conciliado! Taxa de ${brl(taxa)} registrada.`);

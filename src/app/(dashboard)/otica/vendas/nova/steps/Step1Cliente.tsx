@@ -39,6 +39,7 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
   const receitaSelecionada = receitas.find((r) => r.id === data.receitaId) ?? null;
   const [previewReceita, setPreviewReceita] = useState<ReceitaOptometrica | null>(null);
   const [clinicaHeader, setClinicaHeader] = useState<any | null>(null);
+  const [osExists, setOsExists] = useState<boolean | null>(null);
 
   // load otica/clinica branding when preview opens
   useEffect(() => {
@@ -59,6 +60,43 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
     }
     void loadBranding();
     return () => { mounted = false; };
+
+    // Verifica se o número de OS manual já existe (debounced)
+    useEffect(() => {
+      let mounted = true;
+      let timer: any = null;
+      async function checkOs(numero: string) {
+        try {
+          const q = numero.trim();
+          if (!q) {
+            if (mounted) setOsExists(null);
+            return;
+          }
+          const ctx = await resolveClinicaContext();
+          const { data: osRes, error } = await supabase
+            .from('ordens_servico')
+            .select('id')
+            .eq('clinica_id', ctx.clinicaId)
+            .eq('numero_os', q)
+            .limit(1)
+            .maybeSingle();
+
+          if (!mounted) return;
+          if (error) {
+            console.warn('checkOs error', error);
+            setOsExists(null);
+            return;
+          }
+          setOsExists(!!osRes);
+        } catch (e) {
+          console.warn('checkOs exception', e);
+          if (mounted) setOsExists(null);
+        }
+      }
+
+      timer = setTimeout(() => { void checkOs(String(data.numeroOsManual || '')); }, 350);
+      return () => { mounted = false; if (timer) clearTimeout(timer); };
+    }, [data.numeroOsManual]);
   }, [previewReceita]);
 
   function atualizarReceitaManual(campo: keyof VendaData["receitaManual"], valor: string) {
@@ -128,30 +166,22 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
         </div>
 
         <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-amber-200 shadow-sm w-full md:w-auto">
-          <div className="flex items-center gap-2 px-3 border-r border-slate-100">
-            <span className="text-[9px] font-black text-slate-400 uppercase">Ativar?</span>
-            <input 
-              type="checkbox" 
-              checked={data.usaNumManual} 
-              onChange={(e) => onChange({ ...data, usaNumManual: e.target.checked })}
-              className="w-5 h-5 rounded-lg border-slate-200 text-amber-600 focus:ring-amber-500 transition-all cursor-pointer"
-            />
+          <input
+            type="text"
+            placeholder="Ex: 5001 (opcional)"
+            value={data.numeroOsManual || ""}
+            onChange={(e) => onChange({ ...data, numeroOsManual: e.target.value })}
+            className="w-full md:w-56 p-2 bg-transparent font-black text-xl text-slate-800 outline-none placeholder:text-slate-300"
+          />
+          <div className="px-2 py-1 text-right">
+            <div className="text-[10px] font-bold text-slate-400 italic uppercase">vazio = automático</div>
+            {osExists === true && (
+              <div className="mt-1 text-[11px] font-bold text-rose-600">Já existe uma O.S. com esse número nesta clínica.</div>
+            )}
+            {osExists === false && data.numeroOsManual && data.numeroOsManual.trim() !== "" && (
+              <div className="mt-1 text-[11px] font-bold text-emerald-600">Número disponível.</div>
+            )}
           </div>
-          
-          {data.usaNumManual ? (
-            <input
-              type="text"
-              placeholder="Ex: 5001"
-              value={data.numeroOsManual || ""}
-              onChange={(e) => onChange({ ...data, numeroOsManual: e.target.value })}
-              className="w-full md:w-32 p-2 bg-transparent font-black text-xl text-slate-800 outline-none placeholder:text-slate-200"
-              autoFocus
-            />
-          ) : (
-            <div className="px-4 py-2">
-              <span className="text-[10px] font-bold text-slate-300 italic uppercase">Gera OS automático (se desativado)</span>
-            </div>
-          )}
         </div>
       </section>
 

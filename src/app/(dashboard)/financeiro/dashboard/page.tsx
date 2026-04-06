@@ -15,31 +15,10 @@ import { resolveClinicaContext } from "@/lib/clinica";
 type InstallmentRow = {
   id: string;
   valor_parcela: number;
-  vencimento: string;
+  data_vencimento: string;
   status?: string | null;
   pago_em?: string | null;
-  payments?:
-    | {
-        vendas?:
-          | {
-              localidade_venda?: string | null;
-            }
-          | Array<{
-              localidade_venda?: string | null;
-            }>
-          | null;
-      }
-    | Array<{
-        vendas?:
-          | {
-              localidade_venda?: string | null;
-            }
-          | Array<{
-              localidade_venda?: string | null;
-            }>
-          | null;
-      }>
-    | null;
+  localidade?: string | null;
 };
 
 type IndicatorBg = "bg-blue-50" | "bg-rose-50" | "bg-emerald-50";
@@ -93,10 +72,10 @@ export default function DashboardFinanceiroPage() {
         const ctx = await resolveClinicaContext();
         const [{ data: instData }, { data: fluxoData }] = await Promise.all([
           supabase
-            .from("installments")
-            .select("id, valor_parcela, vencimento, status, pago_em, payments(vendas(localidade_venda))")
+            .from("financeiro_parcelas")
+            .select("id, valor_parcela, data_vencimento, status, data_pagamento, localidade")
             .eq("clinica_id", ctx.clinicaId)
-            .order("vencimento", { ascending: true }),
+            .order("data_vencimento", { ascending: true }),
           supabase
             .from("fluxo_caixa")
             .select("valor, tipo, localidade, criado_em, data_movimento")
@@ -143,18 +122,16 @@ export default function DashboardFinanceiroPage() {
     }
 
     rows.forEach((r) => {
-      const pay = Array.isArray(r.payments) ? r.payments[0] : r.payments;
-      const venda = Array.isArray(pay?.vendas) ? pay?.vendas[0] : pay?.vendas;
-      const isExterno = Boolean((venda?.localidade_venda || "").trim());
+      const isExterno = Boolean((r.localidade || "").trim());
       const origemOk = origem === "todos" || (origem === "externo" ? isExterno : !isExterno);
 
-      const vencDate = new Date(r.vencimento);
+      const vencDate = new Date(r.data_vencimento);
       const inicioOk = vencDate >= periodStart;
       const fimOk = vencDate <= periodEnd;
       if (!origemOk || !inicioOk || !fimOk) return;
 
       const valor = toNumber(r.valor_parcela);
-      const venc = new Date(r.vencimento);
+      const venc = new Date(r.data_vencimento);
       const pago = (r.status ?? "").toLowerCase() === "pago";
 
       if (!Number.isNaN(venc.getTime()) && !pago && venc.getMonth() === mes && venc.getFullYear() === ano) {
@@ -162,7 +139,7 @@ export default function DashboardFinanceiroPage() {
       }
 
       if (!pago) {
-        const dias = diasAtraso(r.vencimento);
+        const dias = diasAtraso(r.data_vencimento);
         if (dias > 0) {
           vencidosTotal += valor;
           if (dias <= 10) c1a10 += 1;

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Info } from 'lucide-react';
 
 type Props = {
   label: string;
@@ -9,9 +10,10 @@ type Props = {
   icon?: React.ReactNode;
   color?: "emerald" | "rose" | "amber" | "blue" | "indigo";
   empty?: boolean;
+  hint?: string;
 };
 
-export default function StatCard({ label, value, trend, icon, color = "emerald", empty = false }: Props) {
+export default function StatCard({ label, value, trend, icon, color = "emerald", empty = false, hint }: Props) {
   const colors: any = {
     emerald: "bg-emerald-50 text-emerald-600",
     rose: "bg-rose-50 text-rose-600",
@@ -39,7 +41,19 @@ export default function StatCard({ label, value, trend, icon, color = "emerald",
 
   return (
     <div className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all h-40 flex flex-col justify-between">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+      <div className="relative">
+        <div className="flex items-center gap-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+          {hint && (
+            <div className="relative group">
+              <Info size={14} className="text-slate-400" />
+              <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-8 w-56 bg-slate-900 text-white text-xs rounded-md p-2 shadow-lg z-50">
+                {hint}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
       <h3 className="text-3xl font-black text-slate-900 mb-4">{value}</h3>
       <div className="flex items-center gap-2">
         <div className={`p-1.5 rounded-lg ${colors[color]}`}>{icon}</div>

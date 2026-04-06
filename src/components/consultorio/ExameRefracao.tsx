@@ -130,26 +130,64 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Pr
           </div>
           <div className="flex-1">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Adição</label>
-            <div className="grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 sm:gap-3">
-              <button type="button" onClick={() => stepAdicao(-0.25)} className="h-11 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 transition-colors flex items-center justify-center"><ChevronDown size={20} /></button>
-              <input
-                type="text"
-                inputMode="decimal"
-                id="adicao"
-                name="adicao"
-                aria-label="Adição"
-                value={editingAdicao ? value.adicao : formatRefracaoString(value.adicao)}
-                onChange={(e) => setField("adicao", normalizeNumericInput(e.target.value))}
-                onFocus={() => setEditingAdicao(true)}
-                onBlur={() => {
-                  setEditingAdicao(false);
-                  const n = Number(normalizeNumericInput(value.adicao ?? ""));
-                  if (Number.isFinite(n)) setField("adicao", n.toFixed(2));
-                }}
-                className="w-full min-w-0 h-11 text-xl font-black text-slate-800 bg-slate-50 border border-slate-100 rounded-xl px-2 focus:ring-2 focus:ring-orange-300 text-center"
-                placeholder="+0,00"
-              />
-              <button type="button" onClick={() => stepAdicao(0.25)} className="h-11 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 transition-colors flex items-center justify-center"><ChevronUp size={20} /></button>
+            {/* Mobile: input with arrows below on separate line */}
+            <div className="sm:hidden flex flex-col items-center gap-2">
+              <div className="w-full bg-slate-50 p-2 rounded-xl flex items-center justify-center">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  id="adicao"
+                  name="adicao"
+                  aria-label="Adição"
+                  value={editingAdicao ? value.adicao : (formatRefracaoString(value.adicao) || '+0,00')}
+                  onChange={(e) => setField("adicao", normalizeNumericInput(e.target.value))}
+                  onFocus={() => setEditingAdicao(true)}
+                  onBlur={() => {
+                    setEditingAdicao(false);
+                    const n = Number(normalizeNumericInput(value.adicao ?? ""));
+                    if (Number.isFinite(n)) setField("adicao", n.toFixed(2));
+                  }}
+                  className="w-full min-w-[64px] h-9 text-base font-black text-slate-800 bg-transparent border-none rounded-md px-2 text-center"
+                  placeholder="+0,00"
+                />
+              </div>
+              <div className="flex items-center justify-center gap-3">
+                <button type="button" onClick={() => stepAdicao(-0.25)} className="h-9 w-9 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 transition-colors flex items-center justify-center">
+                  <ChevronDown size={18} />
+                </button>
+                <button type="button" onClick={() => stepAdicao(0.25)} className="h-9 w-9 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 transition-colors flex items-center justify-center">
+                  <ChevronUp size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Desktop / Tablet: original layout */}
+            <div className="hidden sm:grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-3">
+              <div className="flex items-center justify-center">
+                <button type="button" onClick={() => stepAdicao(-0.25)} className="h-11 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 transition-colors flex items-center justify-center"><ChevronDown size={20} /></button>
+              </div>
+              <div>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  id="adicao"
+                  name="adicao"
+                  aria-label="Adição"
+                  value={editingAdicao ? value.adicao : (formatRefracaoString(value.adicao) || '+0,00')}
+                  onChange={(e) => setField("adicao", normalizeNumericInput(e.target.value))}
+                  onFocus={() => setEditingAdicao(true)}
+                  onBlur={() => {
+                    setEditingAdicao(false);
+                    const n = Number(normalizeNumericInput(value.adicao ?? ""));
+                    if (Number.isFinite(n)) setField("adicao", n.toFixed(2));
+                  }}
+                  className="w-full min-w-[64px] h-11 text-xl font-black text-slate-800 bg-slate-50 border border-slate-100 rounded-xl px-2 focus:ring-2 focus:ring-orange-300 text-center"
+                  placeholder="+0,00"
+                />
+              </div>
+              <div className="flex items-center justify-center">
+                <button type="button" onClick={() => stepAdicao(0.25)} className="h-11 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-orange-600 transition-colors flex items-center justify-center"><ChevronUp size={20} /></button>
+              </div>
             </div>
           </div>
         </div>

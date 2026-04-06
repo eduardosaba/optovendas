@@ -43,16 +43,24 @@ export default function Step2Produtos({ data, lentes, tiposArmacao, armacoesEsto
         comboId: null,
         combo_aplicado_id: null,
         valor_desconto_combo: 0,
+        financeiro: { ...data.financeiro, desconto: 0 },
       });
       return;
     }
+
+    // calcula preços atuais da lente e armação selecionadas para derivar o desconto
+    const valorLente = Number((lentes || []).find((l: any) => l.id === data.lenteId)?.preco_base ?? 0);
+    const valorArmacaoEstoque = data.armacaoPropria ? 0 : Number((armacoesEstoque || []).find((a: any) => a.id === data.armacaoId)?.preco_venda ?? 0);
+    const valorTipoArmacao = data.armacaoPropria ? 0 : Number((tiposArmacao || []).find((t: any) => t.id === data.armacaoTipoId)?.preco_venda ?? 0);
+    const base = valorLente + Math.max(valorArmacaoEstoque, valorTipoArmacao);
+    const descontoCalculado = Math.max(0, Number((base - Number(combo.preco_fechado || 0)).toFixed(2)));
 
     onChange({
       ...data,
       comboId: combo.id,
       combo_aplicado_id: combo.id,
-      valor_desconto_combo: 0,
-      financeiro: { ...data.financeiro, total: Number(combo.preco_fechado) },
+      valor_desconto_combo: descontoCalculado,
+      financeiro: { ...data.financeiro, desconto: descontoCalculado },
     });
     toast.success(`Combo ${combo.nome_combo} selecionado!`);
   };

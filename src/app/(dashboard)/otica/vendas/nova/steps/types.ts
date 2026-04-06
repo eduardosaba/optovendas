@@ -90,6 +90,7 @@ export type ReceitaManualData = {
 export type VendaData = {
   id?: string;
   dataVenda?: string;
+  valor_final?: number | null;
   vendaManual: boolean;
   clienteManualNome: string;
   clienteManualCpf: string;
@@ -108,7 +109,6 @@ export type VendaData = {
   previsaoEntrega: string;
   dataEncomenda: string;
   statusOS: "Laboratorio" | "Em Producao" | "Pronto" | "Entrega";
-  usaNumManual: boolean;
   numeroOsManual: string;
   termoQuebraAceito: boolean;
   assinatura?: string | null;
@@ -123,6 +123,7 @@ export type VendaData = {
   anexos_urls?: string[];
   medida_obrigatoria?: boolean;
   status_medida?: string;
+  usaNumManual?: boolean;
   // Combo fields
   comboId?: string | null;
   combo_aplicado_id?: string | null;

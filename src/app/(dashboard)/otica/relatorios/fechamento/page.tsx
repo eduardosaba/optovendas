@@ -116,9 +116,9 @@ export default function FechamentoCaixaPage() {
       // evitar duplicatas: identificar vendas que já têm lançamento no fluxo via referencia_id
       const fluxoRefs = new Set((fluxoData || []).map((f: any) => String(f.referencia_id)));
       const vendasAsMov = (vendasIntervalo || []).map((v: any) => {
-        const paciente = v.pacientes && v.pacientes[0] ? v.pacientes[0].nome_completo : null;
-        const os = v.ordens_servico && v.ordens_servico[0] ? v.ordens_servico[0].numero_os : null;
-        const descricao = os ? `Venda OS #${os} — ${paciente || ''}` : paciente ? `Venda — ${paciente}` : 'Venda';
+      const paciente = v.pacientes && v.pacientes[0] ? v.pacientes[0].nome_completo : null;
+      const os = (v.ordens_servico && v.ordens_servico[0] ? v.ordens_servico[0].numero_os : null) || v.numero_os || v.numero_os_manual || null;
+      const descricao = os ? `Venda OS #${os} — ${paciente || ''}` : paciente ? `Venda — ${paciente}` : 'Venda';
         return {
           id: `v-${v.id}`,
           descricao,

@@ -15,18 +15,30 @@ export async function POST(req: NextRequest) {
         const token = match[1];
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
         const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        // Prefer using the service role client to validate tokens when available
         if (supabaseUrl && serviceRole) {
           const supabaseAdmin = createClient(supabaseUrl, serviceRole, { auth: { persistSession: false } });
           try {
             const userRes: any = await (supabaseAdmin as any).auth.getUser({ access_token: token });
             const userId = userRes?.data?.user?.id;
             if (userId) {
-              const perfilRes = await supabaseAdmin.from('perfis').select('funcao').eq('id', userId).maybeSingle();
-              const funcao = (perfilRes.data?.funcao || '').toLowerCase();
-              if (['master', 'admin', 'admin_clinica'].includes(funcao)) allowedByAuth = true;
+              allowedByAuth = true;
             }
           } catch (e) {
-            console.warn('failed to validate bearer token for update-attachments', e);
+            console.warn('failed to validate bearer token for update-attachments (serviceRole)', e);
+          }
+        } else if (supabaseUrl && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+          // Fallback: try validating with the anon key when service role is not configured
+          // This allows local/dev environments to authenticate session tokens.
+          try {
+            const supabaseClient = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+            const userRes: any = await (supabaseClient as any).auth.getUser({ access_token: token });
+            const userId = userRes?.data?.user?.id;
+            if (userId) {
+              allowedByAuth = true;
+            }
+          } catch (e) {
+            console.warn('failed to validate bearer token for update-attachments (anon fallback)', e);
           }
         }
       }

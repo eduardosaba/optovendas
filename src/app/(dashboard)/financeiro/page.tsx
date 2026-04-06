@@ -87,7 +87,7 @@ export default function FinanceiroPage() {
         }
 
         const [instRes, pagarRes, fluxoRes] = await Promise.all([
-          supabase.from("installments").select("*").eq("clinica_id", ctx.clinicaId),
+          supabase.from("financeiro_parcelas").select("*").eq("clinica_id", ctx.clinicaId),
           supabase.from("contas_a_pagar").select("*").eq("clinica_id", ctx.clinicaId),
           supabase.from("fluxo_caixa").select("valor, tipo, localidade").eq("clinica_id", ctx.clinicaId),
         ]);
@@ -148,7 +148,7 @@ export default function FinanceiroPage() {
 
     installments.forEach((inst) => {
       const valor = Number(inst.valor_parcela || 0);
-      const venc = new Date(inst.vencimento);
+      const venc = new Date(inst.data_vencimento || inst.vencimento);
       const isPago = inst.status === "pago";
 
       // A Receber no mês atual

@@ -13,63 +13,19 @@ import {
   MessageCircle,
   Phone,
   Search,
+  Calendar,
 } from "lucide-react";
 
-type PacienteInfo = {
-  nome_completo?: string | null;
-  celular?: string | null;
-  cidade_atendimento?: string | null;
-  endereco_completo?: string | null;
-};
+// Helper para formatar moeda
+const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-type DevedorRow = {
-  id: string;
-  valor_parcela?: number | null;
-  vencimento?: string | null;
-  status?: string | null;
-  payments?:
-    | {
-        pacientes?: PacienteInfo | PacienteInfo[] | null;
-      }
-    | Array<{
-        pacientes?: PacienteInfo | PacienteInfo[] | null;
-      }>
-    | null;
-};
-
-function brl(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function getPaciente(row: DevedorRow): PacienteInfo | undefined {
-  const pay = Array.isArray(row.payments) ? row.payments[0] : row.payments;
-  const p = pay?.pacientes;
-  return Array.isArray(p) ? p[0] : p ?? undefined;
-}
-
-function diasAtraso(vencimento?: string | null) {
-  if (!vencimento) return 0;
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const venc = new Date(vencimento);
-  venc.setHours(0, 0, 0, 0);
-  const diff = hoje.getTime() - venc.getTime();
-  return Math.max(0, Math.floor(diff / (1000 * 3600 * 24)));
-}
-
-function limparTelefone(valor?: string | null) {
-  return (valor || "").replace(/\D/g, "");
-}
-
-function toWhatsappLink(numero: string, mensagem: string) {
-  const digits = limparTelefone(numero);
-  if (!digits) return "";
-  const withDdi = digits.startsWith("55") ? digits : `55${digits}`;
-  return `https://wa.me/${withDdi}?text=${encodeURIComponent(mensagem)}`;
+function pickOne<T = any>(value: any): T | null {
+  if (Array.isArray(value)) return (value[0] as T) || null;
+  return (value as T) || null;
 }
 
 export default function InadimplenciaRotaPage() {
-  const [devedores, setDevedores] = useState<DevedorRow[]>([]);
+  const [devedores, setDevedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [cidadeFiltro, setCidadeFiltro] = useState("todas");
@@ -79,194 +35,210 @@ export default function InadimplenciaRotaPage() {
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
+      
+      // AJUSTADO PARA O SEU SCHEMA REAL: financeiro_parcelas
       const { data, error } = await supabase
-        .from("installments")
-        .select(
-          "id, valor_parcela, vencimento, status, payments(pacientes(nome_completo, celular, cidade_atendimento, endereco_completo))"
-        )
+        .from("financeiro_parcelas")
+        .select(`
+          id, 
+          venda_id,
+          valor_parcela, 
+          data_vencimento, 
+          status, 
+          localidade,
+          pacientes:paciente_id (nome_completo, celular, cidade_atendimento, endereco_completo)
+        `)
         .eq("clinica_id", ctx.clinicaId)
-        .eq("status", "atrasado")
-        .order("vencimento", { ascending: true });
+        .in("status", ["pendente", "atrasado"])
+        .order("data_vencimento", { ascending: true });
 
       if (error) throw error;
-      setDevedores((data as DevedorRow[]) || []);
-    } catch (err) {
-      const e = err as Error;
-      toast.error("Erro ao carregar inadimplencia: " + e.message);
+
+      const baseRows = data || [];
+      const vendaIds = Array.from(new Set(baseRows.map((r: any) => r.venda_id).filter(Boolean)));
+
+      let vendasMap = new Map<string, any>();
+      if (vendaIds.length > 0) {
+        const { data: vendasData, error: vendasErr } = await supabase
+          .from("vendas")
+          .select("id, localidade")
+          .in("id", vendaIds);
+        if (vendasErr) throw vendasErr;
+        vendasMap = new Map((vendasData || []).map((v: any) => [v.id, v]));
+      }
+
+      // Fallback para bases onde financeiro_parcelas.venda_id referencia otica_vendas
+      let oticaVendasMap = new Map<string, any>();
+      if (vendaIds.length > 0) {
+        const { data: oticaVendasData, error: oticaVendasErr } = await supabase
+          .from("otica_vendas")
+          .select("id, localidade")
+          .in("id", vendaIds);
+        if (oticaVendasErr) throw oticaVendasErr;
+        oticaVendasMap = new Map((oticaVendasData || []).map((v: any) => [v.id, v]));
+      }
+
+      const enriched = baseRows.map((r: any) => ({
+        ...r,
+        venda_localidade:
+          vendasMap.get(r.venda_id)?.localidade ||
+          oticaVendasMap.get(r.venda_id)?.localidade ||
+          r.localidade ||
+          null,
+      }));
+
+      setDevedores(enriched);
+    } catch (err: any) {
+      toast.error("Erro ao carregar inadimplência: " + err.message);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    void carregarInadimplentes();
-  }, []);
+  useEffect(() => { carregarInadimplentes(); }, []);
+
+  // Dias de atraso baseado na coluna correta
+  function calcularDiasAtraso(vencimento: string) {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const venc = new Date(vencimento);
+    venc.setHours(0, 0, 0, 0);
+    const diff = hoje.getTime() - venc.getTime();
+    return Math.max(0, Math.floor(diff / (1000 * 3600 * 24)));
+  }
 
   const cidadesDisponiveis = useMemo(() => {
     const cidades = devedores
-      .map((d) => getPaciente(d)?.cidade_atendimento)
-      .filter((v): v is string => Boolean(v));
-    return Array.from(new Set(cidades)).sort((a, b) => a.localeCompare(b));
+      .map((d) => {
+        const paciente = pickOne(d.pacientes);
+        return d.venda_localidade || paciente?.cidade_atendimento;
+      })
+      .filter(Boolean);
+    return Array.from(new Set(cidades)).sort() as string[];
   }, [devedores]);
 
   const listaFiltrada = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
 
     return devedores.filter((d) => {
-      const p = getPaciente(d);
-      const nome = (p?.nome_completo ?? "").toLowerCase();
-      const cidade = p?.cidade_atendimento ?? "";
-      const bateNome = termo.length === 0 || nome.includes(termo);
-      const bateCidade = cidadeFiltro === "todas" || cidade === cidadeFiltro;
-      return bateNome && bateCidade;
+      const paciente = pickOne(d.pacientes);
+      const nome = (paciente?.nome_completo ?? "").toLowerCase();
+      const cidade = d.venda_localidade || paciente?.cidade_atendimento || "";
+      const venc = new Date(d.data_vencimento);
+      venc.setHours(0, 0, 0, 0);
+      const isVencida = venc < hoje && d.status !== "pago" && d.status !== "cancelado";
+      return (busca === "" || nome.includes(busca.toLowerCase())) &&
+             (cidadeFiltro === "todas" || cidade === cidadeFiltro) &&
+             isVencida;
     });
   }, [devedores, busca, cidadeFiltro]);
 
   const totalAtraso = useMemo(
     () => listaFiltrada.reduce((acc, curr) => acc + Number(curr.valor_parcela || 0), 0),
-    [listaFiltrada],
+    [listaFiltrada]
   );
 
-  function acionarWhatsapp(row: DevedorRow) {
-    const paciente = getPaciente(row);
-    const numero = paciente?.celular;
-
-    if (!numero) {
-      toast.info("Paciente sem telefone cadastrado.");
-      return;
-    }
-
-    const atraso = diasAtraso(row.vencimento);
-    const msg = `Ola ${paciente?.nome_completo || ""}, tudo bem? Notamos que sua parcela de ${brl(
-      Number(row.valor_parcela || 0)
-    )} venceu ha ${atraso} dias. Estamos passando em ${paciente?.cidade_atendimento || "sua cidade"} hoje, podemos te visitar?`;
-
-    const link = toWhatsappLink(numero, msg);
-    if (!link) {
-      toast.info("Telefone invalido para WhatsApp.");
-      return;
-    }
-
-    window.open(link, "_blank", "noopener,noreferrer");
+  function acionarWhatsapp(row: any) {
+    const paciente = pickOne(row.pacientes);
+    if (!paciente?.celular) return toast.info("Paciente sem telefone.");
+    const atraso = calcularDiasAtraso(row.data_vencimento);
+    const localidade = row.venda_localidade || paciente?.cidade_atendimento || "sua região";
+    const msg = `Olá ${paciente.nome_completo}, tudo bem? Notamos que sua parcela de ${brl(row.valor_parcela)} venceu há ${atraso} dias. Estamos passando em ${localidade} hoje, podemos te visitar?`;
+    window.open(`https://wa.me/55${paciente.celular.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 animate-in fade-in p-6 pb-20 duration-700 md:p-10">
-      <header className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+    <div className="mx-auto max-w-6xl space-y-10 p-6 md:p-10 pb-20 animate-in fade-in duration-500">
+      <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
-          <Link
-            href="/financeiro"
-            className="rounded-2xl border border-slate-50 bg-white p-3 text-slate-400 shadow-sm transition-all hover:text-rose-600"
-          >
+          <Link href="/financeiro" className="p-3 bg-white border rounded-2xl text-slate-400 hover:text-rose-600 shadow-sm transition-all">
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-rose-600">Cobranca Externa</p>
-            <h1 className="text-4xl font-black tracking-tight text-slate-900">
-              Mapa de Devedores<span className="text-rose-600">.</span>
-            </h1>
+            <p className="text-xs font-black uppercase tracking-widest text-rose-600">Gestão de Rota</p>
+            <h1 className="text-4xl font-black text-slate-900">Mapa de Devedores</h1>
           </div>
         </div>
-
-        <div className="rounded-[24px] bg-rose-600 px-8 py-4 text-white shadow-xl shadow-rose-100">
+        <div className="bg-rose-600 px-8 py-4 rounded-[24px] text-white shadow-xl shadow-rose-100">
           <p className="text-[10px] font-black uppercase opacity-70">Total em Atraso</p>
           <p className="text-2xl font-black">{brl(totalAtraso)}</p>
         </div>
       </header>
 
-      <section className="grid grid-cols-1 gap-4 rounded-[32px] border border-slate-50 bg-white p-6 shadow-sm md:grid-cols-12">
+      {/* FILTROS */}
+      <section className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-white p-6 rounded-[32px] border border-slate-50 shadow-sm">
         <div className="relative md:col-span-7">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar devedor pelo nome..."
-            className="w-full rounded-2xl border-none bg-slate-50 py-4 pl-12 pr-4 font-bold text-slate-700 shadow-inner focus:ring-2 focus:ring-rose-500"
+          <input 
+            value={busca} 
+            onChange={e => setBusca(e.target.value)} 
+            placeholder="Nome do cliente..." 
+            className="w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-4 font-bold text-slate-700 focus:ring-2 focus:ring-rose-500"
           />
         </div>
         <div className="relative md:col-span-5">
           <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-400" size={18} />
-          <select
-            value={cidadeFiltro}
-            onChange={(e) => setCidadeFiltro(e.target.value)}
-            className="w-full appearance-none rounded-2xl border-none bg-slate-50 py-4 pl-12 pr-4 font-black text-slate-600 focus:ring-2 focus:ring-rose-500"
+          <select 
+            value={cidadeFiltro} 
+            onChange={e => setCidadeFiltro(e.target.value)}
+            className="w-full bg-slate-50 border-none rounded-2xl py-4 pl-12 pr-4 font-black text-slate-600 focus:ring-2 focus:ring-rose-500 appearance-none"
           >
-            <option value="todas">Todas as Cidades na Rota</option>
-            {cidadesDisponiveis.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
+            <option value="todas">Todas as Cidades</option>
+            {cidadesDisponiveis.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
       </section>
 
+      {/* LISTA */}
       <div className="space-y-4">
         {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="animate-spin text-rose-500" size={40} />
-          </div>
+          <div className="flex justify-center py-20"><Loader2 className="animate-spin text-rose-500" size={40} /></div>
         ) : listaFiltrada.length === 0 ? (
-          <div className="rounded-[40px] border-2 border-dashed border-slate-100 bg-white p-20 text-center">
-            <AlertTriangle className="mx-auto mb-4 text-slate-200" size={48} />
+          <div className="p-20 text-center bg-white rounded-[40px] border border-dashed border-slate-100">
+            <AlertTriangle className="mx-auto text-slate-200 mb-4" size={48} />
             <p className="font-bold text-slate-400">Nenhum devedor encontrado nesta rota.</p>
           </div>
         ) : (
-          listaFiltrada.map((d) => {
-            const paciente = getPaciente(d);
-            const atraso = diasAtraso(d.vencimento);
-            const telefone = paciente?.celular;
-
-            return (
-              <div
-                key={d.id}
-                className="group rounded-[40px] border border-slate-50 bg-white p-8 shadow-sm transition-all hover:shadow-xl"
-              >
-                <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-3">
-                      <span className="rounded-full bg-rose-100 px-3 py-1 text-[10px] font-black uppercase text-rose-600">
-                        {atraso} dias de atraso
-                      </span>
-                      <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-slate-300">
-                        <MapPin size={12} /> {paciente?.cidade_atendimento || "Cidade nao informada"}
-                      </span>
-                    </div>
-                    <h3 className="text-2xl font-black tracking-tight text-slate-800">{paciente?.nome_completo || "Cliente"}</h3>
-                    <p className="text-sm font-medium text-slate-500">{paciente?.endereco_completo || "Endereco nao cadastrado"}</p>
+          listaFiltrada.map((d) => (
+            <div key={d.id} className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all group">
+              {(() => {
+                const paciente = pickOne(d.pacientes);
+                const cidade = d.venda_localidade || paciente?.cidade_atendimento || "Não informada";
+                return (
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className="bg-rose-100 text-rose-600 px-3 py-1 rounded-full text-[10px] font-black uppercase">
+                      {calcularDiasAtraso(d.data_vencimento)} dias de atraso
+                    </span>
+                    <span className="text-xs font-bold text-slate-300 uppercase flex items-center gap-1">
+                      <MapPin size={12}/> {cidade}
+                    </span>
                   </div>
+                  <h3 className="text-2xl font-black text-slate-800">{paciente?.nome_completo}</h3>
+                  <p className="text-sm text-slate-500">{paciente?.endereco_completo || "Sem endereço cadastrado"}</p>
+                </div>
 
-                  <div className="flex w-full items-center gap-6 border-t border-slate-50 pt-4 md:w-auto md:border-t-0 md:pt-0">
-                    <div className="text-right">
-                      <p className="text-[10px] font-black uppercase text-slate-400">Divida de Parcela</p>
-                      <p className="text-3xl font-black text-rose-600">{brl(Number(d.valor_parcela || 0))}</p>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <a
-                        href={telefone ? `tel:${telefone}` : undefined}
-                        onClick={(e) => {
-                          if (!telefone) {
-                            e.preventDefault();
-                            toast.info("Paciente sem telefone cadastrado.");
-                          }
-                        }}
-                        className="rounded-[24px] bg-slate-50 p-5 text-slate-400 transition-all hover:bg-slate-900 hover:text-white"
-                      >
-                        <Phone size={20} />
+                <div className="flex items-center gap-6 w-full md:w-auto border-t md:border-t-0 pt-4 md:pt-0 border-slate-50">
+                   <div className="text-right">
+                      <p className="text-[10px] font-black text-slate-400 uppercase">Dívida Atual</p>
+                      <p className="text-3xl font-black text-rose-600">{brl(d.valor_parcela)}</p>
+                   </div>
+                   <div className="flex gap-2">
+                      <a href={`tel:${paciente?.celular || ''}`} className="p-5 bg-slate-50 text-slate-400 rounded-[24px] hover:bg-slate-900 hover:text-white transition-all">
+                        <Phone size={20}/>
                       </a>
-                      <button
-                        onClick={() => acionarWhatsapp(d)}
-                        className="rounded-[24px] bg-emerald-50 p-5 text-emerald-600 transition-all hover:bg-emerald-600 hover:text-white"
-                      >
-                        <MessageCircle size={20} />
+                      <button onClick={() => acionarWhatsapp(d)} className="p-5 bg-emerald-50 text-emerald-600 rounded-[24px] hover:bg-emerald-600 hover:text-white transition-all">
+                        <MessageCircle size={20}/>
                       </button>
-                    </div>
-                  </div>
+                   </div>
                 </div>
               </div>
-            );
-          })
+                );
+              })()}
+            </div>
+          ))
         )}
       </div>
     </div>
