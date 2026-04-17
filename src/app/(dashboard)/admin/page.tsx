@@ -31,6 +31,10 @@ type MasterStats = {
   pacientesBase: number;
 };
 
+type VendaResumo = {
+  valor_total?: number | null;
+};
+
 export default function TorreDeControleMaster() {
   const [clinicas, setClinicas] = useState<Clinica[]>([]);
   const [stats, setStats] = useState<MasterStats>({
@@ -53,7 +57,7 @@ export default function TorreDeControleMaster() {
       const [clinicasRes, pacientesRes, vendasRes] = await Promise.all([
         supabase.from("clinicas").select("*").order("criado_em", { ascending: false }),
         supabase.from("pacientes").select("id", { count: "exact", head: true }),
-        supabase.from("vendas").select("valor_final, valor_total"),
+        supabase.from("vendas").select("valor_total"),
       ]);
 
       if (clinicasRes.error) throw clinicasRes.error;
@@ -62,7 +66,10 @@ export default function TorreDeControleMaster() {
       setClinicas(rows);
 
       const trialCount = rows.filter(c => c.plano === 'trial').length;
-      const faturamento = (vendasRes.data || []).reduce((acc, item) => acc + Number(item.valor_final ?? item.valor_total ?? 0), 0);
+      const faturamento = ((vendasRes.data ?? []) as VendaResumo[]).reduce(
+        (acc: number, item: VendaResumo) => acc + Number(item.valor_total || 0),
+        0,
+      );
 
       setStats({
         clinicasTotais: rows.length,

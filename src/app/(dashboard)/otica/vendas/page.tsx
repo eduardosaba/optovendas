@@ -38,7 +38,7 @@ export default function AcompanhamentoVendasPage() {
           ordens_servico (numero_os, status_os)
         `)
         .eq("clinica_id", ctx.clinicaId)
-        .order("criado_em", { ascending: false });
+        .order("data_venda", { ascending: false });
 
       if (error) throw error;
       setVendas(data || []);
@@ -56,7 +56,7 @@ export default function AcompanhamentoVendasPage() {
         (cliente?.nome_completo || "").toLowerCase().includes(busca.toLowerCase()) ||
         (cliente?.cpf || "").includes(busca);
       const matchCidade = cidadeFiltro === "todas" || v.localidade_venda === cidadeFiltro || cliente?.cidade_atendimento === cidadeFiltro;
-      const dataVenda = new Date(v.criado_em).toISOString().split('T')[0];
+      const dataVenda = new Date(v.data_venda || v.criado_em).toISOString().split('T')[0];
       const matchData = (!dataInicio || dataVenda >= dataInicio) && (!dataFim || dataVenda <= dataFim);
 
       return matchBusca && matchCidade && matchData;
@@ -79,7 +79,7 @@ export default function AcompanhamentoVendasPage() {
 
     // Mapeamento dos dados
     const rows = vendasFiltradas.map(v => [
-      new Date(v.criado_em).toLocaleDateString('pt-BR'),
+      new Date(v.data_venda || v.criado_em).toLocaleDateString('pt-BR'),
       v.ordens_servico?.[0]?.numero_os || "N/D",
       v.pacientes?.nome_completo,
       v.pacientes?.cpf || "",

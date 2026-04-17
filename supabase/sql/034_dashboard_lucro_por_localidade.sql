@@ -28,7 +28,7 @@ BEGIN
     FROM vendas v
     LEFT JOIN pacientes p ON p.id = v.paciente_id
     WHERE v.clinica_id = p_clinica_id
-      AND v.criado_em::date BETWEEN p_inicio AND p_fim
+      AND (COALESCE(v.data_venda::date, v.criado_em::date)) BETWEEN p_inicio AND p_fim
     GROUP BY 1
   ),
   despesas AS (

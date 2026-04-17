@@ -8,6 +8,16 @@ export type ClinicaContext = {
   isMaster: boolean;
 };
 
+function normalizarFuncao(funcaoRaw?: string | null): string {
+  const f = String(funcaoRaw ?? "").toLowerCase();
+  if (f === "master") return "master";
+  if (f === "admin" || f === "admin_clinica") return "admin";
+  if (f === "consultorio" || f === "optometrista") return "consultorio";
+  if (f === "vendas" || f === "atendente") return "vendas";
+  if (f === "financeiro") return "financeiro";
+  return "vendas";
+}
+
 export async function resolveClinicaContext(): Promise<ClinicaContext> {
   const {
     data: { session },
@@ -42,27 +52,33 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
 
   let perfil = await lerPerfilAtual();
 
-  // Auto-heal: tenta sincronizar cadastro de equipe/perfil quando o registro ainda nao foi criado.
-  if (!perfil) {
+  // Auto-heal: tenta sincronizar cadastro de equipe/perfil quando o registro ainda nao foi criado
+  // ou quando os campos obrigatorios vierem incompletos.
+  if (!perfil || !perfil.clinica_id || !perfil.funcao) {
     await supabase.rpc("sync_current_user_membership");
     perfil = await lerPerfilAtual();
   }
 
   const metadataClinicaId = (user.user_metadata?.clinica_id as string | undefined) ?? undefined;
-  const metadataFuncao = (user.user_metadata?.funcao as string | undefined) ?? undefined;
+  const metadataFuncao =
+    (user.user_metadata?.funcao as string | undefined) ??
+    (user.user_metadata?.role as string | undefined) ??
+    (user.app_metadata?.funcao as string | undefined) ??
+    (user.app_metadata?.role as string | undefined) ??
+    undefined;
   const metadataOticaId = (user.user_metadata?.otica_id as string | undefined) ?? undefined;
 
   let profile: { clinica_id?: string; otica_id?: string } | null = null;
   // Fallback: se `perfis` não possui clinica_id, tentar ler da tabela legada `profiles` (user_id)
   if (!perfil?.clinica_id && !metadataClinicaId) {
     const profilesRes = await supabase
-      .from("perfis")
-      .select("clinica_id, otica_id")
-      .eq("id", userId)
+      .from("profiles")
+      .select("clinica_id")
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (profilesRes.error) {
-      throw new Error(`Falha ao ler fallback de clinica em perfis: ${profilesRes.error.message}`);
+      throw new Error(`Falha ao ler fallback de clinica em profiles: ${profilesRes.error.message}`);
     }
 
     profile = (profilesRes.data ?? null) as { clinica_id?: string } | null;
@@ -74,8 +90,9 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
 
   // Normaliza a função (força lower case) e define um padrão 'vendas'
   // para forçar a busca real no banco quando não houver valor explícito.
-  const rawFuncao = (perfil?.funcao ?? metadataFuncao ?? "vendas").toLowerCase();
-  const isMaster = rawFuncao === "master";
+  const rawFuncao = perfil?.funcao ?? metadataFuncao ?? "vendas";
+  const funcao = normalizarFuncao(rawFuncao);
+  const isMaster = funcao === "master";
 
   // Se não houver clinica vinculada e o usuário não for master, erro.
   if (!clinicaId && !isMaster) {
@@ -87,7 +104,7 @@ export async function resolveClinicaContext(): Promise<ClinicaContext> {
     // Se for master e nao tiver clinicaId, retorna 'master' para queries globais.
     clinicaId: clinicaId || "master",
     oticaId,
-    funcao: rawFuncao,
+    funcao,
     isMaster,
   };
 }

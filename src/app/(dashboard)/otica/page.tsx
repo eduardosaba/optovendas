@@ -41,6 +41,19 @@ type MetricsState = {
   totalConsultasCount: number;
 };
 
+type VendaRow = {
+  valor_final?: number | null;
+  valor_total?: number | null;
+};
+
+type ParcelaRow = {
+  valor_parcela?: number | null;
+};
+
+type EstoqueThumbRow = {
+  foto_url?: string | null;
+};
+
 type MetricColor = "emerald" | "indigo" | "rose" | "cyan" | "amber";
 
 type TopMetricProps = {
@@ -61,11 +74,16 @@ export default function OticaPage() {
     totalVendasCount: 0,
     totalConsultasCount: 0,
   });
+
+  const [topVendedores, setTopVendedores] = useState<Array<{ nome: string; total: number }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [competencia, setCompetencia] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [metaMensal, setMetaMensal] = useState<number | null>(null);
   const [celebrou, setCelebrou] = useState(false);
   const [showCelebrationModal, setShowCelebrationModal] = useState(false);
-  const [topVendedores, setTopVendedores] = useState<Array<{ nome: string; total: number }>>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function carregarMetrics() {
@@ -75,61 +93,139 @@ export default function OticaPage() {
         hoje.setHours(0, 0, 0, 0);
         const isoHoje = hoje.toISOString().split(".")[0] + "Z";
 
-        async function carregarVendasHoje() {
-              const todayDate = hoje.toISOString().slice(0,10);
-              // Preferir vendas cuja `data_venda` seja hoje; quando `data_venda` for NULL,
-              // considerar vendas criadas hoje (criado_em >= isoHoje). Evita contabilizar
-              // vendas com data_venda antiga que foram apenas registradas/criadas hoje.
-              const res = await supabase
-                .from("vendas")
-                .select("valor_final, valor_total, data_venda, criado_em")
-                .eq("clinica_id", ctx.clinicaId)
-                .or(`data_venda.eq.${todayDate},and(data_venda.is.null,criado_em.gte.${isoHoje})`);
+        // competência YYYY-MM -> primeiro e último dia do mês
+        const [y, m] = (competencia || '').split('-').map(Number);
+        const primeiro = new Date(y, (m || 1) - 1, 1);
+        const ultimo = new Date(y, (m || 1), 0);
+        const primeiroDiaMes = primeiro.toISOString().split('T')[0];
+        const ultimoDiaMes = ultimo.toISOString().split('T')[0];
 
-              return res.error ? [] : res.data ?? [];
+        async function carregarVendasHoje() {
+          const res = await supabase
+            .from("vendas")
+            .select("valor_final, valor_total")
+            .eq("clinica_id", ctx.clinicaId)
+            .gte("criado_em", isoHoje);
+
+          return res.error ? [] : res.data ?? [];
         }
 
-        const [vendasRows, osRes, estoqueRes, inadRes] = await Promise.all([
-          carregarVendasHoje(),
-          supabase
+        const vendasRows = await carregarVendasHoje();
+
+        let osRes: any = { data: [], count: 0 };
+        try {
+          osRes = await supabase
             .from("ordens_servico")
             .select("id", { count: "exact", head: true })
             .eq("clinica_id", ctx.clinicaId)
-            .not("status_os", "eq", "Entregue"),
-          supabase
+            .not("status_os", "eq", "Entregue");
+          if (osRes.error) {
+            console.warn('ordens_servico fetch error:', String(osRes.error.message || osRes.error));
+            osRes.data = osRes.data || [];
+            osRes.count = osRes.count || 0;
+          }
+        } catch (err) {
+          console.warn('ordens_servico fetch throw:', err);
+          osRes = { data: [], count: 0 };
+        }
+
+        let estoqueRes: any = { data: [] };
+        try {
+          estoqueRes = await supabase
             .from("estoque_armacoes")
             .select("foto_url")
             .eq("clinica_id", ctx.clinicaId)
             .gt("quantidade_atual", 0)
             .order("atualizado_em", { ascending: false })
-            .limit(4),
-          supabase
-            .from("financeiro_parcelas")
+            .limit(4);
+          if (estoqueRes.error) {
+            console.warn('estoque_armacoes fetch error:', String(estoqueRes.error.message || estoqueRes.error));
+            estoqueRes.data = estoqueRes.data || [];
+          }
+        } catch (err) {
+          console.warn('estoque_armacoes fetch throw:', err);
+          estoqueRes = { data: [] };
+        }
+
+        let inadRes: any = { data: [] };
+        try {
+          inadRes = await supabase
+            .from("installments")
             .select("valor_parcela")
             .eq("clinica_id", ctx.clinicaId)
-            .eq("status", "atrasado"),
-        ]);
+            .eq("status", "atrasado");
+          if (inadRes.error) {
+            const msg = String(inadRes.error.message || inadRes.error);
+            console.warn('installments fetch error (inadimplencia):', msg);
+            if (/Could not find the table 'public.installments'|PGRST205|table 'public.installments'/.test(msg)) {
+              try {
+                const alt = await supabase.from('payments').select('valor_parcela').eq('clinica_id', ctx.clinicaId).eq('status', 'atrasado');
+                if (!alt.error && alt.data) inadRes.data = alt.data;
+                else inadRes.data = inadRes.data || [];
+              } catch (e) {
+                inadRes.data = inadRes.data || [];
+              }
+            } else {
+              inadRes.data = inadRes.data || [];
+            }
+          }
+        } catch (err) {
+          console.warn('installments fetch throw (inadimplencia):', err);
+          inadRes = { data: [] };
+        }
 
-        const vendasHoje = (vendasRows ?? []).reduce(
-          (acc, i) => acc + Number((i as { valor_final?: number | null; valor_total?: number | null }).valor_final ?? (i as { valor_final?: number | null; valor_total?: number | null }).valor_total ?? 0),
+        const vendasHoje = ((vendasRows ?? []) as VendaRow[]).reduce(
+          (acc: number, i: VendaRow) => acc + Number(i.valor_final ?? i.valor_total ?? 0),
           0,
         );
 
-        const inadimplenciaTotal = (inadRes.error ? [] : (inadRes.data ?? [])).reduce(
-          (acc, i) => acc + Number((i as { valor_parcela?: number | null }).valor_parcela ?? 0),
+        const inadimplenciaTotal = (inadRes.error ? [] : (inadRes.data ?? []) as ParcelaRow[]).reduce(
+          (acc: number, i: ParcelaRow) => acc + Number(i.valor_parcela ?? 0),
           0,
         );
 
-        const estoqueThumbnails = (estoqueRes.error ? [] : (estoqueRes.data ?? [])).map((r) => (r as { foto_url?: string | null }).foto_url).filter(Boolean) as string[];
+        const estoqueThumbnails = (estoqueRes.error ? [] : (estoqueRes.data ?? []) as EstoqueThumbRow[])
+          .map((r: EstoqueThumbRow) => r.foto_url)
+          .filter(Boolean) as string[];
+
+        // --- Buscar vendas e consultas para a competência selecionada ---
+        let vendasMes = 0;
+        let totalVendasCount = 0;
+        try {
+          let res: any = await supabase.from('vendas').select('valor_final,valor_total,data_venda,criado_em').eq('clinica_id', ctx.clinicaId).gte('data_venda', primeiroDiaMes).lte('data_venda', ultimoDiaMes);
+          if (res.error && /data_venda|column .* does not exist/i.test(String(res.error.message || res.error))) {
+            res = await supabase.from('vendas').select('valor_final,valor_total,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes).lte('criado_em', ultimoDiaMes + 'T23:59:59Z');
+            if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
+              res = await supabase.from('vendas').select('valor_final,valor_total,created_at').eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes).lte('created_at', ultimoDiaMes + 'T23:59:59Z');
+            }
+          }
+          const vendasMesData = (!res.error && res.data) ? res.data : [];
+          vendasMes = (vendasMesData || []).reduce((s: number, r: any) => s + Number(r.valor_final ?? r.valor_total ?? 0), 0);
+          totalVendasCount = (vendasMesData || []).length;
+        } catch (err) {
+          console.warn('Erro ao buscar vendas por competência', err);
+        }
+
+        let totalConsultasCount = 0;
+        try {
+          // tentamos filtrar por data_venda em consultorio_receitas, com fallback para criado_em
+          let cres: any = await supabase.from('consultorio_receitas').select('id,data_venda,criado_em').eq('clinica_id', ctx.clinicaId).gte('data_venda', primeiroDiaMes).lte('data_venda', ultimoDiaMes);
+          if (cres.error && /data_venda|column .* does not exist/i.test(String(cres.error.message || cres.error))) {
+            cres = await supabase.from('consultorio_receitas').select('id,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes).lte('criado_em', ultimoDiaMes + 'T23:59:59Z');
+          }
+          totalConsultasCount = (cres?.data || []).length || 0;
+        } catch (err) {
+          console.warn('Erro ao buscar consultas por competência', err);
+        }
 
         setMetrics({
           vendasHoje,
           osPendentes: osRes.error ? 0 : osRes.count ?? 0,
           inadimplenciaTotal,
           estoqueThumbnails,
-          totalVendasCount: 0,
-          totalConsultasCount: 0,
-          vendasMes: 0,
+          totalVendasCount,
+          totalConsultasCount,
+          vendasMes,
         });
       } catch (e) {
         // manter estado default em erro
@@ -139,7 +235,7 @@ export default function OticaPage() {
     }
 
     void carregarMetrics();
-  }, []);
+  }, [competencia]);
 
   // celebração com canvas-confetti
   const dispararCelebracao = () => {
@@ -200,21 +296,37 @@ export default function OticaPage() {
         </div>
 
         <div className="flex items-start justify-end w-full lg:w-auto">
-          <div className="ml-auto lg:ml-0">
+          <div className="ml-auto lg:ml-0 flex items-center gap-3">
+            <label className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Competência</span>
+              <input
+                type="month"
+                value={competencia}
+                onChange={(e) => setCompetencia(e.target.value)}
+                className="bg-transparent border-none outline-none text-sm font-bold"
+              />
+            </label>
             <OticaLogoBadge />
           </div>
         </div>
       </header>
 
       {/* KPIs: colocados abaixo do título, alinhados à direita */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-4">
         <StatCard
           label="Vendas Hoje"
-          hint="Conta por data_venda quando disponível"
           value={metrics.vendasHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
           icon={<TrendingUp size={20} className="text-emerald-500" />}
           color="emerald"
           trend="Hoje"
+        />
+
+        <StatCard
+          label="Vendas (Mês)"
+          value={metrics.vendasMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          icon={<DollarSign size={20} className="text-cyan-500" />}
+          color="blue"
+          trend={competencia}
         />
 
         <StatCard

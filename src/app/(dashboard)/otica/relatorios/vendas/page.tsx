@@ -39,44 +39,10 @@ export default function RelatorioVendasPage() {
           ordens_servico (numero_os, status_os)
         `)
         .eq("clinica_id", ctx.clinicaId)
-        .order("criado_em", { ascending: false });
+        .order("data_venda", { ascending: false });
 
       if (error) throw error;
-      const vendasList = (data || []).map((v: any) => {
-        // Normalizar ordens_servico para array quando o PostgREST retornar objeto único
-        if (v.ordens_servico && !Array.isArray(v.ordens_servico)) {
-          try { v.ordens_servico = [v.ordens_servico]; } catch { v.ordens_servico = [] }
-        }
-        return v;
-      });
-
-      // Reconciliar status de conciliação usando fluxo_caixa: se venda estiver
-      // em 'aguardando_conciliacao' mas houver um lançamento em fluxo_caixa com
-      // status_conciliacao = 'concluido', marcar como pago para relatório.
-      const vendaIds = vendasList.map((v: any) => v.id).filter(Boolean);
-      if (vendaIds.length) {
-        const { data: fluxos } = await supabase
-          .from('fluxo_caixa')
-          .select('referencia_id, status_conciliacao')
-          .in('referencia_id', vendaIds);
-        const mapaFluxo: Record<string, string[]> = {};
-        (fluxos || []).forEach((f: any) => {
-          const id = String(f.referencia_id);
-          mapaFluxo[id] = mapaFluxo[id] || [];
-          mapaFluxo[id].push(f.status_conciliacao);
-        });
-
-        for (const v of vendasList) {
-          if (v && v.id && v.status_financeiro === 'aguardando_conciliacao') {
-            const statuses = mapaFluxo[String(v.id)] || [];
-            if (statuses.includes('concluido') || statuses.includes('concluído') || statuses.includes('concluida')) {
-              v.status_financeiro = 'pago';
-            }
-          }
-        }
-      }
-
-      setVendas(vendasList || []);
+      setVendas(data || []);
     } catch {
       toast.error("Erro ao carregar lista de vendas.");
     } finally {
@@ -107,14 +73,15 @@ export default function RelatorioVendasPage() {
   const vendasFiltradas = useMemo(() => {
     return vendas.filter((v) => {
       const cliente = v.pacientes;
+      const osNumero = v.numero_os_manual || v.ordens_servico?.[0]?.numero_os || v.numero_os || '';
       const matchBusca = 
         (cliente?.nome_completo || "").toLowerCase().includes(busca.toLowerCase()) ||
         (cliente?.cpf || "").includes(busca) ||
-        (v.ordens_servico?.[0]?.numero_os || "").includes(busca);
+        String(osNumero || "").includes(busca);
       
       const matchCidade = cidadeFiltro === "todas" || v.localidade_venda === cidadeFiltro || cliente?.cidade_atendimento === cidadeFiltro;
       
-      const dataVenda = (v.data_venda || v.dataVenda || v.criado_em) ? new Date(v.data_venda || v.dataVenda || v.criado_em).toISOString().split('T')[0] : '';
+      const dataVenda = new Date(v.data_venda || v.criado_em).toISOString().split('T')[0];
       const matchData = (!dataInicio || dataVenda >= dataInicio) && (!dataFim || dataVenda <= dataFim);
 
       return matchBusca && matchCidade && matchData;
@@ -135,14 +102,18 @@ export default function RelatorioVendasPage() {
   function exportarExcel() {
     if (vendasFiltradas.length === 0) return toast.info("Não há dados para exportar.");
     const headers = ["Data", "OS", "Cliente", "Cidade", "Status", "Valor"];
-    const rows = vendasFiltradas.map(v => [
-      new Date(v.criado_em).toLocaleDateString('pt-BR'),
-      v.ordens_servico?.[0]?.numero_os || "N/D",
-      v.pacientes?.nome_completo,
-      v.localidade_venda || v.pacientes?.cidade_atendimento || "Geral",
-      v.status_financeiro,
-      (Number(v.valor_final ?? v.valor_total) || 0).toFixed(2)
-    ]);
+    const rows: string[][] = [];
+    for (const v of vendasFiltradas) {
+      const osNumero = v.numero_os_manual || v.ordens_servico?.[0]?.numero_os || v.numero_os || 'N/D';
+      rows.push([
+        new Date(v.data_venda || v.criado_em).toLocaleDateString('pt-BR'),
+        osNumero,
+        v.pacientes?.nome_completo,
+        v.localidade_venda || "Geral",
+        v.status_financeiro,
+        (Number(v.valor_final ?? v.valor_total) || 0).toFixed(2),
+      ]);
+    }
     const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(";")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -236,8 +207,8 @@ export default function RelatorioVendasPage() {
               ) : vendasFiltradas.map((v) => (
                 <tr key={v.id} className={`group hover:bg-slate-50/80 transition-all ${v.status_financeiro === 'cancelado' ? 'opacity-60 bg-slate-50/30' : ''}`}>
                   <td className="px-8 py-6">
-                    <p className="font-black text-sm text-slate-800">{new Date(v.data_venda || v.dataVenda || v.criado_em).toLocaleDateString('pt-BR')}</p>
-                          <p className="text-[10px] font-bold text-cyan-600 uppercase">OS #{v.ordens_servico?.[0]?.numero_os || v.numero_os || v.numero_os_manual || 'N/D'}</p>
+                    <p className="font-black text-sm text-slate-800">{new Date(v.criado_em).toLocaleDateString('pt-BR')}</p>
+                    <p className="text-[10px] font-bold text-cyan-600 uppercase">OS #{v.numero_os_manual || v.ordens_servico?.[0]?.numero_os || v.numero_os || 'N/D'}</p>
                   </td>
                   <td className="px-8 py-6">
                      <p className="text-sm font-black text-slate-700 uppercase">{v.pacientes?.nome_completo}</p>

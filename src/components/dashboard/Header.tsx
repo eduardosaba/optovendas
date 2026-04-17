@@ -195,43 +195,26 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     if (!clinicaId) return;
     setNotificationsLoading(true);
     try {
-      const [parcelasRes, vendasRes] = await Promise.all([
-        supabase.from('financeiro_parcelas').select('id,valor_parcela,data_vencimento,status,paciente_id').eq('clinica_id', clinicaId).order('data_vencimento', { ascending: false }).limit(5),
-        supabase.from('vendas').select('id,paciente_id,valor_total,valor_final,criado_em,localidade_venda,pacientes(nome_completo),ordens_servico(numero_os),numero_os_manual').eq('clinica_id', clinicaId).order('criado_em', { ascending: false }).limit(5),
-      ]);
+      const parcelasRes = await supabase.from('financeiro_parcelas').select('id,valor_parcela,data_vencimento,status,paciente_id').eq('clinica_id', clinicaId).order('data_vencimento', { ascending: false }).limit(5);
 
-      const vendas = (vendasRes.data || []) as any[];
-      const pacienteIdsVendas = Array.from(
-        new Set(vendas.map((v) => v?.paciente_id).filter(Boolean))
-      ) as string[];
-
-      let nomesPacientesPorId = new Map<string, string>();
-      if (pacienteIdsVendas.length > 0) {
-        const pacientesRes = await supabase
-          .from('pacientes')
-          .select('id,apelido,nome_completo')
-          .eq('clinica_id', clinicaId)
-          .in('id', pacienteIdsVendas);
-
-        if (pacientesRes.error) {
-          console.warn('notifications: pacientes error', pacientesRes.error, pacientesRes);
-        } else {
-          nomesPacientesPorId = new Map(
-            (pacientesRes.data || []).map((p: any) => [p.id, p.apelido || p.nome_completo || ''])
-          );
+      let vendasRes: any = { data: [] };
+      try {
+        const v = await supabase.from('vendas').select('id,valor_total,data_venda,localidade_venda').eq('clinica_id', clinicaId).order('data_venda', { ascending: false }).limit(5);
+        if (v?.error) throw v.error;
+        vendasRes = v;
+      } catch (ve: any) {
+        console.warn('vendas notification primary query failed, trying fallback:', ve?.message || ve);
+        try {
+          const v2 = await supabase.from('vendas').select('id,localidade_venda').eq('clinica_id', clinicaId).order('id', { ascending: false }).limit(5);
+          if (v2?.error) throw v2.error;
+          vendasRes = v2;
+        } catch (vfe: any) {
+          console.warn('vendas notification fallback failed:', vfe?.message || vfe);
+          vendasRes = { data: [] };
         }
       }
 
-      const vendasEnriquecidas = vendas.map((v) => ({
-        ...v,
-        cliente_notificacao_nome:
-          nomesPacientesPorId.get(v.paciente_id) ||
-          v.pacientes?.[0]?.nome_completo ||
-          v.cliente_nome ||
-          null,
-      }));
-
-      setNotificationsData({ parcelas: parcelasRes.data || [], vendas: vendasEnriquecidas });
+      setNotificationsData({ parcelas: parcelasRes.data || [], vendas: vendasRes.data || [] });
       const atrasadas = (parcelasRes.data || []).filter((p: any) => p.status !== 'pago' && new Date(p.data_vencimento) < new Date()).length;
       if (atrasadas > 0) toast.info(`${atrasadas} parcela(s) vencida(s)`);
     } catch (err) {
@@ -245,7 +228,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     let active = true;
 
     async function pesquisar() {
-      const termo = (busca || "").trim();
+        const termo = (busca || "").trim();
       if (!termo || termo.length < 2 || !clinicaId) {
         setResultadoBusca([]);
         setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
@@ -254,53 +237,45 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
       setBuscando(true);
       try {
-        // Sanitiza e padroniza o termo para reduzir erros de filtro no PostgREST.
-        const safeTerm = termo.replace(/[%_,()']/g, "").trim();
-        if (!safeTerm || safeTerm.length < 2) {
-          setResultadoBusca([]);
-          setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
-          return;
-        }
-
-        const pattern = `%${safeTerm}%`;
+        // sanitize search term to avoid injecting invalid tokens into PostgREST filters
+        const safeTerm = termo.replace(/[%()']/g, "").trim();
         const [pacientesRes, vendasRes, armacoesRes, lentesRes, parcelasRes] = await Promise.all([
           // 1) Pacientes por nome ou CPF
           supabase
             .from("pacientes")
             .select("id, nome_completo, cpf, cidade_atendimento")
             .eq("clinica_id", clinicaId)
-            .or(`nome_completo.ilike.${pattern},cpf.ilike.${pattern}`)
+            .or(`nome_completo.ilike.%${termo}%,cpf.ilike.%${termo}%`)
             .limit(3),
 
-            // 2) Vendas por localidade, id parcial ou numero OS manual (inclui paciente e OS)
-            supabase
-              .from("vendas")
-              .select("id, paciente_id, valor_total, valor_final, localidade_venda, localidade, numero_os_manual, criado_em, pacientes (nome_completo), ordens_servico (numero_os)")
-              .eq("clinica_id", clinicaId)
-              // Evitar `id.ilike` (UUID) pois pode quebrar a query em alguns ambientes.
-              .or(`numero_os_manual.ilike.${pattern},localidade_venda.ilike.${pattern},localidade.ilike.${pattern}`)
-              .order("criado_em", { ascending: false })
-              .limit(5),
+          // 2) Vendas por localidade ou id parcial
+          supabase
+            .from("vendas")
+            .select("id, valor_total, localidade_venda, criado_em, perfis (nome)")
+            .eq("clinica_id", clinicaId)
+            .or(`localidade_venda.ilike.%${termo}%,id.ilike.%${termo}%`)
+            .order("criado_em", { ascending: false })
+            .limit(2),
 
           // 3) Estoque de armações
           supabase
             .from("estoque_armacoes")
             .select("id, marca, modelo, referencia, quantidade_atual, preco_venda")
-            .or(`marca.ilike.${pattern},modelo.ilike.${pattern},referencia.ilike.${pattern}`)
+            .or(`marca.ilike.%${termo}%,modelo.ilike.%${termo}%,referencia.ilike.%${termo}%`)
             .limit(3),
 
           // 4) Lentes no catálogo
           supabase
             .from("otica_lentes")
             .select("id, tipo, material, tratamento, preco_base")
-            .or(`tipo.ilike.${pattern},material.ilike.${pattern}`)
+            .or(`tipo.ilike.%${termo}%,material.ilike.%${termo}%`)
             .limit(2),
 
           // 5) Parcelas pendentes (installments)
           // usar tabela correta `financeiro_parcelas`
           supabase
             .from("financeiro_parcelas")
-            .select("id, valor_parcela, data_vencimento, paciente_id")
+            .select("id, valor_parcela, vencimento, paciente_id")
             .eq("status", "atrasado")
             .limit(2),
         ]);
@@ -319,36 +294,6 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
         const lentes = (lentesRes.data ?? []) as Array<any>;
         const parcelas = (parcelasRes.data ?? []) as Array<any>;
 
-        const pacienteIdsVendas = Array.from(
-          new Set(vendas.map((v) => v?.paciente_id).filter(Boolean))
-        ) as string[];
-        let nomesPacientesPorId = new Map<string, string>();
-
-        if (pacienteIdsVendas.length > 0) {
-          const pacientesVendasRes = await supabase
-            .from("pacientes")
-            .select("id, apelido, nome_completo")
-            .eq("clinica_id", clinicaId)
-            .in("id", pacienteIdsVendas);
-
-          if (pacientesVendasRes.error) {
-            console.warn('search: pacientes vendas error', pacientesVendasRes.error, pacientesVendasRes);
-          } else {
-            nomesPacientesPorId = new Map(
-              (pacientesVendasRes.data ?? []).map((p: any) => [p.id, p.apelido || p.nome_completo || ""])
-            );
-          }
-        }
-
-        const vendasEnriquecidas = vendas.map((v) => ({
-          ...v,
-          cliente_busca_nome:
-            nomesPacientesPorId.get(v.paciente_id) ||
-            v.pacientes?.[0]?.nome_completo ||
-            v.cliente_nome ||
-            null,
-        }));
-
         const features = [
           { id: 'feat-vendas', titulo: 'Vendas', subtitulo: 'Abrir painel de vendas', rota: '/otica/vendas' },
           { id: 'feat-nova-venda', titulo: 'Nova Venda', subtitulo: 'Iniciar nova venda', rota: '/otica/vendas/nova' },
@@ -358,7 +303,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
         const termoNormalizado2 = safeTerm.toLowerCase();
         const featureMatches = (features as any[]).filter(f => f.titulo.toLowerCase().includes(termoNormalizado2) || f.subtitulo.toLowerCase().includes(termoNormalizado2));
 
-        setResultadosDB({ pacientes, vendas: vendasEnriquecidas, estoque: [...armacoes, ...lentes], financeiro: parcelas });
+        setResultadosDB({ pacientes, vendas, estoque: [...armacoes, ...lentes], financeiro: parcelas });
         setResultadoBusca(featureMatches.map((f) => ({ id: f.id, tipo: 'feature' as any, titulo: f.titulo, subtitulo: f.subtitulo, rota: f.rota })));
       } catch {
         if (active) {
@@ -423,7 +368,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
   function SearchItem({ href, title, sub, icon, color = "bg-slate-100 text-slate-500" }: any) {
     return (
-      <Link href={href} role="option" aria-label={`${title} • ${sub}`} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-all group">
+      <Link href={href} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-all group">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-xl ${color} group-hover:scale-110 transition-transform`}>
             {icon}
@@ -439,8 +384,8 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
   }
 
   return (
-    <header className="sticky top-0 left-0 right-0 w-full z-[80] border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:px-8 overflow-visible">
-      <div className="flex items-center justify-between gap-3 max-w-full overflow-visible">
+    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
+      <div className="flex items-center justify-between gap-3">
         <div ref={containerBuscaRef} className="relative hidden w-full max-w-md md:block">
           <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2">
             {moduleLogoUrl && (
@@ -450,23 +395,18 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             )}
             <Search size={18} className="text-slate-400" />
             <input
-              id="buscar"
-              name="buscar"
-              aria-label="Buscar paciente, OS ou venda"
-              aria-controls="dropdown-busca"
-              aria-expanded={buscaAberta}
-              ref={inputBuscaRef}
-              placeholder="Buscar paciente, OS ou venda..."
-              value={busca}
-              onFocus={() => setBuscaAberta(true)}
-              onChange={(e) => setBusca(e.target.value)}
-              className="w-full bg-transparent text-sm font-medium text-slate-600 outline-none"
-            />
+            ref={inputBuscaRef}
+            placeholder="Buscar paciente, OS ou venda..."
+            value={busca}
+            onFocus={() => setBuscaAberta(true)}
+            onChange={(e) => setBusca(e.target.value)}
+            className="w-full bg-transparent text-sm font-medium text-slate-600 outline-none"
+          />
             <kbd className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400">Ctrl+K</kbd>
           </div>
 
           {buscaAberta && (
-            <div id="dropdown-busca" role="listbox" aria-label="Resultados da busca" className="absolute left-0 right-0 top-[calc(100%+8px)] z-[120] max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
+            <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
               {/* DROPDOWN INTELIGENTE */}
               {(resultadoBusca.length > 0 || resultadosDB.pacientes.length > 0 || resultadosDB.vendas.length > 0 || resultadosDB.estoque.length > 0 || resultadosDB.financeiro.length > 0) ? (
                 <div className="space-y-3">
@@ -475,7 +415,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                     <div className="mb-2">
                       <p className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Páginas e Funções</p>
                       {resultadoBusca.map((item) => (
-                                        <SearchItem key={item.id} href={item.rota} title={item.titulo} sub={item.subtitulo} icon={<Monitor size={14} />} />
+                        <SearchItem key={item.id} href={item.rota} title={item.titulo} sub={item.subtitulo} icon={<Monitor size={14} />} />
                       ))}
                     </div>
                   )}
@@ -494,26 +434,16 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                       {resultadosDB.vendas.length > 0 && (
                         <div className="mb-2 border-t border-slate-50 pt-2">
                           <p className="px-4 py-2 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Vendas</p>
-                          {resultadosDB.vendas.map((v) => {
-                                const clienteNome = v.cliente_busca_nome || null;
-                            const osNum = v.ordens_servico?.[0]?.numero_os || v.numero_os || v.numero_os_manual || null;
-                                const tituloVenda = clienteNome || (osNum ? `OS ${osNum}` : "Venda");
-                            const parts = [] as string[];
-                            if (osNum) parts.push(`OS: ${osNum}`);
-                                if (!clienteNome) parts.push("Cliente não identificado");
-                            parts.push(`R$ ${Number(v.valor_final ?? v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
-                            const sub = parts.join(' • ');
-                            return (
-                              <SearchItem
-                                key={v.id}
-                                href={`/otica/vendas/${v.id}/visualizar`}
-                                    title={tituloVenda}
-                                sub={sub}
-                                icon={<FileText size={14} />}
-                                color="bg-indigo-50 text-indigo-600"
-                              />
-                            );
-                          })}
+                          {resultadosDB.vendas.map((v) => (
+                            <SearchItem 
+                              key={v.id} 
+                              href={`/otica/vendas/${v.id}`} 
+                              title={`Venda ${v.id}`} 
+                              sub={`${v.localidade_venda || '-'} • R$ ${Number(v.valor_total ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})}`} 
+                              icon={<FileText size={14}/>} 
+                              color="bg-indigo-50 text-indigo-600" 
+                            />
+                          ))}
                         </div>
                       )}
 
@@ -576,11 +506,11 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
           Menu
         </button>
 
-        <div className="ml-auto flex items-center gap-4">
+        <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-4">
           {/* Indicador de sincronização */}
           <SyncContext.Consumer>
             {(sync) => (
-              <div className="mr-2 flex items-center gap-2">
+              <div className="mr-0 flex items-center gap-2 sm:mr-2">
                 <div
                   title={
                     sync?.status === "syncing"
@@ -611,10 +541,11 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   <button
                     type="button"
                     onClick={() => sync?.triggerSync?.()}
-                    className="rounded-md border border-slate-100 bg-white px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                    className="inline-flex w-[90px] items-center justify-center rounded-md border border-slate-100 bg-white px-2 py-1 text-center text-[11px] font-semibold leading-tight text-slate-600 hover:bg-slate-50 sm:w-auto sm:text-xs"
                     title="Sincronizar agora"
                   >
-                    Sincronizar agora
+                    <span className="sm:hidden">Sincronizar</span>
+                    <span className="hidden sm:inline">Sincronizar agora</span>
                   </button>
                 )}
               </div>
@@ -628,7 +559,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                 type="button"
                 onClick={() => ctx?.toggleFocusMode()}
                 title={ctx?.isFocusMode ? "Sair do modo Tela Cheia" : "Entrar no modo Tela Cheia"}
-                className="p-2 text-slate-400 transition-colors hover:text-cyan-600"
+                className="hidden p-2 text-slate-400 transition-colors hover:text-cyan-600 sm:inline-flex"
               >
                 {ctx?.isFocusMode ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
               </button>
@@ -653,12 +584,15 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             </button>
 
             {notificationsOpen && (
-              <div ref={notifRef} className="absolute left-1/2 transform -translate-x-1/2 mt-2 w-full sm:w-96 max-w-[92vw] rounded-2xl border border-slate-100 bg-white shadow-2xl z-[120] p-2">
+              <div
+                ref={notifRef}
+                className="fixed left-2 right-2 top-[72px] z-50 max-h-[calc(100dvh-88px)] overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+8px)] sm:mt-0 sm:max-h-96 sm:w-96"
+              >
                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-50">
                   <p className="text-sm font-black">Notificações</p>
                   <button className="text-xs text-slate-400" onClick={() => { setNotificationsData({ parcelas: [], vendas: [] }); setNotificationsOpen(false); }}>Fechar</button>
                 </div>
-                <div className="p-2 max-h-64 overflow-auto">
+                <div className="p-2 sm:max-h-64 sm:overflow-auto">
                   <p className="text-[10px] font-black text-rose-600 uppercase mb-2">Financeiro</p>
                   {notificationsLoading && <p className="text-sm text-slate-400">Carregando...</p>}
                   {!notificationsLoading && notificationsData.parcelas.length === 0 && <p className="text-xs text-slate-400">Nenhuma movimentação financeira recente.</p>}
@@ -674,34 +608,26 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   <hr className="my-2" />
                   <p className="text-[10px] font-black text-indigo-600 uppercase mb-2">Vendas</p>
                   {!notificationsLoading && notificationsData.vendas.length === 0 && <p className="text-xs text-slate-400">Nenhuma venda recente.</p>}
-                  {!notificationsLoading && notificationsData.vendas.map((v: any) => {
-                    const clienteNome = v.cliente_notificacao_nome || null;
-                    const osNum = v.ordens_servico?.[0]?.numero_os || v.numero_os || v.numero_os_manual || null;
-                    const parts: string[] = [];
-                    if (osNum) parts.push(`OS: ${osNum}`);
-                    if (clienteNome) parts.push(clienteNome);
-                    parts.push(v.localidade_venda || '-');
-                    return (
-                      <Link key={v.id} href={`/otica/vendas/${v.id}/visualizar`} onClick={() => setNotificationsOpen(false)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
-                        <div className="flex-1">
-                          <p className="text-sm font-bold">{clienteNome || 'Cliente'}</p>
-                          <p className="text-[10px] text-slate-400">{new Date(v.criado_em).toLocaleDateString('pt-BR')} • {parts.join(' • ')}</p>
-                        </div>
-                      </Link>
-                    );
-                  })}
+                  {!notificationsLoading && notificationsData.vendas.map((v: any) => (
+                    <Link key={v.id} href={`/otica/vendas/${v.id}`} onClick={() => setNotificationsOpen(false)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
+                      <div className="flex-1">
+                        <p className="text-sm font-bold">Venda {v.id} • R$ {Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-[10px] text-slate-400">{new Date(v.data_venda || v.criado_em).toLocaleDateString('pt-BR')} • {v.localidade_venda || '-'}</p>
+                      </div>
+                    </Link>
+                  ))}
                 </div>
               </div>
             )}
           </div>
 
-          <div className="h-8 w-px bg-slate-100" />
+          <div className="hidden h-8 w-px bg-slate-100 sm:block" />
 
           <div className="relative">
             <button
               type="button"
               onClick={() => setMenuAberto((v) => !v)}
-              className="flex items-center gap-3 rounded-2xl border border-transparent p-1 pr-3 transition-all hover:border-slate-100 hover:bg-slate-50"
+              className="flex items-center gap-2 rounded-2xl border border-transparent p-1 pr-1 transition-all hover:border-slate-100 hover:bg-slate-50 sm:gap-3 sm:pr-3"
             >
               <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-xs font-black text-white shadow-lg shadow-cyan-100">
                 {perfil?.foto_url ? (
@@ -718,7 +644,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                 </p>
               </div>
 
-              <ChevronDown size={16} className={`text-slate-300 transition-transform ${menuAberto ? "rotate-180" : ""}`} />
+              <ChevronDown size={16} className={`hidden text-slate-300 transition-transform sm:block ${menuAberto ? "rotate-180" : ""}`} />
             </button>
 
             {menuAberto && (
@@ -730,7 +656,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   onClick={() => setMenuAberto(false)}
                 />
 
-                <div className="absolute right-0 z-20 mt-3 w-full sm:w-64 max-w-[92vw] rounded-[28px] border border-slate-50 bg-white p-3 shadow-2xl shadow-slate-200">
+                <div className="fixed left-2 right-2 top-[72px] z-20 max-h-[calc(100dvh-88px)] overflow-auto rounded-[28px] border border-slate-50 bg-white p-3 shadow-2xl shadow-slate-200 sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+12px)] sm:mt-0 sm:w-64 sm:max-h-none sm:overflow-visible">
                   <div className="mb-2 border-b border-slate-50 p-4">
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Nivel de Acesso</p>
                     <div className="flex items-center gap-2 text-xs font-black italic text-cyan-600">
