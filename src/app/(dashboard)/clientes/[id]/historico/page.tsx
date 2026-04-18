@@ -63,8 +63,8 @@ export default function ClienteHistoricoCompletoPage() {
         ]);
 
         // Filtro do financeiro para este paciente (baseado nas vendas dele)
-        const vendasIds = (vRes.data || []).map(v => v.id);
-        const financeiroFiltrado = (fRes.data || []).filter(f => vendasIds.includes(f.venda_id));
+        const vendasIds = (vRes.data || []).map((v: any) => v.id);
+        const financeiroFiltrado = (fRes.data || []).filter((f: any) => vendasIds.includes(f.venda_id));
 
         setHistorico({
           receitas: (rRes.data || []).map(normalizeReceita),

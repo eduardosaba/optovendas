@@ -266,7 +266,7 @@ export default function PacienteRichFichaPage() {
       setPreviewUrl(url);
       setPreviewOpen(true);
     } catch (e) {
-      // eslint-disable-next-line no-console
+       
       console.error('imprimirReceita error', e);
       setPreviewError('Falha ao gerar PDF da receita. Veja console para detalhes.');
     } finally {

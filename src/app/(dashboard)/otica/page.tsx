@@ -209,10 +209,27 @@ export default function OticaPage() {
         let totalConsultasCount = 0;
         try {
           // tentamos filtrar por data_venda em consultorio_receitas, com fallback para criado_em
-          let cres: any = await supabase.from('consultorio_receitas').select('id,data_venda,criado_em').eq('clinica_id', ctx.clinicaId).gte('data_venda', primeiroDiaMes).lte('data_venda', ultimoDiaMes);
-          if (cres.error && /data_venda|column .* does not exist/i.test(String(cres.error.message || cres.error))) {
-            cres = await supabase.from('consultorio_receitas').select('id,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes).lte('criado_em', ultimoDiaMes + 'T23:59:59Z');
+          let cres: any;
+          try {
+            cres = await supabase.from('consultorio_receitas').select('id,data_venda,criado_em').eq('clinica_id', ctx.clinicaId).gte('data_venda', primeiroDiaMes).lte('data_venda', ultimoDiaMes);
+            if (cres.error && /data_venda|column .* does not exist/i.test(String(cres.error.message || cres.error))) {
+              throw new Error(String(cres.error.message || cres.error));
+            }
+          } catch (innerErr: any) {
+            const msg = String(innerErr?.message || innerErr || '');
+            if (/data_venda|column .* does not exist/i.test(msg)) {
+              try {
+                cres = await supabase.from('consultorio_receitas').select('id,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes).lte('criado_em', ultimoDiaMes + 'T23:59:59Z');
+              } catch (e) {
+                console.warn('Fallback consultorio_receitas fetch failed', e);
+                cres = { data: [] };
+              }
+            } else {
+              console.warn('consultorio_receitas fetch error', innerErr);
+              cres = { data: [] };
+            }
           }
+
           totalConsultasCount = (cres?.data || []).length || 0;
         } catch (err) {
           console.warn('Erro ao buscar consultas por competência', err);

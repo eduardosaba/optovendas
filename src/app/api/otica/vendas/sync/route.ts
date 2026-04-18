@@ -2,17 +2,82 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logSync } from '@/lib/syncLogger';
 
+type VendaData = Record<string, unknown> & {
+  anexos_urls?: unknown[];
+  pupilometroFoto?: string;
+  vendaManual?: boolean;
+  clienteManualNome?: string;
+  clienteManualCpf?: string;
+  clienteManualCidade?: string;
+  receitaManual?: Record<string, unknown> | null;
+  financeiro?: Record<string, unknown> & {
+    valorEntrada?: number | string;
+    total?: number | string;
+    formaEntrada?: string;
+    tipoFechamento?: string;
+    formaSaldo?: string;
+    pagamento_confirmado?: boolean;
+    contaDestinoId?: string | null;
+    conta_destino_id?: string | null;
+    status?: string;
+  } | null;
+  valorConsulta?: number | string;
+  tipoAtendimento?: string;
+  modeloCobranca?: string;
+  armacaoPropria?: boolean;
+  termoQuebraAceito?: boolean;
+  receitaId?: string | null;
+  pacienteId?: string | null;
+  valor_desconto_combo?: number | string | null;
+  valor_desconto_manual?: number | string | null;
+  descontoManual?: number | string | null;
+  autorizadorId?: string | null;
+  autorizado_por?: string | null;
+  justificativa_desconto?: string | null;
+  armacaoSelecionada?: { grife?: string; modelo?: string; cor?: string } | null;
+  armacaoTipoSelecionado?: { nome?: string; cor?: string } | null;
+  lenteSelecionada?: { nome?: string } | null;
+  armacaoId?: string | null;
+  lenteId?: string | null;
+  medidas?: Record<string, unknown> | null;
+  parcelas?: Array<Record<string, unknown> & { numero?: number; valor?: number | string; vencimento?: string }>;
+  laboratorioNome?: string | null;
+  dataEncomenda?: string | null;
+  previsaoEntrega?: string | null;
+  statusOS?: string | null;
+  pending_terms?: Array<Record<string, unknown>>;
+  termo_confirmacao_id?: string | null;
+  termo_responsabilidade_id?: string | null;
+  assinatura?: string | null;
+  termoTexto?: string | null;
+  [k: string]: unknown;
+};
+
+type SyncJob = {
+  id?: number;
+  type?: string;
+  clinicaId?: string | null;
+  venda?: VendaData | null;
+  vendaData?: VendaData | null;
+  numeroFinal?: string | null;
+  criadoPor?: string | null;
+  forceRpcBaixa?: boolean;
+  ipOrigem?: string | null;
+  [k: string]: unknown;
+};
+
 type PendingRow = {
   id?: number;
   createdAt?: string;
   syncPending?: boolean;
-  venda?: any; // payload saved from client
+  venda?: VendaData | SyncJob | null;
+  [k: string]: unknown;
 };
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null);
-  const jobRow: PendingRow = body?.job ?? body ?? null;
-  const job = jobRow?.venda ?? jobRow;
+  const body = await req.json().catch(() => null) as unknown;
+  const jobRow: PendingRow | null = (((body as Record<string, unknown>)?.job) ?? body) as PendingRow | null;
+  const job: SyncJob | VendaData | null = ((jobRow as SyncJob)?.venda ?? (jobRow as SyncJob) ?? null) as SyncJob | VendaData | null;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -58,18 +123,18 @@ export async function POST(req: NextRequest) {
     }
     if (!allowed) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
 
-    await logSync(jobId, job?.type ?? 'unknown', 'started', 'processing job');
+    await logSync(jobId, String((job as SyncJob)?.type ?? 'unknown'), 'started', 'processing job');
 
     if (!job || job.type !== 'finalize_venda') {
-      await logSync(jobId, job?.type ?? 'unknown', 'failed', 'unsupported job type');
+      await logSync(jobId, String((job as SyncJob)?.type ?? 'unknown'), 'failed', 'unsupported job type');
       return NextResponse.json({ error: 'unsupported job type' }, { status: 400 });
     }
 
     // Extract data
-    const clinicaId = job.clinicaId;
-    const vendaData = job.vendaData ?? {};
-    const numeroFinal = job.numeroFinal ?? null;
-    const criadoPor = job.criadoPor ?? null;
+    const clinicaId = (job as SyncJob)?.clinicaId ?? (job as VendaData)?.clinicaId ?? null;
+    const vendaData: VendaData = ((job as SyncJob)?.venda ?? (job as SyncJob)?.vendaData ?? (job as VendaData) ?? {}) as VendaData;
+    const numeroFinal = (job as SyncJob)?.numeroFinal ?? null;
+    const criadoPor = (job as SyncJob)?.criadoPor ?? null;
 
     // helper to upload base64 data URLs to storage and return public url
     async function uploadDataUrlToStorage(dataUrl: string, destPath: string) {
@@ -93,7 +158,7 @@ export async function POST(req: NextRequest) {
     }
 
     // If vendaData contains base64 attachments, upload them and replace values
-    const anexos: string[] = Array.isArray(vendaData.anexos_urls) ? [...vendaData.anexos_urls] : [];
+    const anexos: string[] = Array.isArray(vendaData.anexos_urls) ? (vendaData.anexos_urls as string[]).slice() : [];
     const resolvedAnexos: string[] = [];
     for (let i = 0; i < anexos.length; i++) {
       const a = anexos[i];
@@ -108,14 +173,14 @@ export async function POST(req: NextRequest) {
 
     // handle pupilometroFoto (single image)
     let pupilometroUrl: string | null = null;
-    if (vendaData.pupilometroFoto && typeof vendaData.pupilometroFoto === 'string' && vendaData.pupilometroFoto.startsWith('data:')) {
+    if (typeof vendaData.pupilometroFoto === 'string' && vendaData.pupilometroFoto.startsWith('data:')) {
       const filename = `clinicas/${clinicaId}/vendas/job-${jobId ?? Date.now()}-pupilometro.png`;
       pupilometroUrl = await uploadDataUrlToStorage(vendaData.pupilometroFoto, filename);
     }
 
     // If vendaData indicates vendaManual, create patient and receita if needed
-    let pacienteIdFinal = vendaData.pacienteId || null;
-    let receitaIdFinal = vendaData.receitaId || null;
+    let pacienteIdFinal = (vendaData.pacienteId as string) || null;
+    let receitaIdFinal = (vendaData.receitaId as string) || null;
 
     if (vendaData.vendaManual && vendaData.clienteManualNome) {
       const pacienteRes = await supabaseAdmin.from('pacientes').insert({ clinica_id: clinicaId, nome_completo: vendaData.clienteManualNome.trim(), cpf: vendaData.clienteManualCpf?.trim() || null, cidade_atendimento: vendaData.clienteManualCidade || null }).select('id').maybeSingle();
@@ -123,7 +188,7 @@ export async function POST(req: NextRequest) {
       pacienteIdFinal = pacienteRes.data?.id ?? pacienteIdFinal;
 
       if (vendaData.receitaManual) {
-        const r = vendaData.receitaManual;
+        const r = vendaData.receitaManual as Record<string, unknown>;
         const receitaRes = await supabaseAdmin.from('receitas_optometricas').insert({ clinica_id: clinicaId, paciente_id: pacienteIdFinal, localidade_atendimento: vendaData.clienteManualCidade || null, data_exame: r.data_exame || new Date().toISOString().slice(0,10), od_esferico: r.od_esferico || null, oe_esferico: r.oe_esferico || null, od_cilindrico: r.od_cilindrico || null, oe_cilindrico: r.oe_cilindrico || null, od_eixo: r.od_eixo || null, oe_eixo: r.oe_eixo || null, adicao: r.adicao || null, dp_dnp: r.dp_dnp || null }).select('id').maybeSingle();
         if (receitaRes.error) throw receitaRes.error;
         receitaIdFinal = receitaRes.data?.id ?? receitaIdFinal;
@@ -133,7 +198,7 @@ export async function POST(req: NextRequest) {
             const valorConsultaNum = vendaData.valorConsulta ? Number(String(vendaData.valorConsulta).replace(',', '.')) : null;
             const tipoFechamentoLocal = vendaData.financeiro?.tipoFechamento || 'entrada_crediario';
             const statusLocal = tipoFechamentoLocal === 'total' ? 'pago' : tipoFechamentoLocal === 'pendente' ? 'pendente' : (Number(vendaData.financeiro?.valorEntrada || 0) > 0 ? 'pago_parcial' : 'pendente');
-            const consPayload: any = {
+            const consPayload: Record<string, unknown> = {
               clinica_id: clinicaId,
               paciente_id: pacienteIdFinal,
               profissional_id: criadoPor || null,
@@ -173,7 +238,7 @@ export async function POST(req: NextRequest) {
             ? 'pago_parcial'
             : 'pendente';
 
-    const vendaPayload: any = {
+    const vendaPayload: Record<string, unknown> = {
       clinica_id: clinicaId,
       paciente_id: pacienteIdFinal,
       receita_id: receitaIdFinal,
@@ -203,7 +268,7 @@ export async function POST(req: NextRequest) {
       justificativa_desconto: vendaData.justificativa_desconto || vendaData.justificativa || null,
     };
 
-    const vendaInsert = await supabaseAdmin.from('vendas').insert(vendaPayload).select('id').maybeSingle();
+    const vendaInsert = await supabaseAdmin.from('vendas').insert(vendaPayload as any).select('id').maybeSingle();
     if (vendaInsert.error) throw vendaInsert.error;
     const vendaId = vendaInsert.data?.id;
 
@@ -248,7 +313,7 @@ export async function POST(req: NextRequest) {
     const valorFinalArm = Math.max(0, Math.round((precoArm - descontoArm) * 100) / 100);
     const valorFinalLente = Math.max(0, Math.round((precoLente - descontoLente) * 100) / 100);
 
-    const osPayload: any = {
+    const osPayload: Record<string, unknown> = {
       venda_id: vendaId,
       clinica_id: clinicaId,
       receita_id: receitaIdFinal,
@@ -280,7 +345,7 @@ export async function POST(req: NextRequest) {
       valor_final_lente: valorFinalLente,
     };
 
-    const osRes = await supabaseAdmin.from('ordens_servico').insert(osPayload);
+    const osRes = await supabaseAdmin.from('ordens_servico').insert(osPayload as any);
     if (osRes.error) throw osRes.error;
 
     // Registra entrada imediata no fluxo de caixa quando houver sinal (paridade offline)
@@ -325,24 +390,24 @@ export async function POST(req: NextRequest) {
     }
 
     // payments / installments
-    const parcelas = (vendaData.parcelas || []).map((p: any) => ({ ...p }));
+    const parcelas = ((vendaData.parcelas as unknown[]) || []).map((p) => ({ ...(p as Record<string, unknown>) }));
     if (parcelas.length > 0) {
       const paymentTotal = parcelas.reduce((acc: number, p: any) => acc + Number(p.valor || 0), 0);
       const payRes = await supabaseAdmin.from('payments').insert({ clinica_id: clinicaId, venda_id: vendaId, paciente_id: pacienteIdFinal, metodo: 'crediario', valor_total: Number(paymentTotal.toFixed(2)), quantidade_parcelas: parcelas.length, status: 'aberto' }).select('id').maybeSingle();
       if (payRes.error) throw payRes.error;
       const paymentId = payRes.data?.id;
-      const installmentsPayload = parcelas.map((par: any) => ({ payment_id: paymentId, clinica_id: clinicaId, numero_parcela: par.numero, valor_parcela: Number(par.valor), vencimento: par.vencimento, status: 'pendente' }));
+      const installmentsPayload = parcelas.map((par) => ({ payment_id: paymentId, clinica_id: clinicaId, numero_parcela: (par as any).numero, valor_parcela: Number((par as any).valor), vencimento: (par as any).vencimento, status: 'pendente' }));
       const inst = await supabaseAdmin.from('installments').insert(installmentsPayload);
       if (inst.error) throw inst.error;
       // Registra também as parcelas em financeiro_parcelas para controle de contas a receber
       try {
-        const parcelasPayloadForFinance = parcelas.map((par: any) => ({
+        const parcelasPayloadForFinance = parcelas.map((par) => ({
           clinica_id: clinicaId,
           venda_id: vendaId,
           paciente_id: pacienteIdFinal,
-          numero_parcela: par.numero,
-          valor_parcela: Number(par.valor || 0),
-          data_vencimento: par.vencimento,
+          numero_parcela: (par as any).numero,
+          valor_parcela: Number((par as any).valor || 0),
+          data_vencimento: (par as any).vencimento,
           status: 'pendente',
           localidade: vendaData.localidadeVenda || null,
         }));
@@ -389,25 +454,29 @@ export async function POST(req: NextRequest) {
       }
 
       // If client sent pending_terms array (offline local terms), insert them and link
-      if (Array.isArray(vendaData.pending_terms) && vendaData.pending_terms.length) {
-        for (const t of vendaData.pending_terms) {
-          try {
-            const insertObj: any = {
-              clinica_id: clinicaId,
-              paciente_id: pacienteIdFinal,
-              venda_id: vendaId,
-              criado_por: criadoPor || null,
-              tipo_termo: t.tipo_termo || t.tipo || 'Confirmacao_Compra',
-              termo_texto: t.termo_texto || t.texto || null,
-              assinatura_base64: t.assinatura_base64 || t.assinatura || null,
-              ip_origem: job.ipOrigem || null,
-            };
-            await supabaseAdmin.from('termos_aceite').insert(insertObj);
-          } catch (e) {
-            console.warn('failed to insert pending_term', e);
+        if (Array.isArray(vendaData.pending_terms) && vendaData.pending_terms.length) {
+          for (const tRaw of vendaData.pending_terms as Array<Record<string, unknown>>) {
+            try {
+              const t = tRaw as Record<string, unknown>;
+              const tipo_termo = (t['tipo_termo'] as string) || (t['tipo'] as string) || 'Confirmacao_Compra';
+              const termo_texto = (t['termo_texto'] as string) || (t['texto'] as string) || null;
+              const assinatura_base64 = (t['assinatura_base64'] as string) || (t['assinatura'] as string) || null;
+              const insertObj: Record<string, unknown> = {
+                clinica_id: clinicaId,
+                paciente_id: pacienteIdFinal,
+                venda_id: vendaId,
+                criado_por: criadoPor || null,
+                tipo_termo,
+                termo_texto,
+                assinatura_base64,
+                ip_origem: (job as SyncJob)?.ipOrigem || null,
+              };
+              await supabaseAdmin.from('termos_aceite').insert(insertObj as any);
+            } catch (e) {
+              console.warn('failed to insert pending_term', e);
+            }
           }
         }
-      }
     } catch (e) {
       console.warn('linking pre-created terms failed', e);
     }
@@ -426,11 +495,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    await logSync(jobId, 'finalize_venda', 'success', `venda ${vendaId} synchronized` , { vendaId });
+    await logSync(jobId, String((job as SyncJob)?.type ?? 'finalize_venda'), 'success', `venda ${vendaId} synchronized` , { vendaId });
     return NextResponse.json({ ok: true, vendaId });
   } catch (err: any) {
     console.error('sync handler failed', err);
-    await logSync(jobId, job?.type ?? 'finalize_venda', 'failed', String(err?.message || err), { err: String(err) });
+    await logSync(jobId, String((job as SyncJob)?.type ?? 'finalize_venda'), 'failed', String(err?.message || err), { err: String(err) });
     return NextResponse.json({ error: err?.message || String(err) }, { status: 500 });
   }
 }

@@ -39,6 +39,7 @@ type AlvoComunicacao = {
   cidade?: string;
   data?: string;
   horario?: string;
+  origem?: 'otica' | 'consultorio';
 };
 
 type HistoricoItem = {
@@ -156,6 +157,19 @@ export default function ComunicacaoPage() {
         if (agendaRes.error) throw new Error(agendaRes.error.message);
 
         const pacientes = (pacRes.data as Paciente[]) ?? [];
+        // buscar vendas dos pacientes para distinguir cliente de ótica vs consultório
+        const pacienteIds = pacientes.map((p) => p.id).filter(Boolean);
+        let vendasPorPaciente = new Set<string>();
+        if (pacienteIds.length) {
+          try {
+            const vRes = await supabase.from('vendas').select('paciente_id').in('paciente_id', pacienteIds).limit(1000);
+            if (!vRes.error && vRes.data) {
+              vendasPorPaciente = new Set((vRes.data as Array<{ paciente_id?: string }>).map((r) => String(r.paciente_id)));
+            }
+          } catch (e) {
+            console.warn('Erro ao buscar vendas por paciente para segmentacao de comunicacao', e);
+          }
+        }
         const alvosDia: AlvoComunicacao[] = [];
 
         for (const p of pacientes) {
@@ -170,6 +184,9 @@ export default function ComunicacaoPage() {
                 nome: p.nome_completo,
                 fone: p.celular,
                 tipo: "Aniversario",
+                // origem: 'otica' se o paciente tem venda registrada, caso contrario 'consultorio'
+                // usado para escolher o template adequado
+                origem: vendasPorPaciente.has(p.id) ? 'otica' : 'consultorio',
               });
             }
           }
@@ -266,11 +283,16 @@ export default function ComunicacaoPage() {
     void carregar();
   }, [toast]);
 
-  async function enviar(item: AlvoComunicacao) {
+    async function enviar(item: AlvoComunicacao) {
     let mensagem = "";
 
     if (item.tipo === "Aniversario") {
-      mensagem = templatesMensagens.aniversario(item.nome);
+      // escolher template conforme origem do paciente (ótica x consultório)
+      if ((item as any).origem === 'otica') {
+        mensagem = templatesMensagens.aniversarioOptica(item.nome);
+      } else {
+        mensagem = templatesMensagens.aniversarioConsultorio(item.nome);
+      }
     } else if (item.tipo === "Oculos Pronto") {
       mensagem = templatesMensagens.oculosPronto(item.nome, item.local || "sua cidade");
     } else if (item.tipo === "Retorno Anual") {
@@ -288,8 +310,20 @@ export default function ComunicacaoPage() {
         return;
       }
 
+      // garantir clinicaId válido (pode não estar carregado instantaneamente)
+      let useClinicaId = clinicaId;
+      if (!useClinicaId) {
+        try {
+          const ctx = await resolveClinicaContext();
+          useClinicaId = ctx.clinicaId;
+          setClinicaId(useClinicaId);
+        } catch (e) {
+          console.warn('Falha ao resolver clinicaId antes do envio', e);
+        }
+      }
+
       const logRes = await supabase.from("comunicacoes_whatsapp").insert({
-        clinica_id: clinicaId,
+        clinica_id: useClinicaId,
         paciente_id: item.pacienteId,
         tipo: item.tipo,
         status: "Enviado",
@@ -490,9 +524,9 @@ export default function ComunicacaoPage() {
                       <button
                         type="button"
                         onClick={() => void enviar(c)}
-                        disabled={enviando === c.chave}
+                        disabled={enviando === c.chave || !clinicaId}
                         className="rounded-2xl bg-emerald-50 p-4 text-emerald-600 transition-all hover:bg-emerald-600 hover:text-white disabled:opacity-50"
-                        title="Enviar WhatsApp"
+                        title={clinicaId ? "Enviar WhatsApp" : "Aguardando vínculo com clínica..."}
                       >
                         {enviando === c.chave ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
                       </button>

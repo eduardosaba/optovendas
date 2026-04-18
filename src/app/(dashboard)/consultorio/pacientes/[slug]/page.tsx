@@ -97,6 +97,17 @@ export default function PacienteRichFichaPage() {
             }
             return res;
           }
+          
+          if (table === 'consultorio_receitas') {
+            let res = await supabase.from(table).select('*').eq('paciente_id', pacienteId).order('data_atendimento', { ascending: false });
+            if (res.error && /data_atendimento|column .* does not exist/i.test(String(res.error.message || res.error))) {
+              res = await supabase.from(table).select('*').eq('paciente_id', pacienteId).order('criado_em', { ascending: false });
+            }
+            if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
+              res = await supabase.from(table).select('*').eq('paciente_id', pacienteId).order('created_at', { ascending: false });
+            }
+            return res;
+          }
 
           if (table === 'termos_aceite') {
             const raw = await supabase.from(table).select('*').eq('paciente_id', pacienteId);
@@ -835,7 +846,7 @@ async function imprimirReceita(item: any) {
     window.open(url, '_blank');
     setTimeout(() => URL.revokeObjectURL(url), 15_000);
   } catch (e) {
-    // eslint-disable-next-line no-console
+     
     console.error('imprimirReceita error', e);
     try { alert('Falha ao gerar PDF da receita. Veja console para detalhes.'); } catch {};
   }

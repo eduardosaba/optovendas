@@ -16,8 +16,8 @@ function gerarNumeroOSAutomatico() {
   return `OS-${y}${m}${d}-${seq}`;
 }
 
-function normalizarMetodoPagamento(v: any) {
-  const raw = String(v || '').toLowerCase().trim();
+function normalizarMetodoPagamento(v: unknown) {
+  const raw = String(v ?? '').toLowerCase().trim();
   if (!raw) return '';
   if (raw.includes('cartao') || raw.includes('cartão')) {
     if (raw.includes('deb')) return 'cartao_debito';
@@ -46,12 +46,91 @@ export async function POST(request: Request) {
       return err;
     };
 
-    const body = await request.json();
-    const { 
-      clinica_id, paciente_id, financeiro, status_os, 
-      anexos_urls, assinatura, assinatura_arma_responsabilidade,
-      status_financeiro, localidade_venda, id, cliente
-    } = body as any;
+    type FinalizeVendaBody = {
+      clinica_id?: string;
+      paciente_id?: string | null;
+      financeiro?: Financeiro | null;
+      status_os?: string | null;
+      anexos_urls?: string[] | null;
+      assinatura?: string | null;
+      assinatura_arma_responsabilidade?: string | null;
+      status_financeiro?: string | null;
+      localidade_venda?: string | null;
+      id?: string | null;
+      cliente?: { cidade_atendimento?: string | null; nome_completo?: string | null } | null;
+      vendaManual?: boolean;
+      clienteManualNome?: string | null;
+      cliente_manual_nome?: string | null;
+      clienteManualCpf?: string | null;
+      clienteManualCidade?: string | null;
+      cliente_manual_cidade?: string | null;
+      valor_total?: number | string;
+      desconto?: number | string;
+      valor_desconto?: number | string;
+      valor_final?: number | string;
+      qtd_parcelas_venda?: number;
+      qtd_parcelas?: number;
+      forma_entrada?: string | null;
+      receita_id?: string | null;
+      receitaId?: string | null;
+      financeiro_detalhe?: any;
+      numero_os_manual?: string | null;
+      numeroOsManual?: string | null;
+      vendedor_id?: string | null;
+      vendedorId?: string | null;
+      tipo_fechamento?: string | null;
+      tipoFechamento?: string | null;
+      status?: string | null;
+      metodo_pagamento?: string | null;
+      data_venda?: string | null;
+      dataVenda?: string | null;
+      criado_em?: string | null;
+      os_detalhe?: Record<string, unknown> | any;
+      armacao_propria?: boolean;
+      armacaoPropria?: boolean;
+      termo_quebra_aceito?: boolean;
+      termoQuebraAceito?: boolean;
+      combo_aplicado_id?: string | null;
+      comboId?: string | null;
+      valor_desconto_manual?: number | string | null;
+      valorDescontoManual?: number | string | null;
+      valor_desconto_combo?: number | string | null;
+      valorDescontoCombo?: number | string | null;
+      saldo_restante?: number | string | null;
+      pupilometro_foto_url?: string | null;
+      autorizado_por_id?: string | null;
+      autorizadoPor?: string | null;
+      autorizado_por?: string | null;
+      autorizadorId?: string | null;
+      justificativa_desconto?: string | null;
+      armacaoId?: string | null;
+      armacao_id?: string | null;
+      lenteId?: string | null;
+      lente_id?: string | null;
+      valor_parcela_venda?: number | string | null;
+      primeiro_vencimento_venda?: string | null;
+    };
+
+    const body = (await request.json()) as FinalizeVendaBody;
+    const { clinica_id, paciente_id, financeiro, status_os, anexos_urls, assinatura, assinatura_arma_responsabilidade, status_financeiro, localidade_venda, id, cliente } = body;
+
+    type Financeiro = {
+      valorEntrada?: number | string;
+      valor_entrada?: number | string;
+      formaEntrada?: string;
+      forma_entrada?: string;
+      contaDestinoId?: string;
+      conta_destino_id?: string;
+      total?: number | string;
+      formaSaldo?: string;
+      qtdParcelas?: number;
+      qtd_parcelas?: number;
+      primeiroVencimento?: string;
+      primeiro_vencimento?: string;
+      cidade?: string;
+    };
+
+    const financeiroTyped = (financeiro as unknown) as Financeiro | undefined;
 
     // Se for venda manual sem paciente_id, tente criar o paciente a partir dos dados manuais enviados
     if (!clinica_id) {
@@ -77,21 +156,21 @@ export async function POST(request: Request) {
 
     // 1. Salvar/Atualizar a Venda
     // Normalizar detalhe financeiro recebido (compatível com payload antigo)
-    const financeiroDetalhe = body.financeiro_detalhe || {
+    const financeiroDetalhe = (body as any).financeiro_detalhe || {
       entrada: {
-        valor: Number(financeiro?.valorEntrada || financeiro?.valor_entrada || 0),
-        forma: financeiro?.formaEntrada || 'dinheiro',
-        conta_id: financeiro?.contaDestinoId || financeiro?.conta_destino_id || null
+        valor: Number(financeiroTyped?.valorEntrada || financeiroTyped?.valor_entrada || 0),
+        forma: financeiroTyped?.formaEntrada || 'dinheiro',
+        conta_id: financeiroTyped?.contaDestinoId || financeiroTyped?.conta_destino_id || null
       },
       saldo: {
-        valor: Number((body.valor_final ?? financeiro?.total) || 0) - Number(financeiro?.valorEntrada || financeiro?.valor_entrada || 0),
-        forma: financeiro?.formaSaldo || null,
-        qtd_parcelas: financeiro?.qtdParcelas || financeiro?.qtd_parcelas || 0,
-        primeiro_vencimento: financeiro?.primeiroVencimento || financeiro?.primeiro_vencimento || null
+        valor: Number((body.valor_final ?? financeiroTyped?.total) || 0) - Number(financeiroTyped?.valorEntrada || financeiroTyped?.valor_entrada || 0),
+        forma: financeiroTyped?.formaSaldo || null,
+        qtd_parcelas: financeiroTyped?.qtdParcelas || financeiroTyped?.qtd_parcelas || 0,
+        primeiro_vencimento: financeiroTyped?.primeiroVencimento || financeiroTyped?.primeiro_vencimento || null
       }
     };
 
-    const valorTotalFinal = Number(body.valor_total ?? financeiro?.total ?? 0);
+    const valorTotalFinal = Number(body.valor_total ?? financeiroTyped?.total ?? 0);
     const descontoRecebido = Number(body.desconto ?? body.valor_desconto ?? 0);
     // Valor final preferido: body.valor_final, fallback para valor_total - desconto
     let valorFinalNormalized = Number(body.valor_final ?? 0);
@@ -100,7 +179,7 @@ export async function POST(request: Request) {
     }
 
     const valorEntradaParaVenda = Number(financeiroDetalhe.entrada?.valor || 0);
-    const receitaIdFinal = body.receita_id || body.receitaId || body.os_detalhe?.receita_id || null;
+    const receitaIdFinal = (body as any).receita_id || (body as any).receitaId || (body as any).os_detalhe?.receita_id || null;
 
     // Normalizar entrada/saldo para decisão no backend
     const entrada = financeiroDetalhe.entrada || { valor: 0, forma: 'dinheiro', conta_id: null };
@@ -110,13 +189,13 @@ export async function POST(request: Request) {
     const saldoValor = Math.max(0, Number(valorFinalNormalized) - entradaValor);
     const saldo = {
       valor: saldoValor,
-      forma: saldoOrig.forma || financeiro?.formaSaldo || null,
-      qtd_parcelas: saldoOrig.qtd_parcelas || financeiro?.qtd_parcelas || 0,
-      primeiro_vencimento: saldoOrig.primeiro_vencimento || financeiro?.primeiro_vencimento || null,
+      forma: saldoOrig.forma || financeiroTyped?.formaSaldo || null,
+      qtd_parcelas: saldoOrig.qtd_parcelas || financeiroTyped?.qtd_parcelas || 0,
+      primeiro_vencimento: saldoOrig.primeiro_vencimento || financeiroTyped?.primeiro_vencimento || null,
     };
 
     const metodoEntradaNorm = normalizarMetodoPagamento(entrada.forma);
-    const metodoSaldoNorm = normalizarMetodoPagamento(saldo.forma || financeiro?.formaSaldo || null);
+    const metodoSaldoNorm = normalizarMetodoPagamento(saldo.forma || financeiroTyped?.formaSaldo || null);
     const metodosConciliacao = new Set(['cartao_credito', 'cartao_debito']);
 
     // Lógica de status financeiro considerando pendência de conciliação para cartão
@@ -141,7 +220,7 @@ export async function POST(request: Request) {
     const qtdParcelasForVendas = Number(qtdParcelasForVendasRaw);
     const valorParcelaForVendas = qtdParcelasForVendas > 0 ? Number(((saldo.valor || 0) / qtdParcelasForVendas).toFixed(2)) : 0;
 
-    const vendaPayload: Record<string, any> = {
+    const vendaPayload: Record<string, unknown> = {
       id: id || undefined,
       clinica_id,
       paciente_id: pacienteIdFinal,
@@ -157,15 +236,15 @@ export async function POST(request: Request) {
       desconto: Number(descontoRecebido || 0),
       valor_final: Number(valorFinalNormalized),
       valor_entrada: entradaValor || valorEntradaParaVenda,
-      forma_entrada: body.forma_entrada || financeiro?.formaEntrada || null,
+      forma_entrada: body.forma_entrada || financeiroTyped?.formaEntrada || null,
       saldo_restante: (typeof (saldo?.valor) !== 'undefined' ? Number(saldo.valor) : (body.saldo_restante || null)),
       valor_desconto_manual: Number(body.valor_desconto_manual || body.valorDescontoManual || 0),
       valor_desconto_combo: Number(body.valor_desconto_combo || body.valorDescontoCombo || 0),
       combo_aplicado_id: body.combo_aplicado_id || body.comboId || null,
-      metodo_pagamento: saldo.forma || financeiro?.formaSaldo || 'pendente',
-      localidade_venda: localidade_venda || cliente?.cidade_atendimento || financeiro?.cidade || 'Geral',
+      metodo_pagamento: saldo.forma || financeiroTyped?.formaSaldo || 'pendente',
+      localidade_venda: localidade_venda || cliente?.cidade_atendimento || financeiroTyped?.cidade || 'Geral',
       // Persistir também na coluna `localidade` (algumas versões do schema usam esse nome)
-      localidade: localidade_venda || cliente?.cidade_atendimento || body.clienteManualCidade || body.cliente_manual_cidade || financeiro?.cidade || 'Geral',
+      localidade: localidade_venda || cliente?.cidade_atendimento || body.clienteManualCidade || body.cliente_manual_cidade || financeiroTyped?.cidade || 'Geral',
       // data real da venda (opcional) — aceita data_venda ou dataVenda do frontend
       data_venda: body.data_venda || body.dataVenda || (body.criado_em ? (String(body.criado_em).split('T')[0]) : null),
       status_financeiro: statusFinanceiroFinal,
@@ -187,8 +266,8 @@ export async function POST(request: Request) {
       primeiro_vencimento_venda: saldo.primeiro_vencimento || null,
     };
 
-    let venda: any = null;
-    let vendaErr: any = null;
+    let venda: Record<string, unknown> | null = null;
+    let vendaErr: unknown = null;
     const payloadCompat = { ...vendaPayload };
     for (let attempt = 0; attempt < 8; attempt++) {
       const upsertRes = await supabaseAdmin
@@ -201,7 +280,7 @@ export async function POST(request: Request) {
       vendaErr = upsertRes.error;
       if (!vendaErr) break;
 
-      const msg = String(vendaErr?.message || '');
+      const msg = String((vendaErr as any)?.message || '');
       const missingColumnMatch = msg.match(/Could not find the '([^']+)' column of 'vendas'/i);
       const missingColumn = missingColumnMatch?.[1];
 
@@ -253,7 +332,7 @@ export async function POST(request: Request) {
     const creatingNewVenda = !body.id; // se tiver id no body, é atualização
 
     // Função auxiliar de rollback parcial quando algo falhar após criar venda
-    async function rollbackPartialSave(reason?: any) {
+    async function rollbackPartialSave(reason?: unknown) {
       try {
         if (creatingNewVenda && venda?.id) {
           await supabaseAdmin.from('financeiro_parcelas').delete().eq('venda_id', venda.id);
@@ -281,7 +360,7 @@ export async function POST(request: Request) {
     const registrarLogSistema = async (
       nivel: 'info' | 'aviso' | 'erro',
       mensagem: string,
-      payload?: Record<string, any>
+      payload?: Record<string, unknown>
     ) => {
       try {
         await supabaseAdmin.from('logs_sistema').insert({
@@ -367,7 +446,7 @@ export async function POST(request: Request) {
         armacao_modelo: osDetalhe.armacao_modelo || null,
         armacao_tipo: osDetalhe.armacao_tipo || null,
         material_lente: osDetalhe.material_lente || lenteId || null,
-        previsao_entrega: osDetalhe.previsao_entrega || financeiro?.primeiroVencimento || financeiro?.primeiro_vencimento || null,
+        previsao_entrega: osDetalhe.previsao_entrega || financeiroTyped?.primeiroVencimento || financeiroTyped?.primeiro_vencimento || null,
 
         // Medidas Técnicas
         od_dnp: osDetalhe.od_dnp ?? null,
@@ -400,8 +479,8 @@ export async function POST(request: Request) {
 
     // 3. Tratar detlahes financeiros recebidos (entrada + saldo)
 
-    const insertFluxoCaixaCompat = async (payload: Record<string, any>) => {
-      const first = await supabaseAdmin.from('fluxo_caixa').insert(payload);
+    const insertFluxoCaixaCompat = async (payload: Record<string, unknown>) => {
+      const first = await supabaseAdmin.from('fluxo_caixa').insert(payload as any);
       if (!first.error) return first;
 
       const msg = String(first.error.message || '').toLowerCase();
@@ -459,7 +538,7 @@ export async function POST(request: Request) {
     const qtdParcelasCrediarioRaw = body.qtd_parcelas_venda ?? body.qtd_parcelas ?? saldo.qtd_parcelas ?? 0;
     const qtdParcelasCrediario = Number(qtdParcelasCrediarioRaw);
     const formaSaldoFinal = normalizarMetodoPagamento(
-      saldo.forma || financeiro?.formaSaldo || body.metodo_pagamento || null
+      saldo.forma || financeiroTyped?.formaSaldo || body.metodo_pagamento || null
     );
     auditFormaSaldoFinal = formaSaldoFinal;
     auditQtdParcelasCrediario = qtdParcelasCrediario;
@@ -481,7 +560,7 @@ export async function POST(request: Request) {
             valor_parcela: valorParc,
             data_vencimento: d.toISOString().slice(0, 10),
             status: 'pendente',
-            localidade: localidade_venda || cliente?.cidade_atendimento || financeiro?.cidade || 'Geral',
+            localidade: localidade_venda || cliente?.cidade_atendimento || financeiroTyped?.cidade || 'Geral',
           };
         });
 
@@ -532,7 +611,7 @@ export async function POST(request: Request) {
           descricao,
           origem: 'venda_otica',
           referencia_id: venda.id,
-          localidade: localidade_venda || cliente?.cidade_atendimento || financeiro?.cidade || 'Geral',
+          localidade: localidade_venda || cliente?.cidade_atendimento || financeiroTyped?.cidade || 'Geral',
           data_movimento: new Date().toISOString().slice(0, 10),
           conta_id: contaLancamento,
           metodo_pagamento: metodoLancamento || null

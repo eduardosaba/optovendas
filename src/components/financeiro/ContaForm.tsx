@@ -53,7 +53,7 @@ export default function ContaForm({
         onSaved?.(data);
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error(err);
       alert("Erro ao salvar conta. Veja o console.");
     } finally {

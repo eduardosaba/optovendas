@@ -656,7 +656,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   onClick={() => setMenuAberto(false)}
                 />
 
-                <div className="fixed left-2 right-2 top-[72px] z-20 max-h-[calc(100dvh-88px)] overflow-auto rounded-[28px] border border-slate-50 bg-white p-3 shadow-2xl shadow-slate-200 sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+12px)] sm:mt-0 sm:w-64 sm:max-h-none sm:overflow-visible">
+                <div className="fixed left-2 right-2 top-[72px] z-20 max-h-[calc(100dvh-88px)] overflow-auto rounded-[28px] border border-slate-50 bg-white p-3 shadow-2xl shadow-slate-200 sm:relative sm:left-auto sm:right-0 sm:top-auto sm:w-64 sm:max-h-none sm:overflow-visible">
                   <div className="mb-2 border-b border-slate-50 p-4">
                     <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Nivel de Acesso</p>
                     <div className="flex items-center gap-2 text-xs font-black italic text-cyan-600">

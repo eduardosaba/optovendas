@@ -23,14 +23,37 @@ import { NumericFormat } from 'react-number-format';
 
 type ParcelaRow = {
   id: string;
+  venda_id?: string | null;
+  paciente_id?: string | null;
   payment_id?: string;
   numero_parcela: number;
   valor_parcela: number;
+  data_vencimento?: string;
   vencimento: string;
   status: string;
   localidade?: string;
+  pacientes?: { nome_completo?: string | null; cidade_atendimento?: string | null; celular?: string | null } | Array<{ nome_completo?: string | null; cidade_atendimento?: string | null; celular?: string | null }> | null;
+  vendas?: { id?: string | null; localidade_venda?: string | null; ordens_servico?: Array<{ numero_os?: string | null }> | null } | Array<{ id?: string | null; localidade_venda?: string | null; ordens_servico?: Array<{ numero_os?: string | null }> | null }> | null;
   payments?: any;
 };
+
+function getPaciente(row: ParcelaRow) {
+  const pDireto = row.pacientes;
+  if (pDireto) return Array.isArray(pDireto) ? pDireto[0] : pDireto;
+  const pLegacy = Array.isArray(row.payments?.pacientes) ? row.payments.pacientes[0] : row.payments?.pacientes;
+  return pLegacy;
+}
+
+function getVenda(row: ParcelaRow) {
+  const vDireto = row.vendas;
+  if (vDireto) return Array.isArray(vDireto) ? vDireto[0] : vDireto;
+  const vLegacy = Array.isArray(row.payments?.vendas) ? row.payments.vendas[0] : row.payments?.vendas;
+  return vLegacy;
+}
+
+function getVencimento(row: ParcelaRow) {
+  return row.data_vencimento || row.vencimento;
+}
 
 function brl(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -99,39 +122,46 @@ export default function ReceberPage() {
   async function buscarDados(cid: string) {
     try {
       const { data, error } = await supabase
-        .from("installments")
+        .from("financeiro_parcelas")
         .select(`
-          *,
-          payments (
-            metodo,
-            vendas (id, localidade_venda, ordens_servico (numero_os)),
-            pacientes (nome_completo, cidade_atendimento, celular)
-          )
+          id,
+          venda_id,
+          paciente_id,
+          numero_parcela,
+          valor_parcela,
+          data_vencimento,
+          status,
+          localidade,
+          vendas (id, localidade_venda, ordens_servico (numero_os)),
+          pacientes (nome_completo, cidade_atendimento, celular)
         `)
         .eq("clinica_id", cid)
         .in("status", ["pendente", "atrasado"])
-        .order("vencimento", { ascending: true });
+        .order("data_vencimento", { ascending: true });
 
       if (error) throw error;
-      setRows(data || []);
+      setRows((data as ParcelaRow[]) || []);
     } catch (e: any) {
-      console.warn("installments read failed, attempting payments fallback:", e?.message || e);
+      console.warn("financeiro_parcelas read failed, attempting legacy installments fallback:", e?.message || e);
       try {
         const { data: data2, error: error2 } = await supabase
-          .from("payments")
+          .from("installments")
           .select(`
             *,
-            vendas (id, localidade_venda, ordens_servico (numero_os)),
-            pacientes (nome_completo, cidade_atendimento, celular)
+            payments (
+              metodo,
+              vendas (id, localidade_venda, ordens_servico (numero_os)),
+              pacientes (nome_completo, cidade_atendimento, celular)
+            )
           `)
           .eq("clinica_id", cid)
           .in("status", ["pendente", "atrasado"])
           .order("vencimento", { ascending: true });
 
         if (error2) throw error2;
-        setRows(data2 || []);
+        setRows((data2 as ParcelaRow[]) || []);
       } catch (e2: any) {
-        console.warn("payments fallback also failed:", e2?.message || e2);
+        console.warn("legacy installments fallback also failed:", e2?.message || e2);
         toast.error("Erro ao carregar parcelas (tabela ausente).");
         setRows([]);
       }
@@ -140,8 +170,8 @@ export default function ReceberPage() {
 
   const filtradas = useMemo(() => {
     return rows.filter((r) => {
-      const paciente = Array.isArray(r.payments?.pacientes) ? r.payments.pacientes[0] : r.payments?.pacientes;
-      const vendasRel = Array.isArray(r.payments?.vendas) ? r.payments.vendas[0] : r.payments?.vendas;
+      const paciente = getPaciente(r);
+      const vendasRel = getVenda(r);
       const nomeMatch = (paciente?.nome_completo || "").toLowerCase().includes(busca.toLowerCase());
       const cidadeObtida = vendasRel?.localidade_venda || paciente?.cidade_atendimento || "Não informada";
       const cidadeMatch = cidadeFiltro === "todas" || cidadeObtida === cidadeFiltro;
@@ -151,8 +181,8 @@ export default function ReceberPage() {
 
   const listaCidades = useMemo(() => {
     const cidades = rows.map((r) => {
-      const vendasRel = Array.isArray(r.payments?.vendas) ? r.payments.vendas[0] : r.payments?.vendas;
-      const paciente = Array.isArray(r.payments?.pacientes) ? r.payments.pacientes[0] : r.payments?.pacientes;
+      const vendasRel = getVenda(r);
+      const paciente = getPaciente(r);
       return vendasRel?.localidade_venda || paciente?.cidade_atendimento;
     }).filter(Boolean);
     return Array.from(new Set(cidades));
@@ -174,8 +204,8 @@ export default function ReceberPage() {
 
     setBaixandoId(parcelaSelecionada.id);
     const hoje = new Date().toISOString().slice(0, 10);
-    const paciente = Array.isArray(parcelaSelecionada.payments?.pacientes) ? parcelaSelecionada.payments.pacientes[0] : parcelaSelecionada.payments?.pacientes;
-    const vendasRel = Array.isArray(parcelaSelecionada.payments?.vendas) ? parcelaSelecionada.payments.vendas[0] : parcelaSelecionada.payments?.vendas;
+    const paciente = getPaciente(parcelaSelecionada as ParcelaRow);
+    const vendasRel = getVenda(parcelaSelecionada as ParcelaRow);
     const osNum = vendasRel?.ordens_servico?.[0]?.numero_os || '';
 
     try {
@@ -183,22 +213,28 @@ export default function ReceberPage() {
       const diferenca = valorOriginal - Number(valorRecebido || 0);
 
       // 1. Atualiza a parcela atual como paga com o valor recebido
-      await supabase.from('installments').update({
+      const baixaRich = await supabase.from('financeiro_parcelas').update({
         status: 'pago',
         pago_em: hoje,
         valor_pago: valorRecebido,
         metodo_pagamento: metodoRecebimento,
       }).eq('id', parcelaSelecionada.id);
+      if (baixaRich.error) {
+        const baixaMin = await supabase.from('financeiro_parcelas').update({ status: 'pago' }).eq('id', parcelaSelecionada.id);
+        if (baixaMin.error) throw baixaMin.error;
+      }
 
       // 2. Se for baixa parcial, cria parcela residual
       if (diferenca > 0.01) {
-        await supabase.from('installments').insert({
+        await supabase.from('financeiro_parcelas').insert({
           clinica_id: clinicaId,
-          payment_id: (parcelaSelecionada as any).payment_id,
+          venda_id: (parcelaSelecionada as ParcelaRow).venda_id || null,
+          paciente_id: (parcelaSelecionada as ParcelaRow).paciente_id || null,
           numero_parcela: parcelaSelecionada.numero_parcela,
           valor_parcela: diferenca,
-          vencimento: parcelaSelecionada.vencimento,
+          data_vencimento: getVencimento(parcelaSelecionada as ParcelaRow),
           status: 'pendente',
+          localidade: vendasRel?.localidade_venda || paciente?.cidade_atendimento || (parcelaSelecionada as ParcelaRow).localidade || null,
           descricao_interna: `Saldo devedor da parcela original de R$ ${valorOriginal}`,
         });
       }
@@ -245,7 +281,7 @@ export default function ReceberPage() {
   }
 
   function cobrarViaWhatsapp(row: ParcelaRow) {
-    const paciente = Array.isArray(row.payments?.pacientes) ? row.payments.pacientes[0] : row.payments?.pacientes;
+    const paciente = getPaciente(row);
     const nome = paciente?.nome_completo || "cliente";
     const numero = paciente?.celular;
     if (!numero) return toast.info("Paciente sem telefone cadastrado para WhatsApp.");
@@ -313,8 +349,8 @@ export default function ReceberPage() {
           <div className="p-12 text-center bg-white rounded-[40px] border border-dashed border-slate-200"><p className="font-bold text-slate-400">Nenhuma parcela para esta rota/filtro.</p></div>
         ) : (
           filtradas.map((p) => {
-            const paciente = Array.isArray(p.payments?.pacientes) ? p.payments.pacientes[0] : p.payments?.pacientes;
-            const atrasada = new Date(p.vencimento) < new Date();
+            const paciente = getPaciente(p);
+            const atrasada = new Date(getVencimento(p)) < new Date();
 
             return (
               <div key={p.id} className="flex flex-col md:flex-row items-center justify-between gap-6 p-6 bg-white rounded-[32px] border border-slate-50 shadow-sm hover:shadow-md transition-all">
@@ -323,8 +359,8 @@ export default function ReceberPage() {
                   <div>
                     <h4 className="font-black text-slate-800">{paciente?.nome_completo}</h4>
                     <div className="flex flex-wrap gap-3 mt-1">
-                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><Calendar size={12} /> {new Date(p.vencimento).toLocaleDateString('pt-BR')}</span>
-                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><MapPin size={12} /> {(Array.isArray(p.payments?.vendas) ? p.payments.vendas[0]?.localidade_venda : p.payments?.vendas?.localidade_venda) || paciente?.cidade_atendimento}</span>
+                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><Calendar size={12} /> {new Date(getVencimento(p)).toLocaleDateString('pt-BR')}</span>
+                      <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><MapPin size={12} /> {getVenda(p)?.localidade_venda || paciente?.cidade_atendimento}</span>
                     </div>
                   </div>
                 </div>

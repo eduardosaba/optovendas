@@ -17,6 +17,7 @@ import {
   Wallet,
   TrendingUp,
   Percent,
+  FileText
 } from "lucide-react";
 import StatCard from "@/components/shared/StatCard";
 import { resolveClinicaContext } from "@/lib/clinica";
@@ -28,7 +29,6 @@ export default function FinanceiroPage() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   
-  // ESTADOS PARA OS DADOS BRUTOS
   const [parcelas, setParcelas] = useState<any[]>([]);
   const [contasPagar, setContasPagar] = useState<any[]>([]);
   const [fluxoCaixa, setFluxoCaixa] = useState<any[]>([]);
@@ -49,11 +49,8 @@ export default function FinanceiroPage() {
         const primeiroDiaMes = new Date(y, m - 1, 1).toISOString().split('T')[0];
         const ultimoDiaMes = new Date(y, m, 0).toISOString().split('T')[0];
 
-        // 1. BUSCA PARCELAS (Crediário Próprio)
         const pRes = await supabase.from("financeiro_parcelas").select("*").eq("clinica_id", ctx.clinicaId);
         
-        // 2. BUSCA VENDAS (Lógica Resiliente para colunas)
-        // Tentamos buscar as colunas que você precisa. Se der erro 400, o catch trata.
         let vData: any[] = [];
         const { data: vTry, error: vErr } = await supabase
           .from("vendas")
@@ -63,23 +60,19 @@ export default function FinanceiroPage() {
 
         if (!vErr) vData = vTry || [];
 
-        // 3. BUSCA FLUXO DE CAIXA (Dinheiro Real)
         const fcRes = await supabase.from("fluxo_caixa").select("*")
           .eq("clinica_id", ctx.clinicaId)
           .gte("data_movimento", primeiroDiaMes)
           .lte("data_movimento", ultimoDiaMes);
 
-        // 4. BUSCA CONTAS A PAGAR
         const cpRes = await supabase.from("contas_a_pagar").select("*")
           .eq("clinica_id", ctx.clinicaId)
           .neq("status", "pago");
 
-        // 5. BUSCA CONSULTAS (Para Conversão)
         const { count: cCount } = await supabase.from("receitas_optometricas").select("id", { count: 'exact' })
           .eq("clinica_id", ctx.clinicaId)
           .gte("created_at", primeiroDiaMes);
 
-        // ATUALIZA ESTADOS
         setParcelas(pRes.data || []);
         setVendasRaw(vData);
         setFluxoCaixa(fcRes.data || []);
@@ -95,13 +88,11 @@ export default function FinanceiroPage() {
     carregarTudo();
   }, [competencia]);
 
-  // PROCESSAMENTO DOS INDICADORES (RESTAURAÇÃO DOS CARDS)
   const indicadores = useMemo(() => {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const [compY, compM] = competencia.split('-').map(Number);
 
-    // Vendas do Mês (Baseado na Data Real da Venda)
     const valorVendidoMes = vendasRaw.reduce((acc, v) => {
         const dataRef = v.data_venda || v.criado_em;
         if (!dataRef) return acc;
@@ -112,12 +103,10 @@ export default function FinanceiroPage() {
         return acc;
     }, 0);
 
-    // Recebido em Caixa (Fluxo de Caixa)
     const recebidoCaixa = fluxoCaixa
       .filter(f => f.tipo === 'entrada')
       .reduce((acc, curr) => acc + Number(curr.valor || 0), 0);
 
-    // A Receber (Parcelas pendentes do mês atual da competência)
     const aReceberMes = parcelas
       .filter(p => p.status !== 'pago')
       .reduce((acc, p) => {
@@ -128,7 +117,6 @@ export default function FinanceiroPage() {
         return acc;
       }, 0);
 
-    // Inadimplência (Vencidas antes de HOJE)
     const inadimplenciaTotal = parcelas
       .filter(p => p.status !== 'pago')
       .reduce((acc, p) => {
@@ -137,7 +125,6 @@ export default function FinanceiroPage() {
         return acc;
       }, 0);
 
-    // Ranking de Cidades
     const cidadesMap: Record<string, number> = {};
     vendasRaw.forEach(v => {
       const loc = v.localidade_venda || 'Geral';
@@ -177,12 +164,12 @@ export default function FinanceiroPage() {
               <p className="text-xl font-black text-slate-800">{indicadores.conversao.toFixed(1)}%</p>
             </div>
           </div>
-          <input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="rounded-2xl border p-2 font-bold text-sm bg-white" />
+          <input type="month" value={competencia} onChange={e => setCompetencia(e.target.value)} className="rounded-2xl border p-2 font-bold text-sm bg-white outline-none focus:ring-2 ring-emerald-500" />
           <OticaLogoBadge />
         </div>
       </header>
 
-      {/* CARDS RESTAURADOS */}
+      {/* CARDS DE INDICADORES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
         <StatCard label="Vendido (Mês)" value={brl(indicadores.valorVendidoMes)} trend={`${vendasRaw.length} vendas`} icon={<Wallet />} color="blue" />
         <StatCard label="Recebido (Caixa)" value={brl(indicadores.recebidoCaixa)} trend="Dinheiro real" icon={<TrendingUp />} color="emerald" />
@@ -192,25 +179,45 @@ export default function FinanceiroPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <MenuCard href="/financeiro/receber" title="Gestão de Parcelas" desc="Baixas e Recibos" icon={<Receipt size={24} />} colorClass="bg-emerald-600" />
-          <MenuCard href="/financeiro/inadimplencia" title="Cobrança por Rota" desc="Inadimplência por Cidade" icon={<MapPin size={24} />} colorClass="bg-rose-600" />
-          <MenuCard href="/financeiro/fluxo" title="Fluxo de Caixa" desc="Entradas e Saídas" icon={<History size={24} />} colorClass="bg-slate-800" />
-          <MenuCard href="/financeiro/contas" title="Conta Corrente" desc="Saldos bancários" icon={<Wallet size={24} />} colorClass="bg-blue-600" />
+        <div className="lg:col-span-2">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* LINHA 1 */}
+            <MenuCard href="/financeiro/dashboard" title="Inteligencia de Caixa" desc="GRAFICOS DE FATURAMENTO, ROI E SAUDE FINANCEIRA." icon={<BarChart3 size={24} />} colorClass="bg-blue-600" />
+            <MenuCard href="/financeiro/contas" title="Conta Corrente" desc="GERENCIE SUAS CONTAS CORRENTES E SALDOS." icon={<Wallet size={24} />} colorClass="bg-emerald-600" />
+
+            {/* LINHA 2 */}
+            <MenuCard href="/financeiro/receber" title="Gestão de Parcelas" desc="RECEBER PARCELAS E EMITIR RECIBOS NA HORA." icon={<Receipt size={24} />} colorClass="bg-emerald-600" />
+            <MenuCard href="/financeiro/inadimplencia" title="Inadimplência por Rota" desc="FILTRAR DEVEDORES POR CIDADE E ORGANIZAR COBRANÇAS." icon={<MapPin size={24} />} colorClass="bg-rose-600" />
+
+            {/* LINHA 3 */}
+            <MenuCard href="/financeiro/fluxo" title="Fluxo de Caixa" desc="LINHA DO TEMPO DE ENTRADAS E SAÍDAS COM SALDO CONSOLIDADO." icon={<History size={24} />} colorClass="bg-emerald-800" />
+            <MenuCard href="/otica/relatorios/fechamento" title="Fechamento de Caixa" desc="CONSOLIDE RECEBIMENTOS DO DIA POR ROTA E MÉTODO DE PAGAMENTO." icon={<FileText size={24} />} colorClass="bg-cyan-600" />
+
+            {/* Conciliação */}
+            <MenuCard href="/financeiro/conciliacao" title="Conciliação de Recebimentos" desc="Registrar valor líquido recebido após taxas e reconciliar com o caixa." icon={<FileSpreadsheet size={24} />} colorClass="bg-indigo-600" />
+
+            {/* LINHA 4 */}
+            <MenuCard href="/financeiro/lucratividade" title="Mapa da Mina" desc="RESUMO MENSAL POR CIDADE COM RANKING DE LUCRO LÍQUIDO." icon={<Target size={24} />} colorClass="bg-emerald-900" />
+            <MenuCard href="/financeiro/despesas/nova" title="Lançar Despesa" desc="REGISTRAR CUSTOS DE ROTA E DESPESAS OPERACIONAIS." icon={<Receipt size={24} />} colorClass="bg-rose-600" />
+
+            {/* LINHA 5 */}
+            <MenuCard href="/financeiro/consultorio" title="Financeiro Consultório" desc="TICKET MÉDIO DE CONSULTA E CONVERSÃO EXAME PARA ÓTICA." icon={<Stethoscope size={24} />} colorClass="bg-green-500" />
+          </div>
         </div>
 
-        <aside className="bg-slate-900 rounded-[40px] p-8 text-white shadow-2xl">
+        {/* RANKING LATERAL */}
+        <aside className="bg-slate-900 rounded-[40px] p-8 text-white shadow-2xl h-fit">
           <h3 className="text-sm font-black uppercase tracking-widest mb-6 flex items-center gap-2"><TrendingUp className="text-emerald-400" /> Top Cidades</h3>
           {indicadores.ranking.map((item, idx) => (
-            <div key={idx} className="flex items-center justify-between mb-4">
+            <div key={idx} className="flex items-center justify-between mb-4 border-b border-white/5 pb-4 last:border-0 last:pb-0">
               <div>
                 <p className="text-xs font-black uppercase">{item.cidade}</p>
                 <p className="text-[10px] text-emerald-400 font-bold">{brl(item.total)}</p>
               </div>
-              <span className="text-xl font-black text-slate-700">0{idx + 1}</span>
+              <span className="text-xl font-black text-white/20">0{idx + 1}</span>
             </div>
           ))}
-          <Link href="/financeiro/lucratividade" className="mt-4 block text-center py-3 bg-white/5 rounded-xl text-[10px] font-black uppercase">Ver Mapa Completo</Link>
+          <Link href="/financeiro/lucratividade" className="mt-4 block text-center py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">Ver Mapa Completo</Link>
         </aside>
       </div>
     </div>
@@ -220,10 +227,13 @@ export default function FinanceiroPage() {
 function MenuCard({ href, title, desc, icon, colorClass }: any) {
   return (
     <Link href={href} className="group">
-      <div className="flex items-center gap-5 p-6 bg-white border border-slate-100 rounded-[32px] hover:shadow-lg transition-all">
+      <div className="flex items-center gap-5 p-6 bg-white border border-slate-100 rounded-[32px] hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
         <div className={`${colorClass} p-4 rounded-2xl text-white shadow-lg`}>{icon}</div>
-        <div className="flex-1"><h4 className="text-sm font-black text-slate-800">{title}</h4><p className="text-[10px] font-bold text-slate-400 uppercase">{desc}</p></div>
-        <ChevronRight size={18} className="text-slate-300" />
+        <div className="flex-1">
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">{title}</h4>
+            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 leading-tight">{desc}</p>
+        </div>
+        <ChevronRight size={18} className="text-slate-300 group-hover:text-slate-900 group-hover:translate-x-1 transition-all" />
       </div>
     </Link>
   );

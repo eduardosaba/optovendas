@@ -29,7 +29,8 @@ export default function SyncStatus() {
 
   return (
     <div className="mb-6 animate-in slide-in-from-top duration-500">
-      <div className="bg-amber-50 border border-amber-100 rounded-[24px] p-4 flex items-center justify-between shadow-sm">
+      <div className="mx-auto w-full max-w-7xl px-4 md:px-10 md:pl-[20rem]">
+        <div className="bg-amber-50 border border-amber-100 rounded-[24px] p-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <div className="bg-amber-500 p-2 rounded-xl text-white">
             <CloudOff size={20} />
@@ -48,6 +49,7 @@ export default function SyncStatus() {
         >
           <RefreshCw size={14} /> Sincronizar Agora
         </button>
+        </div>
       </div>
     </div>
   );

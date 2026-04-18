@@ -377,7 +377,7 @@ export default function DashboardOS() {
       if (selectedOS.observacoes !== undefined) payload.observacoes = selectedOS.observacoes || null;
 
       // Tenta salvar no ordens_servico; se a coluna `observacoes` nao existir, faremos fallback
-      let res = await supabase.from("ordens_servico").update(payload).eq("id", selectedOS.id);
+      const res = await supabase.from("ordens_servico").update(payload).eq("id", selectedOS.id);
       if (res.error) throw new Error(res.error.message);
 
       const savedOS = { ...selectedOS, status_os: status } as OSRow;

@@ -24,6 +24,12 @@ export const templatesMensagens = {
   aniversario: (nome: string) =>
     `Ola ${nome}! A equipe da OptoVendas te deseja um feliz aniversario! Como presente, voce tem 10% de desconto em novas lentes este mes.`,
 
+  aniversarioConsultorio: (nome: string) =>
+    `Ola ${nome}! A equipe do Consultorio te deseja um feliz aniversario! Se precisar agendar um retorno, estamos a disposicao.`,
+
+  aniversarioOptica: (nome: string) =>
+    `Ola ${nome}! A equipe da Optica te deseja um feliz aniversario! Aproveite 10% de desconto em lentes e armações este mes.`,
+
   oculosPronto: (nome: string, local: string) =>
     `Oi ${nome}! Boas noticias: seus oculos ja estao prontos para retirada em ${local}. Estamos te aguardando.`,
 

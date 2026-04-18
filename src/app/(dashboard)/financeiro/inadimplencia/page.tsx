@@ -26,7 +26,10 @@ type DevedorRow = {
   id: string;
   valor_parcela?: number | null;
   vencimento?: string | null;
+  data_vencimento?: string | null;
   status?: string | null;
+  pacientes?: PacienteInfo | PacienteInfo[] | null;
+  vendas?: any;
   payments?:
     | {
         pacientes?: PacienteInfo | PacienteInfo[] | null;
@@ -42,9 +45,45 @@ function brl(v: number) {
 }
 
 function getPaciente(row: DevedorRow): PacienteInfo | undefined {
+  // direct pacientes field
+  if (row.pacientes) return Array.isArray(row.pacientes) ? row.pacientes[0] : row.pacientes;
+
+  // vendas relation may contain pacientes
+  if (row.vendas) {
+    const v = Array.isArray(row.vendas) ? row.vendas[0] : row.vendas;
+    const pv = (v && (v.pacientes ?? v.paciente)) || undefined;
+    if (pv) return Array.isArray(pv) ? pv[0] : pv;
+  }
+
+  // payments relation
   const pay = Array.isArray(row.payments) ? row.payments[0] : row.payments;
   const p = pay?.pacientes;
   return Array.isArray(p) ? p[0] : p ?? undefined;
+}
+
+function getCidade(row: DevedorRow): string | undefined {
+  // try patient
+  const paciente = getPaciente(row);
+  if (paciente?.cidade_atendimento) return paciente.cidade_atendimento;
+
+  // vendas localidade
+  if (row.vendas) {
+    const v = Array.isArray(row.vendas) ? row.vendas[0] : row.vendas;
+    if (v?.localidade_venda) return v.localidade_venda;
+    if (v?.cidade_atendimento) return v.cidade_atendimento;
+  }
+
+  // payments nested
+  const pay = Array.isArray(row.payments) ? row.payments[0] : row.payments;
+  const pp = pay?.pacientes;
+  const pf = Array.isArray(pp) ? pp[0] : pp;
+  if (pf?.cidade_atendimento) return pf.cidade_atendimento;
+
+  // top-level fallback
+  // @ts-ignore
+  if ((row as any).localidade_venda) return (row as any).localidade_venda;
+
+  return undefined;
 }
 
 function diasAtraso(vencimento?: string | null) {
@@ -79,38 +118,97 @@ export default function InadimplenciaRotaPage() {
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
-      try {
-        const { data, error } = await supabase
-          .from("installments")
-          .select(
-            "id, valor_parcela, vencimento, status, payments(pacientes(nome_completo, celular, cidade_atendimento, endereco_completo))"
-          )
-          .eq("clinica_id", ctx.clinicaId)
-          .eq("status", "atrasado")
-          .order("vencimento", { ascending: true });
+      async function enrichWithVendas(rows: any[]) {
+        try {
+          const vendaIds = Array.from(new Set(rows.map((r: any) => {
+            return (r.venda_id || r.venda?.id || (Array.isArray(r.vendas) ? r.vendas[0]?.id : r.vendas?.id) || (r as any).venda)?.toString();
+          }).filter(Boolean)));
+          if (vendaIds.length === 0) return rows;
+          const { data: vendasData } = await supabase
+            .from('vendas')
+            .select('id, localidade_venda, pacientes(nome_completo, celular, cidade_atendimento, endereco_completo)')
+            .in('id', vendaIds);
+          const vendaMap: Record<string, any> = {};
+          (vendasData || []).forEach((v: any) => { vendaMap[v.id] = v; });
+          return rows.map((r: any) => {
+            const id = (r.venda_id || r.venda?.id || (Array.isArray(r.vendas) ? r.vendas[0]?.id : r.vendas?.id) || (r as any).venda)?.toString();
+            const v = id ? vendaMap[id] : undefined;
+            if (v) {
+              return { ...r, vendas: v, pacientes: r.pacientes || v.pacientes || r.pacientes };
+            }
+            return r;
+          });
+        } catch (e) {
+          console.warn('inadimplencia: enrichWithVendas failed', e);
+          return rows;
+        }
+      }
+        // 1) Prefer new table `financeiro_parcelas` (includes vendas and pacientes)
+        try {
+          const { data, error } = await supabase
+            .from("financeiro_parcelas")
+            .select(
+              "id, valor_parcela, data_vencimento, status, pacientes(nome_completo, celular, cidade_atendimento, endereco_completo), vendas(id, localidade_venda, ordens_servico(numero_os), pacientes(nome_completo, celular, cidade_atendimento, endereco_completo))"
+            )
+            .eq("clinica_id", ctx.clinicaId)
+            .in("status", ["atrasado", "pendente"]) 
+            .order("data_vencimento", { ascending: true });
 
-        if (error) throw error;
-        setDevedores((data as DevedorRow[]) || []);
-      } catch (e: any) {
-        console.warn("installments read failed in inadimplencia, trying payments:", e?.message || e);
+          if (!error && data) {
+            const normalized = (data as DevedorRow[]).map((r: any) => ({ ...r, vencimento: r.data_vencimento || r.vencimento }));
+            const enriched = await enrichWithVendas(normalized as any[]);
+            setDevedores(enriched || []);
+            return;
+          }
+        } catch (errFinanceiro) {
+          console.warn("financeiro_parcelas read failed, falling back:", errFinanceiro);
+        }
+
+        // 2) Legacy `installments` table
+        try {
+          const { data, error } = await supabase
+            .from("installments")
+            .select(
+              "id, valor_parcela, vencimento, status, payments(pacientes(nome_completo, celular, cidade_atendimento, endereco_completo)), pacientes(nome_completo, celular, cidade_atendimento, endereco_completo), vendas(id, pacientes(nome_completo, celular, cidade_atendimento, endereco_completo))"
+            )
+            .eq("clinica_id", ctx.clinicaId)
+            .in("status", ["atrasado", "pendente"]) 
+            .order("vencimento", { ascending: true });
+
+          if (!error && data) {
+            const normalized = (data as DevedorRow[]).map((r: any) => ({ ...r, vencimento: r.vencimento || r.data_vencimento }));
+            const enriched = await enrichWithVendas(normalized as any[]);
+            setDevedores(enriched || []);
+            return;
+          }
+        } catch (e: any) {
+          console.warn("installments read failed in inadimplencia, trying payments:", e?.message || e);
+        }
+
+        // 3) Try payments table directly (some schemas expose payments differently)
         try {
           const { data: d2, error: err2 } = await supabase
             .from("payments")
             .select(
-              "id, valor_parcela, vencimento, status, vendas:vendaspay (id), payments:payments_dummy(pacientes(nome_completo, celular, cidade_atendimento, endereco_completo))"
+              "id, valor_parcela, vencimento, status, pacientes(nome_completo, celular, cidade_atendimento, endereco_completo), vendas(id)"
             )
             .eq("clinica_id", ctx.clinicaId)
-            .eq("status", "atrasado")
+            .in("status", ["atrasado", "pendente"]) 
             .order("vencimento", { ascending: true });
 
-          if (err2) throw err2;
-          setDevedores((d2 as DevedorRow[]) || []);
+          if (!err2 && d2) {
+            const normalized = (d2 as DevedorRow[]).map((r: any) => ({ ...r, vencimento: r.vencimento || r.data_vencimento }));
+            const enriched = await enrichWithVendas(normalized as any[]);
+            setDevedores(enriched || []);
+            return;
+          }
         } catch (e2: any) {
           console.warn("payments fallback also failed:", e2?.message || e2);
-          toast.error("Erro ao carregar inadimplência (tabela ausente).");
-          setDevedores([]);
         }
-      }
+
+        // none of the tables available
+        toast.error("Erro ao carregar inadimplência (tabela ausente).");
+        setDevedores([]);
     } catch (err) {
       const e = err as Error;
       toast.error("Erro ao carregar inadimplencia: " + e.message);
@@ -125,7 +223,7 @@ export default function InadimplenciaRotaPage() {
 
   const cidadesDisponiveis = useMemo(() => {
     const cidades = devedores
-      .map((d) => getPaciente(d)?.cidade_atendimento)
+      .map((d) => getCidade(d))
       .filter((v): v is string => Boolean(v));
     return Array.from(new Set(cidades)).sort((a, b) => a.localeCompare(b));
   }, [devedores]);
@@ -136,7 +234,7 @@ export default function InadimplenciaRotaPage() {
     return devedores.filter((d) => {
       const p = getPaciente(d);
       const nome = (p?.nome_completo ?? "").toLowerCase();
-      const cidade = p?.cidade_atendimento ?? "";
+      const cidade = getCidade(d) ?? "";
       const bateNome = termo.length === 0 || nome.includes(termo);
       const bateCidade = cidadeFiltro === "todas" || cidade === cidadeFiltro;
       return bateNome && bateCidade;
@@ -195,6 +293,8 @@ export default function InadimplenciaRotaPage() {
         </div>
       </header>
 
+      
+
       <section className="grid grid-cols-1 gap-4 rounded-[32px] border border-slate-50 bg-white p-6 shadow-sm md:grid-cols-12">
         <div className="relative md:col-span-7">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
@@ -237,6 +337,7 @@ export default function InadimplenciaRotaPage() {
             const paciente = getPaciente(d);
             const atraso = diasAtraso(d.vencimento);
             const telefone = paciente?.celular;
+            const cidade = getCidade(d) || paciente?.cidade_atendimento || "Cidade nao informada";
 
             return (
               <div
@@ -250,7 +351,7 @@ export default function InadimplenciaRotaPage() {
                         {atraso} dias de atraso
                       </span>
                       <span className="flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-slate-300">
-                        <MapPin size={12} /> {paciente?.cidade_atendimento || "Cidade nao informada"}
+                        <MapPin size={12} /> {cidade}
                       </span>
                     </div>
                     <h3 className="text-2xl font-black tracking-tight text-slate-800">{paciente?.nome_completo || "Cliente"}</h3>

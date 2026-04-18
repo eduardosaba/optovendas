@@ -81,7 +81,7 @@ export default function LoginPage() {
       // rota pública segura (`/dashboard`) por padrão. Perfis `master` vão
       // para `/admin`.
       const userId = data.user?.id;
-      let destino = "/dashboard";
+      const destino = "/dashboard";
 
       if (userId) {
         try {

@@ -524,7 +524,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
           saldoRegistrado: !!res.saldoRegistrado
         };
 
-        let parts: string[] = ['Venda realizada com sucesso.'];
+        const parts: string[] = ['Venda realizada com sucesso.'];
         if (detail.entradaInserida) parts.push('Entrada registrada na conta.');
         if (detail.parcelasGeradas) parts.push('Parcelas geradas (crediário).');
         if (detail.saldoRegistrado && !detail.parcelasGeradas) parts.push('Saldo registrado em caixa.');
