@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
@@ -422,6 +423,12 @@ export default function ComunicacaoPage() {
         </div>
 
         <div className="flex flex-col items-stretch gap-3 md:items-end">
+          <Link
+            href="/comunicacao/pos-venda"
+            className="inline-flex items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-indigo-700 hover:bg-indigo-100"
+          >
+            Pós Venda (Próxima Venda)
+          </Link>
           <div className="flex gap-1 rounded-2xl bg-slate-100 p-1">
             <button
               type="button"

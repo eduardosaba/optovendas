@@ -93,8 +93,9 @@ export default function DashboardLayout({
         const ctx = await resolveClinicaContext();
 
         const f = (ctx.funcao || "").toLowerCase();
+        const userIsMaster = !!ctx.isMaster || f === "master";
         setRole(f);
-        setIsMaster(!!ctx.isMaster || f === "master");
+        setIsMaster(userIsMaster);
 
         if (ctx.clinicaId && ctx.clinicaId !== "master") {
           try {
@@ -112,7 +113,7 @@ export default function DashboardLayout({
               const venc = data?.data_vencimento ? new Date(data.data_vencimento) : null;
               const expirado = venc ? venc < new Date() : false;
 
-              if (status !== "ativo" || expirado) {
+              if ((status !== "ativo" || expirado) && !userIsMaster) {
                 // redireciona para página de bloqueio
                 // usamos replace para evitar voltar para área interna
                 router.replace("/bloqueado");

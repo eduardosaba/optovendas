@@ -87,7 +87,7 @@ export default function DashboardPrincipalPage() {
         // Contar atendimentos agendados para a data de hoje
         const atendimentosRes = await supabase
           .from("agenda_pacientes")
-          .select("id", { count: "exact", head: true })
+          .select("id,agenda_externa!inner(clinica_id,data_atendimento)", { count: "exact", head: true })
           .eq("agenda_externa.clinica_id", ctx.clinicaId)
           .eq("agenda_externa.data_atendimento", hoje);
 
@@ -96,10 +96,10 @@ export default function DashboardPrincipalPage() {
         // Contar pacientes na fila (pendentes) — hoje e com status diferente de 'Concluido'
         const filaRes = await supabase
           .from("agenda_pacientes")
-          .select("id", { count: "exact", head: true })
+          .select("id,agenda_externa!inner(clinica_id,data_atendimento)", { count: "exact", head: true })
           .eq("agenda_externa.clinica_id", ctx.clinicaId)
           .eq("agenda_externa.data_atendimento", hoje)
-          .not("status", "eq", "Concluido");
+          .neq("agenda_externa.status", "Concluido");
 
         if (filaRes.error) throw filaRes.error;
 

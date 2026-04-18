@@ -39,6 +39,9 @@ export async function POST(req: Request) {
       meta_mensal: Number(body.meta_mensal || 0),
       limite_desconto_vendedor: Number(body.limite_desconto_vendedor || 5),
       limite_desconto_gerente: Number(body.limite_desconto_gerente || 15),
+      adapt_min_days: Number(body.adapt_min_days ?? body.adaptMin ?? 20),
+      adapt_max_days: Number(body.adapt_max_days ?? body.adaptMax ?? 60),
+      nova_venda_days: Number(body.nova_venda_days ?? body.novaVendaDays ?? 300),
       updated_at: new Date().toISOString()
     };
 
