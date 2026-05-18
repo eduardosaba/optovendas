@@ -1,8 +1,8 @@
+import ToastProvider from "@/components/ui/ToastProvider";
+import { ConfigProvider } from "@/context/ConfigContext";
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import ToastProvider from "@/components/ui/ToastProvider";
-import { ConfigProvider } from "@/context/ConfigContext";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 

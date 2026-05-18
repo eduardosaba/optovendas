@@ -1,35 +1,33 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import Link from "next/link";
-import { resolveClinicaContext } from "@/lib/clinica";
-import { supabase } from "@/lib/supabase";
-import {
-  AlertCircle,
-  ArrowRight,
-  Clock,
-  DollarSign,
-  FileText,
-  PlusCircle,
-  Ruler,
-  Settings,
-  Monitor,
-  Package,
-  Glasses,
-  Tag,
-  BadgePercent,
-  TrendingUp,
-  Users,
-  Target,
-  ShoppingBag,
-  BadgePercent as BadgePercentAlias,
-} from "lucide-react";
 import SyncStatus from "@/components/otica/SyncStatus";
 import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import StatCard from "@/components/shared/StatCard";
+import { DashboardGrid } from "@/components/ui/DashboardGrid";
+import { resolveClinicaContext } from "@/lib/clinica";
+import { supabase } from "@/lib/supabase";
 import confetti from "canvas-confetti";
-import { Award } from "lucide-react";
-import { ReactNode } from "react";
+import {
+  AlertCircle,
+  ArrowRight,
+  Award,
+  BadgePercent,
+  Clock,
+  DollarSign,
+  FileText,
+  Glasses,
+  Monitor,
+  Package,
+  PlusCircle,
+  Ruler,
+  Settings,
+  ShoppingBag,
+  Target,
+  TrendingUp,
+  Users,
+} from "lucide-react";
+import Link from "next/link";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 
 type MetricsState = {
   vendasHoje: number;
@@ -75,11 +73,13 @@ export default function OticaPage() {
     totalConsultasCount: 0,
   });
 
-  const [topVendedores, setTopVendedores] = useState<Array<{ nome: string; total: number }>>([]);
+  const [topVendedores, setTopVendedores] = useState<
+    Array<{ nome: string; total: number }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [competencia, setCompetencia] = useState(() => {
     const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
   const [metaMensal, setMetaMensal] = useState<number | null>(null);
   const [celebrou, setCelebrou] = useState(false);
@@ -94,11 +94,11 @@ export default function OticaPage() {
         const isoHoje = hoje.toISOString().split(".")[0] + "Z";
 
         // competência YYYY-MM -> primeiro e último dia do mês
-        const [y, m] = (competencia || '').split('-').map(Number);
+        const [y, m] = (competencia || "").split("-").map(Number);
         const primeiro = new Date(y, (m || 1) - 1, 1);
-        const ultimo = new Date(y, (m || 1), 0);
-        const primeiroDiaMes = primeiro.toISOString().split('T')[0];
-        const ultimoDiaMes = ultimo.toISOString().split('T')[0];
+        const ultimo = new Date(y, m || 1, 0);
+        const primeiroDiaMes = primeiro.toISOString().split("T")[0];
+        const ultimoDiaMes = ultimo.toISOString().split("T")[0];
 
         async function carregarVendasHoje() {
           const res = await supabase
@@ -107,7 +107,7 @@ export default function OticaPage() {
             .eq("clinica_id", ctx.clinicaId)
             .gte("criado_em", isoHoje);
 
-          return res.error ? [] : res.data ?? [];
+          return res.error ? [] : (res.data ?? []);
         }
 
         const vendasRows = await carregarVendasHoje();
@@ -120,12 +120,15 @@ export default function OticaPage() {
             .eq("clinica_id", ctx.clinicaId)
             .not("status_os", "eq", "Entregue");
           if (osRes.error) {
-            console.warn('ordens_servico fetch error:', String(osRes.error.message || osRes.error));
+            console.warn(
+              "ordens_servico fetch error:",
+              String(osRes.error.message || osRes.error),
+            );
             osRes.data = osRes.data || [];
             osRes.count = osRes.count || 0;
           }
         } catch (err) {
-          console.warn('ordens_servico fetch throw:', err);
+          console.warn("ordens_servico fetch throw:", err);
           osRes = { data: [], count: 0 };
         }
 
@@ -139,11 +142,14 @@ export default function OticaPage() {
             .order("atualizado_em", { ascending: false })
             .limit(4);
           if (estoqueRes.error) {
-            console.warn('estoque_armacoes fetch error:', String(estoqueRes.error.message || estoqueRes.error));
+            console.warn(
+              "estoque_armacoes fetch error:",
+              String(estoqueRes.error.message || estoqueRes.error),
+            );
             estoqueRes.data = estoqueRes.data || [];
           }
         } catch (err) {
-          console.warn('estoque_armacoes fetch throw:', err);
+          console.warn("estoque_armacoes fetch throw:", err);
           estoqueRes = { data: [] };
         }
 
@@ -156,10 +162,18 @@ export default function OticaPage() {
             .eq("status", "atrasado");
           if (inadRes.error) {
             const msg = String(inadRes.error.message || inadRes.error);
-            console.warn('installments fetch error (inadimplencia):', msg);
-            if (/Could not find the table 'public.installments'|PGRST205|table 'public.installments'/.test(msg)) {
+            console.warn("installments fetch error (inadimplencia):", msg);
+            if (
+              /Could not find the table 'public.installments'|PGRST205|table 'public.installments'/.test(
+                msg,
+              )
+            ) {
               try {
-                const alt = await supabase.from('payments').select('valor_parcela').eq('clinica_id', ctx.clinicaId).eq('status', 'atrasado');
+                const alt = await supabase
+                  .from("payments")
+                  .select("valor_parcela")
+                  .eq("clinica_id", ctx.clinicaId)
+                  .eq("status", "atrasado");
                 if (!alt.error && alt.data) inadRes.data = alt.data;
                 else inadRes.data = inadRes.data || [];
               } catch (e) {
@@ -170,21 +184,26 @@ export default function OticaPage() {
             }
           }
         } catch (err) {
-          console.warn('installments fetch throw (inadimplencia):', err);
+          console.warn("installments fetch throw (inadimplencia):", err);
           inadRes = { data: [] };
         }
 
         const vendasHoje = ((vendasRows ?? []) as VendaRow[]).reduce(
-          (acc: number, i: VendaRow) => acc + Number(i.valor_final ?? i.valor_total ?? 0),
+          (acc: number, i: VendaRow) =>
+            acc + Number(i.valor_final ?? i.valor_total ?? 0),
           0,
         );
 
-        const inadimplenciaTotal = (inadRes.error ? [] : (inadRes.data ?? []) as ParcelaRow[]).reduce(
+        const inadimplenciaTotal = (
+          inadRes.error ? [] : ((inadRes.data ?? []) as ParcelaRow[])
+        ).reduce(
           (acc: number, i: ParcelaRow) => acc + Number(i.valor_parcela ?? 0),
           0,
         );
 
-        const estoqueThumbnails = (estoqueRes.error ? [] : (estoqueRes.data ?? []) as EstoqueThumbRow[])
+        const estoqueThumbnails = (
+          estoqueRes.error ? [] : ((estoqueRes.data ?? []) as EstoqueThumbRow[])
+        )
           .map((r: EstoqueThumbRow) => r.foto_url)
           .filter(Boolean) as string[];
 
@@ -192,18 +211,47 @@ export default function OticaPage() {
         let vendasMes = 0;
         let totalVendasCount = 0;
         try {
-          let res: any = await supabase.from('vendas').select('valor_final,valor_total,data_venda,criado_em').eq('clinica_id', ctx.clinicaId).gte('data_venda', primeiroDiaMes).lte('data_venda', ultimoDiaMes);
-          if (res.error && /data_venda|column .* does not exist/i.test(String(res.error.message || res.error))) {
-            res = await supabase.from('vendas').select('valor_final,valor_total,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes).lte('criado_em', ultimoDiaMes + 'T23:59:59Z');
-            if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
-              res = await supabase.from('vendas').select('valor_final,valor_total,created_at').eq('clinica_id', ctx.clinicaId).gte('created_at', primeiroDiaMes).lte('created_at', ultimoDiaMes + 'T23:59:59Z');
+          let res: any = await supabase
+            .from("vendas")
+            .select("valor_final,valor_total,data_venda,criado_em")
+            .eq("clinica_id", ctx.clinicaId)
+            .gte("data_venda", primeiroDiaMes)
+            .lte("data_venda", ultimoDiaMes);
+          if (
+            res.error &&
+            /data_venda|column .* does not exist/i.test(
+              String(res.error.message || res.error),
+            )
+          ) {
+            res = await supabase
+              .from("vendas")
+              .select("valor_final,valor_total,criado_em")
+              .eq("clinica_id", ctx.clinicaId)
+              .gte("criado_em", primeiroDiaMes)
+              .lte("criado_em", ultimoDiaMes + "T23:59:59Z");
+            if (
+              res.error &&
+              /criado_em|column .* does not exist/i.test(
+                String(res.error.message || res.error),
+              )
+            ) {
+              res = await supabase
+                .from("vendas")
+                .select("valor_final,valor_total,created_at")
+                .eq("clinica_id", ctx.clinicaId)
+                .gte("created_at", primeiroDiaMes)
+                .lte("created_at", ultimoDiaMes + "T23:59:59Z");
             }
           }
-          const vendasMesData = (!res.error && res.data) ? res.data : [];
-          vendasMes = (vendasMesData || []).reduce((s: number, r: any) => s + Number(r.valor_final ?? r.valor_total ?? 0), 0);
+          const vendasMesData = !res.error && res.data ? res.data : [];
+          vendasMes = (vendasMesData || []).reduce(
+            (s: number, r: any) =>
+              s + Number(r.valor_final ?? r.valor_total ?? 0),
+            0,
+          );
           totalVendasCount = (vendasMesData || []).length;
         } catch (err) {
-          console.warn('Erro ao buscar vendas por competência', err);
+          console.warn("Erro ao buscar vendas por competência", err);
         }
 
         let totalConsultasCount = 0;
@@ -211,33 +259,48 @@ export default function OticaPage() {
           // tentamos filtrar por data_venda em consultorio_receitas, com fallback para criado_em
           let cres: any;
           try {
-            cres = await supabase.from('consultorio_receitas').select('id,data_venda,criado_em').eq('clinica_id', ctx.clinicaId).gte('data_venda', primeiroDiaMes).lte('data_venda', ultimoDiaMes);
-            if (cres.error && /data_venda|column .* does not exist/i.test(String(cres.error.message || cres.error))) {
+            cres = await supabase
+              .from("consultorio_receitas")
+              .select("id,data_venda,criado_em")
+              .eq("clinica_id", ctx.clinicaId)
+              .gte("data_venda", primeiroDiaMes)
+              .lte("data_venda", ultimoDiaMes);
+            if (
+              cres.error &&
+              /data_venda|column .* does not exist/i.test(
+                String(cres.error.message || cres.error),
+              )
+            ) {
               throw new Error(String(cres.error.message || cres.error));
             }
           } catch (innerErr: any) {
-            const msg = String(innerErr?.message || innerErr || '');
+            const msg = String(innerErr?.message || innerErr || "");
             if (/data_venda|column .* does not exist/i.test(msg)) {
               try {
-                cres = await supabase.from('consultorio_receitas').select('id,criado_em').eq('clinica_id', ctx.clinicaId).gte('criado_em', primeiroDiaMes).lte('criado_em', ultimoDiaMes + 'T23:59:59Z');
+                cres = await supabase
+                  .from("consultorio_receitas")
+                  .select("id,criado_em")
+                  .eq("clinica_id", ctx.clinicaId)
+                  .gte("criado_em", primeiroDiaMes)
+                  .lte("criado_em", ultimoDiaMes + "T23:59:59Z");
               } catch (e) {
-                console.warn('Fallback consultorio_receitas fetch failed', e);
+                console.warn("Fallback consultorio_receitas fetch failed", e);
                 cres = { data: [] };
               }
             } else {
-              console.warn('consultorio_receitas fetch error', innerErr);
+              console.warn("consultorio_receitas fetch error", innerErr);
               cres = { data: [] };
             }
           }
 
           totalConsultasCount = (cres?.data || []).length || 0;
         } catch (err) {
-          console.warn('Erro ao buscar consultas por competência', err);
+          console.warn("Erro ao buscar consultas por competência", err);
         }
 
         setMetrics({
           vendasHoje,
-          osPendentes: osRes.error ? 0 : osRes.count ?? 0,
+          osPendentes: osRes.error ? 0 : (osRes.count ?? 0),
           inadimplenciaTotal,
           estoqueThumbnails,
           totalVendasCount,
@@ -258,19 +321,33 @@ export default function OticaPage() {
   const dispararCelebracao = () => {
     const duration = 5 * 1000;
     const animationEnd = Date.now() + duration;
-    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
+    const defaults = {
+      startVelocity: 30,
+      spread: 360,
+      ticks: 60,
+      zIndex: 9999,
+    };
 
-    const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+    const randomInRange = (min: number, max: number) =>
+      Math.random() * (max - min) + min;
 
-    const interval: any = setInterval(function() {
+    const interval: any = setInterval(function () {
       const timeLeft = animationEnd - Date.now();
 
       if (timeLeft <= 0) return clearInterval(interval);
 
       const particleCount = 50 * (timeLeft / duration);
 
-      confetti({ ...defaults, particleCount: Math.floor(particleCount), origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
-      confetti({ ...defaults, particleCount: Math.floor(particleCount), origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
+      confetti({
+        ...defaults,
+        particleCount: Math.floor(particleCount),
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+      });
+      confetti({
+        ...defaults,
+        particleCount: Math.floor(particleCount),
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+      });
     }, 250);
   };
 
@@ -305,7 +382,9 @@ export default function OticaPage() {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-500" />
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-600">Performance Comercial</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-600">
+              Performance Comercial
+            </p>
           </div>
           <h1 className="text-5xl font-black tracking-tight text-slate-900">
             Dashboard Ótica<span className="text-cyan-600">.</span>
@@ -315,7 +394,9 @@ export default function OticaPage() {
         <div className="flex items-start justify-end w-full lg:w-auto">
           <div className="ml-auto lg:ml-0 flex items-center gap-3">
             <label className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm flex items-center gap-3">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Competência</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Competência
+              </span>
               <input
                 type="month"
                 value={competencia}
@@ -329,10 +410,13 @@ export default function OticaPage() {
       </header>
 
       {/* KPIs: colocados abaixo do título, alinhados à direita */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6 mb-4">
+      <DashboardGrid cols={5} gap="gap-6">
         <StatCard
           label="Vendas Hoje"
-          value={metrics.vendasHoje.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          value={metrics.vendasHoje.toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          })}
           icon={<TrendingUp size={20} className="text-emerald-500" />}
           color="emerald"
           trend="Hoje"
@@ -340,7 +424,10 @@ export default function OticaPage() {
 
         <StatCard
           label="Vendas (Mês)"
-          value={metrics.vendasMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          value={metrics.vendasMes.toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          })}
           icon={<DollarSign size={20} className="text-cyan-500" />}
           color="blue"
           trend={competencia}
@@ -348,7 +435,14 @@ export default function OticaPage() {
 
         <StatCard
           label="Ticket Médio (Mês)"
-          value={ticketMedio === 0 ? "R$ 0,00" : ticketMedio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          value={
+            ticketMedio === 0
+              ? "R$ 0,00"
+              : ticketMedio.toLocaleString("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                })
+          }
           icon={<ShoppingBag size={20} className="text-cyan-500" />}
           color="indigo"
           trend="Mês"
@@ -369,19 +463,29 @@ export default function OticaPage() {
           color="indigo"
           trend="Pendentes"
         />
-      </div>
+      </DashboardGrid>
 
       {/* Meta Mensal */}
       {metaMensal !== null && (
         <div className="max-w-3xl">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-black text-slate-500 uppercase tracking-wider">Meta Mensal</span>
-            <span className="text-sm font-black text-slate-700">R$ {metaMensal.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+            <span className="text-xs font-black text-slate-500 uppercase tracking-wider">
+              Meta Mensal
+            </span>
+            <span className="text-sm font-black text-slate-700">
+              R${" "}
+              {metaMensal.toLocaleString("pt-BR", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </span>
           </div>
           <div className="h-4 w-full rounded-full bg-slate-100">
             <div
               className="h-4 rounded-full bg-cyan-600"
-              style={{ width: `${Math.min(100, metaMensal > 0 ? (metrics.vendasMes / metaMensal) * 100 : 0)}%` }}
+              style={{
+                width: `${Math.min(100, metaMensal > 0 ? (metrics.vendasMes / metaMensal) * 100 : 0)}%`,
+              }}
             />
           </div>
         </div>
@@ -390,7 +494,7 @@ export default function OticaPage() {
       <SyncStatus />
 
       {/* Grid de Atalhos Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <DashboardGrid cols={3} gap="gap-8">
         <Link
           href="/otica/vendas/nova"
           className="group relative h-[340px] flex-col justify-between overflow-hidden rounded-[48px] bg-slate-900 p-10 shadow-2xl shadow-slate-200 transition-all duration-500 hover:scale-[1.02] lg:col-span-1"
@@ -404,9 +508,14 @@ export default function OticaPage() {
               <br />
               Venda<span className="text-cyan-500">.</span>
             </h3>
-            <p className="mt-4 text-sm font-medium italic text-slate-400">Clique para iniciar a venda e tomada de medidas.</p>
+            <p className="mt-4 text-sm font-medium italic text-slate-400">
+              Clique para iniciar a venda e tomada de medidas.
+            </p>
           </div>
-          <ArrowRight className="absolute bottom-10 right-10 text-cyan-500 transition-transform group-hover:translate-x-2" size={32} />
+          <ArrowRight
+            className="absolute bottom-10 right-10 text-cyan-500 transition-transform group-hover:translate-x-2"
+            size={32}
+          />
         </Link>
 
         {/* Módulos de Gestão */}
@@ -451,7 +560,7 @@ export default function OticaPage() {
           thumbnails={metrics.estoqueThumbnails}
         />
 
-                <MenuCard
+        <MenuCard
           href="/otica/lentes"
           title="Catálogo de Lentes"
           desc="Gerencie o catálogo de lentes, preços base e tratamentos disponíveis."
@@ -460,14 +569,14 @@ export default function OticaPage() {
           bgColor="bg-cyan-50"
         />
 
-                <MenuCard
-                  href="/otica/equipe"
-                  title="Equipe de Vendas"
-                  desc="Criar e gerenciar vendedores, permissões e equipes da ótica."
-                  icon={<Users size={24} />}
-                  color="text-indigo-600"
-                  bgColor="bg-indigo-50"
-                />
+        <MenuCard
+          href="/otica/equipe"
+          title="Equipe de Vendas"
+          desc="Criar e gerenciar vendedores, permissões e equipes da ótica."
+          icon={<Users size={24} />}
+          color="text-indigo-600"
+          bgColor="bg-indigo-50"
+        />
 
         <MenuCard
           href="/otica/armacoes-tipos"
@@ -513,7 +622,7 @@ export default function OticaPage() {
           icon={<Monitor size={24} />}
           color="text-indigo-600"
           bgColor="bg-indigo-50"
-        />        
+        />
 
         {/* CARD: CLIENTES */}
         <MenuCard
@@ -557,12 +666,17 @@ export default function OticaPage() {
               <br />
               Ótica<span className="text-cyan-500">.</span>
             </h3>
-            <p className="mt-4 text-sm font-medium italic text-green-100">Clique para ajustar as configurações da ótica, permissões de equipe, logotipos.</p>
+            <p className="mt-4 text-sm font-medium italic text-green-100">
+              Clique para ajustar as configurações da ótica, permissões de
+              equipe, logotipos.
+            </p>
           </div>
-          <ArrowRight className="absolute bottom-10 right-10 text-cyan-500 transition-transform group-hover:translate-x-2" size={32} />
+          <ArrowRight
+            className="absolute bottom-10 right-10 text-cyan-500 transition-transform group-hover:translate-x-2"
+            size={32}
+          />
         </Link>
-
-      </div>
+      </DashboardGrid>
       {/* Modal de Celebração */}
       {showCelebrationModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
@@ -575,32 +689,57 @@ export default function OticaPage() {
                 <Award size={48} />
               </div>
 
-              <h2 className="text-4xl font-black text-slate-900 mb-2">Meta Batida!</h2>
-              <p className="text-emerald-600 font-black uppercase tracking-[0.2em] text-xs mb-6">Performance Extraordinária</p>
-              
+              <h2 className="text-4xl font-black text-slate-900 mb-2">
+                Meta Batida!
+              </h2>
+              <p className="text-emerald-600 font-black uppercase tracking-[0.2em] text-xs mb-6">
+                Performance Extraordinária
+              </p>
+
               <div className="bg-slate-50 rounded-3xl p-6 mb-6 border border-slate-100">
-                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Faturamento Total</p>
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-1">
+                  Faturamento Total
+                </p>
                 <p className="text-3xl font-black text-slate-900">
-                  {metrics.vendasMes.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {metrics.vendasMes.toLocaleString("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  })}
                 </p>
               </div>
 
               {/* Pódio: Top 3 Vendedores */}
               {topVendedores.length > 0 && (
                 <div className="space-y-3 mb-6">
-                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Destaques do Mês</p>
+                  <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                    Destaques do Mês
+                  </p>
                   {topVendedores.map((vend, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white border border-slate-100 p-3 rounded-2xl shadow-sm">
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-white border border-slate-100 p-3 rounded-2xl shadow-sm"
+                    >
                       <div className="flex items-center gap-3">
-                        <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-black text-white ${
-                          idx === 0 ? 'bg-amber-400' : idx === 1 ? 'bg-slate-300' : 'bg-orange-400'
-                        }`}>
+                        <span
+                          className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-black text-white ${
+                            idx === 0
+                              ? "bg-amber-400"
+                              : idx === 1
+                                ? "bg-slate-300"
+                                : "bg-orange-400"
+                          }`}
+                        >
                           {idx + 1}º
                         </span>
-                        <span className="text-xs font-black text-slate-700 uppercase">{vend.nome}</span>
+                        <span className="text-xs font-black text-slate-700 uppercase">
+                          {vend.nome}
+                        </span>
                       </div>
                       <span className="text-xs font-bold text-emerald-600">
-                        {vend.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {vend.total.toLocaleString("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        })}
                       </span>
                     </div>
                   ))}
@@ -608,17 +747,20 @@ export default function OticaPage() {
               )}
 
               <p className="text-slate-500 font-medium leading-relaxed mb-6">
-                Parabéns a toda a equipe! O esforço de cada um resultou no atingimento do nosso objetivo mensal. Vamos pra cima! 🚀
+                Parabéns a toda a equipe! O esforço de cada um resultou no
+                atingimento do nosso objetivo mensal. Vamos pra cima! 🚀
               </p>
 
               <div className="flex gap-3">
-                <button 
-                  onClick={() => { dispararCelebracao(); }}
+                <button
+                  onClick={() => {
+                    dispararCelebracao();
+                  }}
                   className="flex-1 py-4 bg-emerald-50 text-emerald-600 rounded-2xl font-black uppercase tracking-widest hover:bg-emerald-100 transition-all shadow-lg active:scale-95"
                 >
                   Celebrar de Novo
                 </button>
-                <button 
+                <button
                   onClick={() => setShowCelebrationModal(false)}
                   className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg active:scale-95"
                 >
@@ -643,13 +785,17 @@ function TopMetric({ label, value, color, icon, isCurrency }: TopMetricProps) {
   };
 
   return (
-    <div className={`flex items-center gap-4 rounded-[28px] border border-slate-50 bg-white px-6 py-4 shadow-sm ${colors[color]}`}>
+    <div
+      className={`flex items-center gap-4 rounded-[28px] border border-slate-50 bg-white px-6 py-4 shadow-sm ${colors[color]}`}
+    >
       <div className="opacity-80">{icon}</div>
       <div>
-        <p className="text-[9px] font-black uppercase tracking-widest opacity-60">{label}</p>
+        <p className="text-[9px] font-black uppercase tracking-widest opacity-60">
+          {label}
+        </p>
         <p className="text-lg font-black leading-none">
-          {isCurrency && typeof value === 'number' 
-            ? `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+          {isCurrency && typeof value === "number"
+            ? `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : value}
         </p>
       </div>
@@ -658,7 +804,16 @@ function TopMetric({ label, value, color, icon, isCurrency }: TopMetricProps) {
 }
 
 // MenuCard Component (separei para ficar limpo)
-function MenuCard({ href, title, desc, icon, color, bgColor, thumbnails, badge }: any) {
+function MenuCard({
+  href,
+  title,
+  desc,
+  icon,
+  color,
+  bgColor,
+  thumbnails,
+  badge,
+}: any) {
   return (
     <Link
       href={href}
@@ -666,7 +821,9 @@ function MenuCard({ href, title, desc, icon, color, bgColor, thumbnails, badge }
     >
       <div className="space-y-6">
         <div className="flex items-start justify-between">
-          <div className={`h-14 w-14 ${bgColor} ${color} rounded-[22px] flex items-center justify-center shadow-inner transition-all group-hover:scale-110`}>
+          <div
+            className={`h-14 w-14 ${bgColor} ${color} rounded-[22px] flex items-center justify-center shadow-inner transition-all group-hover:scale-110`}
+          >
             {icon}
           </div>
           {badge && (
@@ -679,14 +836,23 @@ function MenuCard({ href, title, desc, icon, color, bgColor, thumbnails, badge }
         {thumbnails && thumbnails.length > 0 && (
           <div className="flex items-center gap-2">
             {thumbnails.map((src: string, idx: number) => (
-              <img key={idx} src={src} className="h-10 w-10 rounded-lg object-cover border border-slate-100" alt="" />
+              <img
+                key={idx}
+                src={src}
+                className="h-10 w-10 rounded-lg object-cover border border-slate-100"
+                alt=""
+              />
             ))}
           </div>
         )}
 
         <div>
-          <h3 className="text-xl font-black tracking-tight text-slate-900 group-hover:text-cyan-600 transition-colors">{title}</h3>
-          <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">{desc}</p>
+          <h3 className="text-xl font-black tracking-tight text-slate-900 group-hover:text-cyan-600 transition-colors">
+            {title}
+          </h3>
+          <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+            {desc}
+          </p>
         </div>
       </div>
 

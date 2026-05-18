@@ -1,30 +1,29 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { usePathname } from 'next/navigation';
-import { useRouter } from "next/navigation";
-import {
-  Bell,
-  Building2,
-  ChevronDown,
-  ArrowRight,
-  LogOut,
-  Search,
-  Monitor,
-  FileText,
-  Package,
-  AlertCircle,
-  Settings,
-  ShieldCheck,
-  User,
-  Maximize2,
-  Minimize2,
-} from "lucide-react";
+import { useToast } from "@/components/ui/ToastProvider";
 import { FocusContext } from "@/context/FocusContext";
 import { SyncContext } from "@/context/SyncContext";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/ToastProvider";
+import {
+  AlertCircle,
+  ArrowRight,
+  Bell,
+  Building2,
+  ChevronDown,
+  FileText,
+  LogOut,
+  Maximize2,
+  Minimize2,
+  Monitor,
+  Package,
+  Search,
+  Settings,
+  ShieldCheck,
+  User,
+} from "lucide-react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type DashboardHeaderProps = {
   onOpenMobileMenu: () => void;
@@ -45,7 +44,9 @@ type SearchItem = {
   rota: string;
 };
 
-export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderProps) {
+export default function DashboardHeader({
+  onOpenMobileMenu,
+}: DashboardHeaderProps) {
   const [email, setEmail] = useState<string>("");
   const [perfil, setPerfil] = useState<Perfil | null>(null);
   const [nomeClinica, setNomeClinica] = useState<string>("Unidade");
@@ -54,7 +55,12 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
   const [busca, setBusca] = useState("");
   const [buscando, setBuscando] = useState(false);
   const [resultadoBusca, setResultadoBusca] = useState<SearchItem[]>([]);
-  const [resultadosDB, setResultadosDB] = useState<{ pacientes: any[]; vendas: any[]; estoque: any[]; financeiro: any[] }>({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
+  const [resultadosDB, setResultadosDB] = useState<{
+    pacientes: any[];
+    vendas: any[];
+    estoque: any[];
+    financeiro: any[];
+  }>({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
   const [buscaAberta, setBuscaAberta] = useState(false);
   const inputBuscaRef = useRef<HTMLInputElement | null>(null);
   const containerBuscaRef = useRef<HTMLDivElement | null>(null);
@@ -63,7 +69,10 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
   const pathname = usePathname();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
-  const [notificationsData, setNotificationsData] = useState<{ parcelas: any[]; vendas: any[] }>({ parcelas: [], vendas: [] });
+  const [notificationsData, setNotificationsData] = useState<{
+    parcelas: any[];
+    vendas: any[];
+  }>({ parcelas: [], vendas: [] });
   const notifRef = useRef<HTMLDivElement | null>(null);
   const [moduleLogoUrl, setModuleLogoUrl] = useState<string | null>(null);
 
@@ -104,7 +113,9 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
           if (!active) return;
 
-          const nome = (clinicaRes.data as { nome_fantasia?: string | null } | null)?.nome_fantasia;
+          const nome = (
+            clinicaRes.data as { nome_fantasia?: string | null } | null
+          )?.nome_fantasia;
           if (nome) setNomeClinica(nome);
         }
       } catch (err) {
@@ -126,19 +137,27 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
       try {
         // Módulos que usam branding da ótica
         if (
-          pathname?.startsWith('/otica') ||
-          pathname?.startsWith('/clientes') ||
-          pathname?.startsWith('/financeiro') ||
-          pathname?.startsWith('/comunicacao')
+          pathname?.startsWith("/otica") ||
+          pathname?.startsWith("/clientes") ||
+          pathname?.startsWith("/financeiro") ||
+          pathname?.startsWith("/comunicacao")
         ) {
-          const { data } = await supabase.from('otica_configuracoes').select('logo_url').eq('clinica_id', clinicaId).maybeSingle();
+          const { data } = await supabase
+            .from("otica_configuracoes")
+            .select("logo_url")
+            .eq("clinica_id", clinicaId)
+            .maybeSingle();
           setModuleLogoUrl((data as any)?.logo_url || null);
           return;
         }
 
         // Consultório: usar apenas clinicas.logomarca_url
-        if (pathname?.startsWith('/consultorio')) {
-          const { data } = await supabase.from('clinicas').select('logomarca_url').eq('id', clinicaId).maybeSingle();
+        if (pathname?.startsWith("/consultorio")) {
+          const { data } = await supabase
+            .from("clinicas")
+            .select("logomarca_url")
+            .eq("id", clinicaId)
+            .maybeSingle();
           const url = (data as any)?.logomarca_url || null;
           setModuleLogoUrl(url);
           return;
@@ -147,7 +166,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
         // Default: limpar
         setModuleLogoUrl(null);
       } catch (err) {
-        console.warn('Erro ao carregar logo do módulo:', err);
+        console.warn("Erro ao carregar logo do módulo:", err);
       }
     }
     void carregarLogoModulo();
@@ -155,7 +174,8 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const atalhosBusca = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k";
+      const atalhosBusca =
+        (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k";
       if (!atalhosBusca) return;
 
       event.preventDefault();
@@ -183,42 +203,73 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
   useEffect(() => {
     function onOutsideClickNotif(e: MouseEvent) {
       const target = e.target as Node;
-      if (notificationsOpen && notifRef.current && !notifRef.current.contains(target)) {
+      if (
+        notificationsOpen &&
+        notifRef.current &&
+        !notifRef.current.contains(target)
+      ) {
         setNotificationsOpen(false);
       }
     }
-    window.addEventListener('mousedown', onOutsideClickNotif);
-    return () => window.removeEventListener('mousedown', onOutsideClickNotif);
+    window.addEventListener("mousedown", onOutsideClickNotif);
+    return () => window.removeEventListener("mousedown", onOutsideClickNotif);
   }, [notificationsOpen]);
 
   async function fetchNotifications() {
     if (!clinicaId) return;
     setNotificationsLoading(true);
     try {
-      const parcelasRes = await supabase.from('financeiro_parcelas').select('id,valor_parcela,data_vencimento,status,paciente_id').eq('clinica_id', clinicaId).order('data_vencimento', { ascending: false }).limit(5);
+      const parcelasRes = await supabase
+        .from("financeiro_parcelas")
+        .select("id,valor_parcela,data_vencimento,status,paciente_id")
+        .eq("clinica_id", clinicaId)
+        .order("data_vencimento", { ascending: false })
+        .limit(5);
 
       let vendasRes: any = { data: [] };
       try {
-        const v = await supabase.from('vendas').select('id,valor_total,data_venda,localidade_venda').eq('clinica_id', clinicaId).order('data_venda', { ascending: false }).limit(5);
+        const v = await supabase
+          .from("vendas")
+          .select("id,valor_total,data_venda,localidade_venda")
+          .eq("clinica_id", clinicaId)
+          .order("data_venda", { ascending: false })
+          .limit(5);
         if (v?.error) throw v.error;
         vendasRes = v;
       } catch (ve: any) {
-        console.warn('vendas notification primary query failed, trying fallback:', ve?.message || ve);
+        console.warn(
+          "vendas notification primary query failed, trying fallback:",
+          ve?.message || ve,
+        );
         try {
-          const v2 = await supabase.from('vendas').select('id,localidade_venda').eq('clinica_id', clinicaId).order('id', { ascending: false }).limit(5);
+          const v2 = await supabase
+            .from("vendas")
+            .select("id,localidade_venda")
+            .eq("clinica_id", clinicaId)
+            .order("id", { ascending: false })
+            .limit(5);
           if (v2?.error) throw v2.error;
           vendasRes = v2;
         } catch (vfe: any) {
-          console.warn('vendas notification fallback failed:', vfe?.message || vfe);
+          console.warn(
+            "vendas notification fallback failed:",
+            vfe?.message || vfe,
+          );
           vendasRes = { data: [] };
         }
       }
 
-      setNotificationsData({ parcelas: parcelasRes.data || [], vendas: vendasRes.data || [] });
-      const atrasadas = (parcelasRes.data || []).filter((p: any) => p.status !== 'pago' && new Date(p.data_vencimento) < new Date()).length;
+      setNotificationsData({
+        parcelas: parcelasRes.data || [],
+        vendas: vendasRes.data || [],
+      });
+      const atrasadas = (parcelasRes.data || []).filter(
+        (p: any) =>
+          p.status !== "pago" && new Date(p.data_vencimento) < new Date(),
+      ).length;
       if (atrasadas > 0) toast.info(`${atrasadas} parcela(s) vencida(s)`);
     } catch (err) {
-      console.warn('Erro ao buscar notificações', err);
+      console.warn("Erro ao buscar notificações", err);
     } finally {
       setNotificationsLoading(false);
     }
@@ -228,10 +279,15 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     let active = true;
 
     async function pesquisar() {
-        const termo = (busca || "").trim();
+      const termo = (busca || "").trim();
       if (!termo || termo.length < 2 || !clinicaId) {
         setResultadoBusca([]);
-        setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
+        setResultadosDB({
+          pacientes: [],
+          vendas: [],
+          estoque: [],
+          financeiro: [],
+        });
         return;
       }
 
@@ -239,54 +295,78 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
       try {
         // sanitize search term to avoid injecting invalid tokens into PostgREST filters
         const safeTerm = termo.replace(/[%()']/g, "").trim();
-        const [pacientesRes, vendasRes, armacoesRes, lentesRes, parcelasRes] = await Promise.all([
-          // 1) Pacientes por nome ou CPF
-          supabase
-            .from("pacientes")
-            .select("id, nome_completo, cpf, cidade_atendimento")
-            .eq("clinica_id", clinicaId)
-            .or(`nome_completo.ilike.%${termo}%,cpf.ilike.%${termo}%`)
-            .limit(3),
+        const [pacientesRes, vendasRes, armacoesRes, lentesRes, parcelasRes] =
+          await Promise.all([
+            // 1) Pacientes por nome ou CPF
+            supabase
+              .from("pacientes")
+              .select("id, nome_completo, cpf, cidade_atendimento")
+              .eq("clinica_id", clinicaId)
+              .or(`nome_completo.ilike.%${termo}%,cpf.ilike.%${termo}%`)
+              .limit(3),
 
-          // 2) Vendas por localidade ou id parcial
-          supabase
-            .from("vendas")
-            .select("id, valor_total, localidade_venda, criado_em, perfis (nome)")
-            .eq("clinica_id", clinicaId)
-            .or(`localidade_venda.ilike.%${termo}%,id.ilike.%${termo}%`)
-            .order("criado_em", { ascending: false })
-            .limit(2),
+            // 2) Vendas por localidade ou id parcial
+            supabase
+              .from("vendas")
+              .select(
+                "id, valor_total, localidade_venda, criado_em, perfis (nome)",
+              )
+              .eq("clinica_id", clinicaId)
+              .or(`localidade_venda.ilike.%${termo}%,id.ilike.%${termo}%`)
+              .order("criado_em", { ascending: false })
+              .limit(2),
 
-          // 3) Estoque de armações
-          supabase
-            .from("estoque_armacoes")
-            .select("id, marca, modelo, referencia, quantidade_atual, preco_venda")
-            .or(`marca.ilike.%${termo}%,modelo.ilike.%${termo}%,referencia.ilike.%${termo}%`)
-            .limit(3),
+            // 3) Estoque de armações
+            supabase
+              .from("estoque_armacoes")
+              .select(
+                "id, marca, modelo, referencia, quantidade_atual, preco_venda",
+              )
+              .or(
+                `marca.ilike.%${termo}%,modelo.ilike.%${termo}%,referencia.ilike.%${termo}%`,
+              )
+              .limit(3),
 
-          // 4) Lentes no catálogo
-          supabase
-            .from("otica_lentes")
-            .select("id, tipo, material, tratamento, preco_base")
-            .or(`tipo.ilike.%${termo}%,material.ilike.%${termo}%`)
-            .limit(2),
+            // 4) Lentes no catálogo
+            supabase
+              .from("otica_lentes")
+              .select("id, tipo, material, tratamento, preco_base")
+              .or(`tipo.ilike.%${termo}%,material.ilike.%${termo}%`)
+              .limit(2),
 
-          // 5) Parcelas pendentes (installments)
-          // usar tabela correta `financeiro_parcelas`
-          supabase
-            .from("financeiro_parcelas")
-            .select("id, valor_parcela, vencimento, paciente_id")
-            .eq("status", "atrasado")
-            .limit(2),
-        ]);
+            // 5) Parcelas pendentes (installments)
+            // usar tabela correta `financeiro_parcelas`
+            supabase
+              .from("financeiro_parcelas")
+              .select("id, valor_parcela, vencimento, paciente_id")
+              .eq("status", "atrasado")
+              .limit(2),
+          ]);
 
         if (!active) return;
 
-        if (pacientesRes.error) console.warn('search: pacientes error', pacientesRes.error, pacientesRes);
-        if (vendasRes.error) console.warn('search: vendas error', vendasRes.error, vendasRes);
-        if (armacoesRes.error) console.warn('search: armacoes error', armacoesRes.error, armacoesRes);
-        if (lentesRes.error) console.warn('search: lentes error', lentesRes.error, lentesRes);
-        if (parcelasRes.error) console.warn('search: parcelas error', parcelasRes.error, parcelasRes);
+        if (pacientesRes.error)
+          console.warn(
+            "search: pacientes error",
+            pacientesRes.error,
+            pacientesRes,
+          );
+        if (vendasRes.error)
+          console.warn("search: vendas error", vendasRes.error, vendasRes);
+        if (armacoesRes.error)
+          console.warn(
+            "search: armacoes error",
+            armacoesRes.error,
+            armacoesRes,
+          );
+        if (lentesRes.error)
+          console.warn("search: lentes error", lentesRes.error, lentesRes);
+        if (parcelasRes.error)
+          console.warn(
+            "search: parcelas error",
+            parcelasRes.error,
+            parcelasRes,
+          );
 
         const pacientes = (pacientesRes.data ?? []) as Array<any>;
         const vendas = (vendasRes.data ?? []) as Array<any>;
@@ -295,20 +375,57 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
         const parcelas = (parcelasRes.data ?? []) as Array<any>;
 
         const features = [
-          { id: 'feat-vendas', titulo: 'Vendas', subtitulo: 'Abrir painel de vendas', rota: '/otica/vendas' },
-          { id: 'feat-nova-venda', titulo: 'Nova Venda', subtitulo: 'Iniciar nova venda', rota: '/otica/vendas/nova' },
-          { id: 'feat-estoque', titulo: 'Estoque', subtitulo: 'Gerenciar estoque de armações', rota: '/otica/estoque' },
+          {
+            id: "feat-vendas",
+            titulo: "Vendas",
+            subtitulo: "Abrir painel de vendas",
+            rota: "/otica/vendas",
+          },
+          {
+            id: "feat-nova-venda",
+            titulo: "Nova Venda",
+            subtitulo: "Iniciar nova venda",
+            rota: "/otica/vendas/nova",
+          },
+          {
+            id: "feat-estoque",
+            titulo: "Estoque",
+            subtitulo: "Gerenciar estoque de armações",
+            rota: "/otica/estoque",
+          },
         ];
 
         const termoNormalizado2 = safeTerm.toLowerCase();
-        const featureMatches = (features as any[]).filter(f => f.titulo.toLowerCase().includes(termoNormalizado2) || f.subtitulo.toLowerCase().includes(termoNormalizado2));
+        const featureMatches = (features as any[]).filter(
+          (f) =>
+            f.titulo.toLowerCase().includes(termoNormalizado2) ||
+            f.subtitulo.toLowerCase().includes(termoNormalizado2),
+        );
 
-        setResultadosDB({ pacientes, vendas, estoque: [...armacoes, ...lentes], financeiro: parcelas });
-        setResultadoBusca(featureMatches.map((f) => ({ id: f.id, tipo: 'feature' as any, titulo: f.titulo, subtitulo: f.subtitulo, rota: f.rota })));
+        setResultadosDB({
+          pacientes,
+          vendas,
+          estoque: [...armacoes, ...lentes],
+          financeiro: parcelas,
+        });
+        setResultadoBusca(
+          featureMatches.map((f) => ({
+            id: f.id,
+            tipo: "feature" as any,
+            titulo: f.titulo,
+            subtitulo: f.subtitulo,
+            rota: f.rota,
+          })),
+        );
       } catch {
         if (active) {
           setResultadoBusca([]);
-          setResultadosDB({ pacientes: [], vendas: [], estoque: [], financeiro: [] });
+          setResultadosDB({
+            pacientes: [],
+            vendas: [],
+            estoque: [],
+            financeiro: [],
+          });
         }
       } finally {
         if (active) setBuscando(false);
@@ -363,22 +480,41 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
     setBusca("");
     setResultadoBusca([]);
     router.push(item.rota);
-    if (item.tipo === "os") toast.info(`Abrindo modulo de OS para localizar: ${item.titulo}`);
+    if (item.tipo === "os")
+      toast.info(`Abrindo modulo de OS para localizar: ${item.titulo}`);
   }
 
-  function SearchItem({ href, title, sub, icon, color = "bg-slate-100 text-slate-500" }: any) {
+  function SearchItem({
+    href,
+    title,
+    sub,
+    icon,
+    color = "bg-slate-100 text-slate-500",
+  }: any) {
     return (
-      <Link href={href} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-all group">
+      <Link
+        href={href}
+        className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl transition-all group"
+      >
         <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-xl ${color} group-hover:scale-110 transition-transform`}>
+          <div
+            className={`p-2 rounded-xl ${color} group-hover:scale-110 transition-transform`}
+          >
             {icon}
           </div>
           <div>
-            <p className="font-bold text-slate-800 text-sm leading-tight">{title}</p>
-            <p className="text-[10px] font-medium text-slate-400 uppercase">{sub}</p>
+            <p className="font-bold text-slate-800 text-sm leading-tight">
+              {title}
+            </p>
+            <p className="text-[10px] font-medium text-slate-400 uppercase">
+              {sub}
+            </p>
           </div>
         </div>
-        <ArrowRight size={14} className="text-slate-200 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all" />
+        <ArrowRight
+          size={14}
+          className="text-slate-200 group-hover:text-cyan-500 group-hover:translate-x-1 transition-all"
+        />
       </Link>
     );
   }
@@ -386,36 +522,57 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur md:px-8">
       <div className="flex items-center justify-between gap-3">
-        <div ref={containerBuscaRef} className="relative hidden w-full max-w-md md:block">
+        <div
+          ref={containerBuscaRef}
+          className="relative hidden w-full max-w-md md:block"
+        >
           <div className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-2">
             {moduleLogoUrl && (
               <div className="flex items-center">
-                <img src={moduleLogoUrl} alt="Logo do módulo" className="h-8 w-8 object-contain rounded-md bg-white p-1" />
+                <img
+                  src={moduleLogoUrl}
+                  alt="Logo do módulo"
+                  className="h-8 w-8 object-contain rounded-md bg-white p-1"
+                />
               </div>
             )}
             <Search size={18} className="text-slate-400" />
             <input
-            ref={inputBuscaRef}
-            placeholder="Buscar paciente, OS ou venda..."
-            value={busca}
-            onFocus={() => setBuscaAberta(true)}
-            onChange={(e) => setBusca(e.target.value)}
-            className="w-full bg-transparent text-sm font-medium text-slate-600 outline-none"
-          />
-            <kbd className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400">Ctrl+K</kbd>
+              ref={inputBuscaRef}
+              placeholder="Buscar paciente, OS ou venda..."
+              value={busca}
+              onFocus={() => setBuscaAberta(true)}
+              onChange={(e) => setBusca(e.target.value)}
+              className="w-full bg-transparent text-sm font-medium text-slate-600 outline-none"
+            />
+            <kbd className="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-400">
+              Ctrl+K
+            </kbd>
           </div>
 
           {buscaAberta && (
             <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 max-h-80 overflow-auto rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl">
               {/* DROPDOWN INTELIGENTE */}
-              {(resultadoBusca.length > 0 || resultadosDB.pacientes.length > 0 || resultadosDB.vendas.length > 0 || resultadosDB.estoque.length > 0 || resultadosDB.financeiro.length > 0) ? (
+              {resultadoBusca.length > 0 ||
+              resultadosDB.pacientes.length > 0 ||
+              resultadosDB.vendas.length > 0 ||
+              resultadosDB.estoque.length > 0 ||
+              resultadosDB.financeiro.length > 0 ? (
                 <div className="space-y-3">
                   {/* SEÇÃO: PÁGINAS E AÇÕES */}
                   {resultadoBusca.length > 0 && (
                     <div className="mb-2">
-                      <p className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Páginas e Funções</p>
+                      <p className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Páginas e Funções
+                      </p>
                       {resultadoBusca.map((item) => (
-                        <SearchItem key={item.id} href={item.rota} title={item.titulo} sub={item.subtitulo} icon={<Monitor size={14} />} />
+                        <SearchItem
+                          key={item.id}
+                          href={item.rota}
+                          title={item.titulo}
+                          sub={item.subtitulo}
+                          icon={<Monitor size={14} />}
+                        />
                       ))}
                     </div>
                   )}
@@ -423,74 +580,115 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                   {/* SEÇÃO: PACIENTES */}
                   {resultadosDB.pacientes.length > 0 && (
                     <div className="mb-2">
-                      <p className="px-4 py-2 text-[10px] font-black text-cyan-600 uppercase tracking-widest">Pacientes</p>
+                      <p className="px-4 py-2 text-[10px] font-black text-cyan-600 uppercase tracking-widest">
+                        Pacientes
+                      </p>
                       {resultadosDB.pacientes.map((c) => (
-                        <SearchItem key={c.id} href={`/clientes/${c.id}`} title={c.nome_completo || c.nome || 'Paciente sem nome'} sub={`${c.cidade_atendimento || 'Feira de Santana'} • CPF: ${c.cpf || 'Não informado'}`} icon={<User size={14}/>} color="bg-cyan-50 text-cyan-600" />
+                        <SearchItem
+                          key={c.id}
+                          href={`/clientes/${c.id}`}
+                          title={
+                            c.nome_completo || c.nome || "Paciente sem nome"
+                          }
+                          sub={`${c.cidade_atendimento || "Feira de Santana"} • CPF: ${c.cpf || "Não informado"}`}
+                          icon={<User size={14} />}
+                          color="bg-cyan-50 text-cyan-600"
+                        />
                       ))}
                     </div>
                   )}
 
-                      {/* SEÇÃO: VENDAS */}
-                      {resultadosDB.vendas.length > 0 && (
-                        <div className="mb-2 border-t border-slate-50 pt-2">
-                          <p className="px-4 py-2 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">Vendas</p>
-                          {resultadosDB.vendas.map((v) => (
-                            <SearchItem 
-                              key={v.id} 
-                              href={`/otica/vendas/${v.id}`} 
-                              title={`Venda ${v.id}`} 
-                              sub={`${v.localidade_venda || '-'} • R$ ${Number(v.valor_total ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})}`} 
-                              icon={<FileText size={14}/>} 
-                              color="bg-indigo-50 text-indigo-600" 
-                            />
-                          ))}
-                        </div>
-                      )}
+                  {/* SEÇÃO: VENDAS */}
+                  {resultadosDB.vendas.length > 0 && (
+                    <div className="mb-2 border-t border-slate-50 pt-2">
+                      <p className="px-4 py-2 text-[10px] font-black text-indigo-600 uppercase tracking-tighter">
+                        Vendas
+                      </p>
+                      {resultadosDB.vendas.map((v) => (
+                        <SearchItem
+                          key={v.id}
+                          href={`/otica/vendas/${v.id}`}
+                          title={`Venda ${v.id}`}
+                          sub={`${v.localidade_venda || "-"} • R$ ${Number(v.valor_total ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
+                          icon={<FileText size={14} />}
+                          color="bg-indigo-50 text-indigo-600"
+                        />
+                      ))}
+                    </div>
+                  )}
 
-                      {/* SEÇÃO: PRODUTOS / ESTOQUE */}
-                      {resultadosDB.estoque.length > 0 && (
-                        <div className="border-t border-slate-50 pt-2">
-                          <p className="px-4 py-2 text-[10px] font-black text-emerald-600 uppercase tracking-tighter">Produtos em Estoque</p>
-                          {resultadosDB.estoque.map((p) => (
-                            <SearchItem 
-                              key={p.id} 
-                              href={p.marca ? `/otica/estoque/${p.id}` : `/otica/lentes/${p.id}`} 
-                              title={p.marca ? `${p.marca} ${p.modelo || ''}`.trim() : `${p.tipo || ''} ${p.material || ''}`.trim()} 
-                              sub={p.quantidade_atual !== undefined ? `Qtd: ${p.quantidade_atual} • R$ ${Number(p.preco_venda ?? p.preco_base ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})}` : `Tabela: R$ ${Number(p.preco_base ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})}`} 
-                              icon={<Package size={14}/>} 
-                              color="bg-emerald-50 text-emerald-600" 
-                            />
-                          ))}
-                        </div>
-                      )}
+                  {/* SEÇÃO: PRODUTOS / ESTOQUE */}
+                  {resultadosDB.estoque.length > 0 && (
+                    <div className="border-t border-slate-50 pt-2">
+                      <p className="px-4 py-2 text-[10px] font-black text-emerald-600 uppercase tracking-tighter">
+                        Produtos em Estoque
+                      </p>
+                      {resultadosDB.estoque.map((p) => (
+                        <SearchItem
+                          key={p.id}
+                          href={
+                            p.marca
+                              ? `/otica/estoque/${p.id}`
+                              : `/otica/lentes/${p.id}`
+                          }
+                          title={
+                            p.marca
+                              ? `${p.marca} ${p.modelo || ""}`.trim()
+                              : `${p.tipo || ""} ${p.material || ""}`.trim()
+                          }
+                          sub={
+                            p.quantidade_atual !== undefined
+                              ? `Qtd: ${p.quantidade_atual} • R$ ${Number(p.preco_venda ?? p.preco_base ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                              : `Tabela: R$ ${Number(p.preco_base ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                          }
+                          icon={<Package size={14} />}
+                          color="bg-emerald-50 text-emerald-600"
+                        />
+                      ))}
+                    </div>
+                  )}
 
-                      {/* SEÇÃO: FINANCEIRO */}
-                      {resultadosDB.financeiro.length > 0 && (
-                        <div className="bg-rose-50 rounded-2xl p-2">
-                          <p className="px-4 py-2 text-[10px] font-black text-rose-600 uppercase mb-2 ml-2">Pendências Financeiras</p>
-                          {resultadosDB.financeiro.map((f) => (
-                            <SearchItem
-                              key={f.id}
-                              href={`/financeiro/parcelas/${f.id}`}
-                              title={f.paciente_nome || f.paciente_id || 'Cliente'}
-                              sub={`Parcela de R$ ${Number(f.valor_parcela ?? 0).toLocaleString('pt-BR', {minimumFractionDigits:2})} vence em ${new Date(f.vencimento || f.data_vencimento || Date.now()).toLocaleDateString()}`}
-                              icon={<AlertCircle size={14}/>} 
-                              color="text-rose-500"
-                            />
-                          ))}
-                        </div>
-                      )}
+                  {/* SEÇÃO: FINANCEIRO */}
+                  {resultadosDB.financeiro.length > 0 && (
+                    <div className="bg-rose-50 rounded-2xl p-2">
+                      <p className="px-4 py-2 text-[10px] font-black text-rose-600 uppercase mb-2 ml-2">
+                        Pendências Financeiras
+                      </p>
+                      {resultadosDB.financeiro.map((f) => (
+                        <SearchItem
+                          key={f.id}
+                          href={`/financeiro/parcelas/${f.id}`}
+                          title={f.paciente_nome || f.paciente_id || "Cliente"}
+                          sub={`Parcela de R$ ${Number(f.valor_parcela ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} vence em ${new Date(f.vencimento || f.data_vencimento || Date.now()).toLocaleDateString()}`}
+                          icon={<AlertCircle size={14} />}
+                          color="text-rose-500"
+                        />
+                      ))}
+                    </div>
+                  )}
 
-                      {buscando && <p className="p-4 text-center text-xs text-slate-400 animate-pulse">Consultando banco de dados...</p>}
+                  {buscando && (
+                    <p className="p-4 text-center text-xs text-slate-400 animate-pulse">
+                      Consultando banco de dados...
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div>
-                  {buscando && <p className="px-3 py-2 text-xs font-semibold text-slate-500">Buscando...</p>}
+                  {buscando && (
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-500">
+                      Buscando...
+                    </p>
+                  )}
                   {!buscando && busca.trim().length < 2 && (
-                    <p className="px-3 py-2 text-xs font-semibold text-slate-500">Digite ao menos 2 caracteres para buscar.</p>
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-500">
+                      Digite ao menos 2 caracteres para buscar.
+                    </p>
                   )}
                   {!buscando && busca.trim().length >= 2 && (
-                    <p className="px-3 py-2 text-xs font-semibold text-slate-500">Nenhum resultado encontrado.</p>
+                    <p className="px-3 py-2 text-xs font-semibold text-slate-500">
+                      Nenhum resultado encontrado.
+                    </p>
                   )}
                 </div>
               )}
@@ -516,10 +714,10 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
                     sync?.status === "syncing"
                       ? "Sincronizando..."
                       : sync?.status === "success"
-                      ? "Sincronizado"
-                      : sync?.status === "error"
-                      ? "Erro na sincronização"
-                      : "Sem sincronização"
+                        ? "Sincronizado"
+                        : sync?.status === "error"
+                          ? "Erro na sincronização"
+                          : "Sem sincronização"
                   }
                   className="flex items-center"
                 >
@@ -558,10 +756,18 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
               <button
                 type="button"
                 onClick={() => ctx?.toggleFocusMode()}
-                title={ctx?.isFocusMode ? "Sair do modo Tela Cheia" : "Entrar no modo Tela Cheia"}
+                title={
+                  ctx?.isFocusMode
+                    ? "Sair do modo Tela Cheia"
+                    : "Entrar no modo Tela Cheia"
+                }
                 className="hidden p-2 text-slate-400 transition-colors hover:text-cyan-600 sm:inline-flex"
               >
-                {ctx?.isFocusMode ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+                {ctx?.isFocusMode ? (
+                  <Minimize2 size={20} />
+                ) : (
+                  <Maximize2 size={20} />
+                )}
               </button>
             )}
           </FocusContext.Consumer>
@@ -590,32 +796,90 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
               >
                 <div className="flex items-center justify-between px-3 py-2 border-b border-slate-50">
                   <p className="text-sm font-black">Notificações</p>
-                  <button className="text-xs text-slate-400" onClick={() => { setNotificationsData({ parcelas: [], vendas: [] }); setNotificationsOpen(false); }}>Fechar</button>
+                  <button
+                    className="text-xs text-slate-400"
+                    onClick={() => {
+                      setNotificationsData({ parcelas: [], vendas: [] });
+                      setNotificationsOpen(false);
+                    }}
+                  >
+                    Fechar
+                  </button>
                 </div>
                 <div className="p-2 sm:max-h-64 sm:overflow-auto">
-                  <p className="text-[10px] font-black text-rose-600 uppercase mb-2">Financeiro</p>
-                  {notificationsLoading && <p className="text-sm text-slate-400">Carregando...</p>}
-                  {!notificationsLoading && notificationsData.parcelas.length === 0 && <p className="text-xs text-slate-400">Nenhuma movimentação financeira recente.</p>}
-                  {!notificationsLoading && notificationsData.parcelas.map((p: any) => (
-                    <Link key={p.id} href={`/financeiro/parcelas/${p.id}`} onClick={() => setNotificationsOpen(false)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
-                      <div className="flex-1">
-                        <p className="text-sm font-bold">R$ {Number(p.valor_parcela).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        <p className="text-[10px] text-slate-400">Venc: {new Date(p.data_vencimento).toLocaleDateString('pt-BR')} • {p.status}</p>
-                      </div>
-                    </Link>
-                  ))}
+                  <p className="text-[10px] font-black text-rose-600 uppercase mb-2">
+                    Financeiro
+                  </p>
+                  {notificationsLoading && (
+                    <p className="text-sm text-slate-400">Carregando...</p>
+                  )}
+                  {!notificationsLoading &&
+                    notificationsData.parcelas.length === 0 && (
+                      <p className="text-xs text-slate-400">
+                        Nenhuma movimentação financeira recente.
+                      </p>
+                    )}
+                  {!notificationsLoading &&
+                    notificationsData.parcelas.map((p: any) => (
+                      <Link
+                        key={p.id}
+                        href={`/financeiro/parcelas/${p.id}`}
+                        onClick={() => setNotificationsOpen(false)}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50"
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-bold">
+                            R${" "}
+                            {Number(p.valor_parcela).toLocaleString("pt-BR", {
+                              minimumFractionDigits: 2,
+                            })}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            Venc:{" "}
+                            {new Date(p.data_vencimento).toLocaleDateString(
+                              "pt-BR",
+                            )}{" "}
+                            • {p.status}
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
 
                   <hr className="my-2" />
-                  <p className="text-[10px] font-black text-indigo-600 uppercase mb-2">Vendas</p>
-                  {!notificationsLoading && notificationsData.vendas.length === 0 && <p className="text-xs text-slate-400">Nenhuma venda recente.</p>}
-                  {!notificationsLoading && notificationsData.vendas.map((v: any) => (
-                    <Link key={v.id} href={`/otica/vendas/${v.id}`} onClick={() => setNotificationsOpen(false)} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
-                      <div className="flex-1">
-                        <p className="text-sm font-bold">Venda {v.id} • R$ {Number(v.valor_total ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                        <p className="text-[10px] text-slate-400">{new Date(v.data_venda || v.criado_em).toLocaleDateString('pt-BR')} • {v.localidade_venda || '-'}</p>
-                      </div>
-                    </Link>
-                  ))}
+                  <p className="text-[10px] font-black text-indigo-600 uppercase mb-2">
+                    Vendas
+                  </p>
+                  {!notificationsLoading &&
+                    notificationsData.vendas.length === 0 && (
+                      <p className="text-xs text-slate-400">
+                        Nenhuma venda recente.
+                      </p>
+                    )}
+                  {!notificationsLoading &&
+                    notificationsData.vendas.map((v: any) => (
+                      <Link
+                        key={v.id}
+                        href={`/otica/vendas/${v.id}`}
+                        onClick={() => setNotificationsOpen(false)}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50"
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-bold">
+                            Venda {v.id} • R${" "}
+                            {Number(v.valor_total ?? 0).toLocaleString(
+                              "pt-BR",
+                              { minimumFractionDigits: 2 },
+                            )}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            {new Date(
+                              v.data_venda || v.criado_em,
+                            ).toLocaleDateString("pt-BR")}{" "}
+                            • {v.localidade_venda || "-"}
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
                 </div>
               </div>
             )}
@@ -623,6 +887,7 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
 
           <div className="hidden h-8 w-px bg-slate-100 sm:block" />
 
+          {/* CONTAINER DO MENU: Adicionado 'relative' para prender o dropdown absoluto */}
           <div className="relative">
             <button
               type="button"
@@ -631,62 +896,88 @@ export default function DashboardHeader({ onOpenMobileMenu }: DashboardHeaderPro
             >
               <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-xs font-black text-white shadow-lg shadow-cyan-100">
                 {perfil?.foto_url ? (
-                  <img src={perfil.foto_url} alt={nomeExibicao} className="h-full w-full object-cover" />
+                  <img
+                    src={perfil.foto_url}
+                    alt={nomeExibicao}
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   iniciais
                 )}
               </div>
 
               <div className="hidden text-left lg:block">
-                <p className="text-xs font-black leading-none text-slate-900">{nomeExibicao}</p>
+                <p className="text-xs font-black leading-none text-slate-900">
+                  {nomeExibicao}
+                </p>
                 <p className="mt-1 flex items-center gap-1 text-[10px] font-bold uppercase text-slate-400">
                   <Building2 size={10} /> {nomeClinica}
                 </p>
               </div>
 
-              <ChevronDown size={16} className={`hidden text-slate-300 transition-transform sm:block ${menuAberto ? "rotate-180" : ""}`} />
+              <ChevronDown
+                size={16}
+                className={`hidden text-slate-300 transition-transform sm:block ${menuAberto ? "rotate-180" : ""}`}
+              />
             </button>
 
             {menuAberto && (
               <>
+                {/* ✅ FIX DEFINITIVO: Backdrop com 'fixed inset-0 w-screen h-screen' e z-index isolado */}
                 <button
                   type="button"
-                  className="fixed inset-0 z-10"
-                  aria-label="Fechar menu do usuario"
+                  className="fixed inset-0 h-screen w-screen cursor-default bg-transparent z-40"
+                  aria-label="Fechar menu"
                   onClick={() => setMenuAberto(false)}
                 />
 
-                <div className="fixed left-2 right-2 top-[72px] z-20 max-h-[calc(100dvh-88px)] overflow-auto rounded-[28px] border border-slate-50 bg-white p-3 shadow-2xl shadow-slate-200 sm:relative sm:left-auto sm:right-0 sm:top-auto sm:w-64 sm:max-h-none sm:overflow-visible">
+                {/* Dropdown com z-50 para ficar acima do backdrop invisível */}
+                <div
+                  className="absolute right-0 top-full mt-2 w-64 rounded-[28px] border border-slate-100 bg-white p-3 shadow-2xl z-50 
+                animate-dropdown-in"
+                >
+                  {" "}
                   <div className="mb-2 border-b border-slate-50 p-4">
-                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Nivel de Acesso</p>
+                    <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Nivel de Acesso
+                    </p>
                     <div className="flex items-center gap-2 text-xs font-black italic text-cyan-600">
                       <ShieldCheck size={14} /> {nomePapel || "vendedor"}
                     </div>
                   </div>
-
                   <Link
                     href="/perfil"
                     onClick={() => setMenuAberto(false)}
                     className="group flex items-center gap-3 rounded-2xl p-4 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50"
                   >
-                    <User size={18} className="text-slate-300 group-hover:text-cyan-500" /> Editar perfil
+                    <User
+                      size={18}
+                      className="text-slate-300 group-hover:text-cyan-500"
+                    />{" "}
+                    Editar perfil
                   </Link>
-
                   <Link
                     href="/consultorio/configuracoes"
                     onClick={() => setMenuAberto(false)}
                     className="group flex items-center gap-3 rounded-2xl p-4 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50"
                   >
-                    <Settings size={18} className="text-slate-300 group-hover:text-cyan-500" /> Configurações Consultório
+                    <Settings
+                      size={18}
+                      className="text-slate-300 group-hover:text-cyan-500"
+                    />{" "}
+                    Configurações Consultório
                   </Link>
                   <Link
                     href="/otica/configuracoes"
                     onClick={() => setMenuAberto(false)}
                     className="group flex items-center gap-3 rounded-2xl p-4 text-sm font-bold text-slate-600 transition-all hover:bg-slate-50"
                   >
-                    <Settings size={18} className="text-slate-300 group-hover:text-cyan-500" /> Configurações Ótica
+                    <Settings
+                      size={18}
+                      className="text-slate-300 group-hover:text-cyan-500"
+                    />{" "}
+                    Configurações Ótica
                   </Link>
-
                   <button
                     type="button"
                     onClick={handleLogout}

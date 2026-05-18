@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
+import { DashboardGrid } from "@/components/ui/DashboardGrid";
 import { useConfig } from "@/context/ConfigContext";
-import { useEffect, useState } from "react";
-import { useRouter } from 'next/navigation';
 import { resolveClinicaContext } from "@/lib/clinica";
 import { supabase } from "@/lib/supabase";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 type GlassCardProps = {
   label: string;
@@ -22,7 +23,15 @@ type PatientRowProps = {
 
 function MiniIcon({ path }: { path: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+    >
       <path d={path} />
     </svg>
   );
@@ -37,15 +46,22 @@ function GlassCard({ label, value, detail, tone }: GlassCardProps) {
 
   return (
     <article className="rounded-[40px] border border-slate-100 bg-white p-8 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.9)] transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_35px_90px_-50px_rgba(15,23,42,0.45)]">
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
-      <p className={`mt-4 text-4xl font-black tracking-tight ${toneClass}`}>{value}</p>
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+        {label}
+      </p>
+      <p className={`mt-4 text-4xl font-black tracking-tight ${toneClass}`}>
+        {value}
+      </p>
       <p className="mt-2 text-sm font-medium text-slate-500">{detail}</p>
     </article>
   );
 }
 
 function PatientRow({ name, time, status }: PatientRowProps) {
-  const statusClass = status === "Finalizado" ? "bg-emerald-50 text-emerald-600" : "bg-orange-50 text-orange-600";
+  const statusClass =
+    status === "Finalizado"
+      ? "bg-emerald-50 text-emerald-600"
+      : "bg-orange-50 text-orange-600";
 
   return (
     <div className="group flex cursor-pointer items-center justify-between">
@@ -58,7 +74,9 @@ function PatientRow({ name, time, status }: PatientRowProps) {
           <p className="text-xs font-semibold text-slate-400">{time}</p>
         </div>
       </div>
-      <span className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-wider ${statusClass}`}>
+      <span
+        className={`rounded-full px-4 py-2 text-[10px] font-black uppercase tracking-wider ${statusClass}`}
+      >
         {status}
       </span>
     </div>
@@ -68,11 +86,27 @@ function PatientRow({ name, time, status }: PatientRowProps) {
 export default function DashboardPrincipalPage() {
   const { nomeSistema } = useConfig();
   const router = useRouter();
-  const [kpis, setKpis] = useState({ atendimentosHoje: "-", pacientesFila: "-" });
-  const [externalKpis, setExternalKpis] = useState({ cidadesAtendidas: "-", pacientesTotais: "-", porCidade: {} as Record<string, number> });
-  const [oticaStats, setOticaStats] = useState({ ordensPendentes: "-", vendasPendentes: "-" });
-  const [financeiroStats, setFinanceiroStats] = useState({ conciliacaoPendente: "-", contasAVencer: "-" });
-  const [comunicacaoStats, setComunicacaoStats] = useState({ aniversariantesSemana: "-", aniversariantesMes: "-" });
+  const [kpis, setKpis] = useState({
+    atendimentosHoje: "-",
+    pacientesFila: "-",
+  });
+  const [externalKpis, setExternalKpis] = useState({
+    cidadesAtendidas: "-",
+    pacientesTotais: "-",
+    porCidade: {} as Record<string, number>,
+  });
+  const [oticaStats, setOticaStats] = useState({
+    ordensPendentes: "-",
+    vendasPendentes: "-",
+  });
+  const [financeiroStats, setFinanceiroStats] = useState({
+    conciliacaoPendente: "-",
+    contasAVencer: "-",
+  });
+  const [comunicacaoStats, setComunicacaoStats] = useState({
+    aniversariantesSemana: "-",
+    aniversariantesMes: "-",
+  });
 
   // Nota: não redirecionamos automaticamente para /admin aqui —
   // a rota /dashboard é o destino pós-login para todos os perfis.
@@ -87,7 +121,10 @@ export default function DashboardPrincipalPage() {
         // Contar atendimentos agendados para a data de hoje
         const atendimentosRes = await supabase
           .from("agenda_pacientes")
-          .select("id,agenda_externa!inner(clinica_id,data_atendimento)", { count: "exact", head: true })
+          .select("id,agenda_externa!inner(clinica_id,data_atendimento)", {
+            count: "exact",
+            head: true,
+          })
           .eq("agenda_externa.clinica_id", ctx.clinicaId)
           .eq("agenda_externa.data_atendimento", hoje);
 
@@ -96,14 +133,21 @@ export default function DashboardPrincipalPage() {
         // Contar pacientes na fila (pendentes) — hoje e com status diferente de 'Concluido'
         const filaRes = await supabase
           .from("agenda_pacientes")
-          .select("id,agenda_externa!inner(clinica_id,data_atendimento)", { count: "exact", head: true })
+          .select("id,agenda_externa!inner(clinica_id,data_atendimento)", {
+            count: "exact",
+            head: true,
+          })
           .eq("agenda_externa.clinica_id", ctx.clinicaId)
           .eq("agenda_externa.data_atendimento", hoje)
           .neq("agenda_externa.status", "Concluido");
 
         if (filaRes.error) throw filaRes.error;
 
-        if (active) setKpis({ atendimentosHoje: String(atendimentosRes.count ?? 0), pacientesFila: String(filaRes.count ?? 0) });
+        if (active)
+          setKpis({
+            atendimentosHoje: String(atendimentosRes.count ?? 0),
+            pacientesFila: String(filaRes.count ?? 0),
+          });
       } catch {
         if (active) setKpis({ atendimentosHoje: "0", pacientesFila: "0" });
       }
@@ -120,7 +164,11 @@ export default function DashboardPrincipalPage() {
           .eq("agenda_externa.clinica_id", ctx.clinicaId);
 
         if (res.error) throw res.error;
-        const rows = (res.data as Array<{ id: string; agenda_externa?: { cidade?: string | null } | null }> ) || [];
+        const rows =
+          (res.data as Array<{
+            id: string;
+            agenda_externa?: { cidade?: string | null } | null;
+          }>) || [];
 
         const counts: Record<string, number> = {};
         let total = 0;
@@ -131,9 +179,19 @@ export default function DashboardPrincipalPage() {
         }
 
         const distinct = Object.keys(counts).length;
-        if (active) setExternalKpis({ cidadesAtendidas: String(distinct), pacientesTotais: String(total), porCidade: counts });
+        if (active)
+          setExternalKpis({
+            cidadesAtendidas: String(distinct),
+            pacientesTotais: String(total),
+            porCidade: counts,
+          });
       } catch {
-        if (active) setExternalKpis({ cidadesAtendidas: "0", pacientesTotais: "0", porCidade: {} });
+        if (active)
+          setExternalKpis({
+            cidadesAtendidas: "0",
+            pacientesTotais: "0",
+            porCidade: {},
+          });
       }
     })();
     void (async function loadModulesSummary() {
@@ -141,15 +199,31 @@ export default function DashboardPrincipalPage() {
         const ctx = await resolveClinicaContext();
 
         // Ótica: ordens de serviço pendentes / não finalizadas
-        const osRes = await supabase.from("ordens_servico").select("id", { count: "exact", head: true }).eq("clinica_id", ctx.clinicaId).not("status_os", "ilike", "pronto");
+        const osRes = await supabase
+          .from("ordens_servico")
+          .select("id", { count: "exact", head: true })
+          .eq("clinica_id", ctx.clinicaId)
+          .not("status_os", "ilike", "pronto");
         // Vendas pendentes (vendas com status financeiro pendente)
-        const vendasRes = await supabase.from("vendas").select("id", { count: "exact", head: true }).eq("clinica_id", ctx.clinicaId).in("status_financeiro", ["pendente", "aguardando_conciliacao"]);
+        const vendasRes = await supabase
+          .from("vendas")
+          .select("id", { count: "exact", head: true })
+          .eq("clinica_id", ctx.clinicaId)
+          .in("status_financeiro", ["pendente", "aguardando_conciliacao"]);
 
         // Financeiro: lançamentos com conciliação pendente
-        const concRes = await supabase.from("fluxo_caixa").select("id", { count: "exact", head: true }).eq("clinica_id", ctx.clinicaId).eq("status_conciliacao", "pendente");
+        const concRes = await supabase
+          .from("fluxo_caixa")
+          .select("id", { count: "exact", head: true })
+          .eq("clinica_id", ctx.clinicaId)
+          .eq("status_conciliacao", "pendente");
 
         // Comunicação: aniversariantes semana / mês
-        const pacientesRes = await supabase.from("pacientes").select("id, data_nascimento").eq("clinica_id", ctx.clinicaId).not("data_nascimento", "is", null);
+        const pacientesRes = await supabase
+          .from("pacientes")
+          .select("id, data_nascimento")
+          .eq("clinica_id", ctx.clinicaId)
+          .not("data_nascimento", "is", null);
 
         // compute birthdays
         let semana = 0;
@@ -160,21 +234,38 @@ export default function DashboardPrincipalPage() {
         const fimSemana = new Date(inicioSemana);
         fimSemana.setDate(inicioSemana.getDate() + 7);
 
-        for (const p of (pacientesRes.data || []) as Array<{ id: string; data_nascimento?: string | null }>) {
+        for (const p of (pacientesRes.data || []) as Array<{
+          id: string;
+          data_nascimento?: string | null;
+        }>) {
           if (!p.data_nascimento) continue;
           const d = new Date(`${p.data_nascimento}T00:00:00`);
-          const candidato = new Date(hoje.getFullYear(), d.getMonth(), d.getDate());
+          const candidato = new Date(
+            hoje.getFullYear(),
+            d.getMonth(),
+            d.getDate(),
+          );
           if (candidato >= inicioSemana && candidato < fimSemana) semana += 1;
           if (candidato.getMonth() === hoje.getMonth()) mes += 1;
         }
 
-        if (osRes.error) console.warn('dashboard: osRes', osRes.error);
-        if (vendasRes.error) console.warn('dashboard: vendasRes', vendasRes.error);
-        if (concRes.error) console.warn('dashboard: concRes', concRes.error);
+        if (osRes.error) console.warn("dashboard: osRes", osRes.error);
+        if (vendasRes.error)
+          console.warn("dashboard: vendasRes", vendasRes.error);
+        if (concRes.error) console.warn("dashboard: concRes", concRes.error);
 
-        setOticaStats({ ordensPendentes: String(osRes.count ?? 0), vendasPendentes: String(vendasRes.count ?? 0) });
-        setFinanceiroStats({ conciliacaoPendente: String(concRes.count ?? 0), contasAVencer: "-" });
-        setComunicacaoStats({ aniversariantesSemana: String(semana), aniversariantesMes: String(mes) });
+        setOticaStats({
+          ordensPendentes: String(osRes.count ?? 0),
+          vendasPendentes: String(vendasRes.count ?? 0),
+        });
+        setFinanceiroStats({
+          conciliacaoPendente: String(concRes.count ?? 0),
+          contasAVencer: "-",
+        });
+        setComunicacaoStats({
+          aniversariantesSemana: String(semana),
+          aniversariantesMes: String(mes),
+        });
       } catch (e) {
         // ignore — manter valores default
       }
@@ -187,58 +278,148 @@ export default function DashboardPrincipalPage() {
   return (
     <div className="space-y-10">
       <header>
-        <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-blue-600">Painel de Controle</p>
+        <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-blue-600">
+          Painel de Controle
+        </p>
         <h1 className="text-4xl font-black tracking-tight text-slate-900 md:text-5xl">
           Olá, {nomeSistema}
           <span className="text-blue-600">.</span>
         </h1>
       </header>
 
-      <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <GlassCard label="Faturamento" value="R$ 12.450" detail="+15% este mês" tone="blue" />
-        <GlassCard label="Consultas" value="24" detail="6 pendentes hoje" tone="emerald" />
-        <GlassCard label="Estoque" value="142" detail="Armações disponíveis" tone="violet" />
+      <section>
+        <DashboardGrid cols={3}>
+          <GlassCard
+            label="Faturamento"
+            value="R$ 12.450"
+            detail="+15% este mês"
+            tone="blue"
+          />
+          <GlassCard
+            label="Consultas"
+            value="24"
+            detail="6 pendentes hoje"
+            tone="emerald"
+          />
+          <GlassCard
+            label="Estoque"
+            value="142"
+            detail="Armações disponíveis"
+            tone="violet"
+          />
+        </DashboardGrid>
       </section>
 
-      <section className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
-        <GlassCard label="Ótica - O.S. Pendentes" value={oticaStats.ordensPendentes} detail="Ordens de serviço abertas" tone="blue" />
-        <GlassCard label="Ótica - Vendas Pendentes" value={oticaStats.vendasPendentes} detail="Vendas com saldo" tone="emerald" />
-        <GlassCard label="Financeiro - Conciliar" value={financeiroStats.conciliacaoPendente} detail="Transações pendentes de conciliação" tone="violet" />
+      <section className="mt-6">
+        <DashboardGrid cols={3}>
+          <GlassCard
+            label="Ótica - O.S. Pendentes"
+            value={oticaStats.ordensPendentes}
+            detail="Ordens de serviço abertas"
+            tone="blue"
+          />
+          <GlassCard
+            label="Ótica - Vendas Pendentes"
+            value={oticaStats.vendasPendentes}
+            detail="Vendas com saldo"
+            tone="emerald"
+          />
+          <GlassCard
+            label="Financeiro - Conciliar"
+            value={financeiroStats.conciliacaoPendente}
+            detail="Transações pendentes de conciliação"
+            tone="violet"
+          />
+        </DashboardGrid>
       </section>
 
-      <section className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
-        <GlassCard label="Comunicação - Aniversários (semana)" value={comunicacaoStats.aniversariantesSemana} detail="Aniversariantes nos próximos 7 dias" tone="blue" />
-        <GlassCard label="Comunicação - Aniversários (mês)" value={comunicacaoStats.aniversariantesMes} detail="Aniversariantes no mês" tone="emerald" />
-        <GlassCard label="Próximos recebíveis" value={financeiroStats.contasAVencer} detail="Contas a vencer" tone="violet" />
+      <section className="mt-6">
+        <DashboardGrid cols={3}>
+          <GlassCard
+            label="Comunicação - Aniversários (semana)"
+            value={comunicacaoStats.aniversariantesSemana}
+            detail="Aniversariantes nos próximos 7 dias"
+            tone="blue"
+          />
+          <GlassCard
+            label="Comunicação - Aniversários (mês)"
+            value={comunicacaoStats.aniversariantesMes}
+            detail="Aniversariantes no mês"
+            tone="emerald"
+          />
+          <GlassCard
+            label="Próximos recebíveis"
+            value={financeiroStats.contasAVencer}
+            detail="Contas a vencer"
+            tone="violet"
+          />
+        </DashboardGrid>
       </section>
 
-      <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <GlassCard label="Atendimentos Hoje" value={kpis.atendimentosHoje} detail="Pacientes agendados para hoje" tone="blue" />
-        <GlassCard label="Pacientes na Fila" value={kpis.pacientesFila} detail="Pacientes disponíveis na fila" tone="emerald" />
-        <GlassCard label="Receitas Emitidas" value="-" detail="Receitas geradas hoje" tone="violet" />
+      <section>
+        <DashboardGrid cols={3}>
+          <GlassCard
+            label="Atendimentos Hoje"
+            value={kpis.atendimentosHoje}
+            detail="Pacientes agendados para hoje"
+            tone="blue"
+          />
+          <GlassCard
+            label="Pacientes na Fila"
+            value={kpis.pacientesFila}
+            detail="Pacientes disponíveis na fila"
+            tone="emerald"
+          />
+          <GlassCard
+            label="Receitas Emitidas"
+            value="-"
+            detail="Receitas geradas hoje"
+            tone="violet"
+          />
+        </DashboardGrid>
       </section>
 
       <section className="mt-6 rounded-[24px] border border-slate-100 bg-white p-6 shadow-sm">
-        <h3 className="mb-4 text-lg font-black text-slate-800">Atendimentos Externos</h3>
+        <h3 className="mb-4 text-lg font-black text-slate-800">
+          Atendimentos Externos
+        </h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="rounded-[20px] border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Cidades atendidas</p>
-            <p className="mt-2 text-2xl font-black text-slate-800">{externalKpis.cidadesAtendidas}</p>
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+              Cidades atendidas
+            </p>
+            <p className="mt-2 text-2xl font-black text-slate-800">
+              {externalKpis.cidadesAtendidas}
+            </p>
           </div>
           <div className="rounded-[20px] border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Pacientes atendidos (total)</p>
-            <p className="mt-2 text-2xl font-black text-slate-800">{externalKpis.pacientesTotais}</p>
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+              Pacientes atendidos (total)
+            </p>
+            <p className="mt-2 text-2xl font-black text-slate-800">
+              {externalKpis.pacientesTotais}
+            </p>
           </div>
           <div className="rounded-[20px] border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Top cidades (pacientes)</p>
+            <p className="text-xs font-black uppercase tracking-widest text-slate-400">
+              Top cidades (pacientes)
+            </p>
             <div className="mt-3 space-y-2">
-              {Object.entries(externalKpis.porCidade).slice(0, 5).map(([city, cnt]) => (
-                <div key={city} className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-700">{city}</span>
-                  <span className="text-sm font-black text-slate-900">{cnt}</span>
-                </div>
-              ))}
-              {Object.keys(externalKpis.porCidade).length === 0 && <p className="text-sm text-slate-500">Nenhum registro</p>}
+              {Object.entries(externalKpis.porCidade)
+                .slice(0, 5)
+                .map(([city, cnt]) => (
+                  <div key={city} className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-700">
+                      {city}
+                    </span>
+                    <span className="text-sm font-black text-slate-900">
+                      {cnt}
+                    </span>
+                  </div>
+                ))}
+              {Object.keys(externalKpis.porCidade).length === 0 && (
+                <p className="text-sm text-slate-500">Nenhum registro</p>
+              )}
             </div>
           </div>
         </div>
@@ -246,9 +427,15 @@ export default function DashboardPrincipalPage() {
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <article className="rounded-[48px] border border-slate-100 bg-white p-8 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.9)] md:p-10">
-          <h2 className="mb-8 text-2xl font-black text-slate-900">Últimos Pacientes</h2>
+          <h2 className="mb-8 text-2xl font-black text-slate-900">
+            Últimos Pacientes
+          </h2>
           <div className="space-y-6">
-            <PatientRow name="Aline Ferreira" time="10:30" status="Finalizado" />
+            <PatientRow
+              name="Aline Ferreira"
+              time="10:30"
+              status="Finalizado"
+            />
             <PatientRow name="Carlos Magno" time="11:15" status="Em espera" />
             <PatientRow name="Bruna Souza" time="14:00" status="Agendado" />
           </div>
@@ -262,7 +449,9 @@ export default function DashboardPrincipalPage() {
                 <br />
                 atendimento?
               </h2>
-              <p className="font-medium text-slate-300">Capture dados e prescrição em um único fluxo.</p>
+              <p className="font-medium text-slate-300">
+                Capture dados e prescrição em um único fluxo.
+              </p>
             </div>
 
             <Link
@@ -280,7 +469,8 @@ export default function DashboardPrincipalPage() {
       <section className="rounded-[40px] border border-blue-100 bg-blue-50/80 p-6">
         <h3 className="text-lg font-black text-blue-800">Próximos passos</h3>
         <p className="mt-1 text-sm font-medium text-blue-700">
-          Use o menu lateral para abrir atendimentos, registrar vendas e acompanhar caixa com a mesma fluidez.
+          Use o menu lateral para abrir atendimentos, registrar vendas e
+          acompanhar caixa com a mesma fluidez.
         </p>
       </section>
     </div>
