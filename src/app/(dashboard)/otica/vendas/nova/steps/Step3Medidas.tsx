@@ -30,9 +30,11 @@ type MarkerId =
   | "coODA"
   | "coODB"
   | "coOEA"
-  | "coOEB";
+  | "coOEB"
+  | "cartaoEsq"
+  | "cartaoDir";
 
-type ModoCalibracao = "armacao";
+type ModoCalibracao = "armacao" | "cartao";
 
 type MarkerPoint = {
   x: number;
@@ -122,7 +124,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [image, setImage] = useState<string | null>(data.pupilometroFoto || null);
   const [imageReady, setImageReady] = useState(false);
   const [mmPorPixel, setMmPorPixel] = useState(0);
-  const [modo, setModo] = useState<ModoCalibracao>("armacao");
+  const [modo, setModo] = useState<ModoCalibracao>("cartao");
+  const [etapaGuia, setEtapaGuia] = useState<1 | 2 | 3 | 4>(1);
   const [ponteManual, setPonteManual] = useState(data.medidas.armacao_ponte_pt || "18");
   const [distanciaCapturaM, setDistanciaCapturaM] = useState("1.0");
 
@@ -131,6 +134,9 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [centroNasal, setCentroNasal] = useState(185);
   const [ponteEsqX, setPonteEsqX] = useState(170);
   const [ponteDirX, setPonteDirX] = useState(200);
+  const [cartaoEsqX, setCartaoEsqX] = useState(130);
+  const [cartaoDirX, setCartaoDirX] = useState(240);
+  const [cartaoY, setCartaoY] = useState(280);
   const [bordaOD, setBordaOD] = useState<MarkerPoint>({ x: 150, y: 240 });
   const [bordaOE, setBordaOE] = useState<MarkerPoint>({ x: 220, y: 240 });
   const [alturaOdMm, setAlturaOdMm] = useState("0.0");
@@ -468,15 +474,17 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     if (!imageReady || !image) return;
 
     const ponteMm = parseMm(ponteManual);
-    if (modo === "armacao" && ponteMm <= 0) return;
+    let mmReferencia = 85.60; // Padrão Internacional ISO/IEC 7810 ID-1 para Cartão de Crédito
+    let larguraReferenciaPx = Math.abs(cartaoDirX - cartaoEsqX);
 
-    const larguraRefPontePx = Math.abs(ponteDirX - ponteEsqX);
+    if (modo === "armacao") {
+      if (ponteMm <= 0) return;
+      mmReferencia = ponteMm;
+      larguraReferenciaPx = Math.abs(ponteDirX - ponteEsqX);
+    }
 
-    if (modo === "armacao" && larguraRefPontePx < 4) return;
+    if (larguraReferenciaPx < 4) return;
 
-    // A escala real nasce da PT informada versus PT marcada na imagem.
-    const mmReferencia = ponteMm;
-    const larguraReferenciaPx = larguraRefPontePx;
     const escala = mmReferencia / larguraReferenciaPx;
     if (!Number.isFinite(escala) || escala <= 0) return;
 
@@ -868,6 +876,9 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     setCentroNasal(Math.round(width * 0.5));
     setPonteEsqX(Math.round(width * 0.47));
     setPonteDirX(Math.round(width * 0.53));
+    setCartaoEsqX(Math.round(width * 0.32));
+    setCartaoDirX(Math.round(width * 0.68));
+    setCartaoY(Math.round(height * 0.85));
     setBordaOD({ x: Math.round(width * 0.43), y: Math.round(height * 0.73) });
     setBordaOE({ x: Math.round(width * 0.57), y: Math.round(height * 0.73) });
     setAvDA({ x: Math.round(width * 0.43), y: Math.round(height * 0.38) });
@@ -1170,6 +1181,8 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     if (id === "oe") return pupilaEsq;
     if (id === "ponteEsq") return { x: ponteEsqX, y: (pupilaDir.y + pupilaEsq.y) / 2 };
     if (id === "ponteDir") return { x: ponteDirX, y: (pupilaDir.y + pupilaEsq.y) / 2 };
+    if (id === "cartaoEsq") return { x: cartaoEsqX, y: cartaoY };
+    if (id === "cartaoDir") return { x: cartaoDirX, y: cartaoY };
     if (id === "bordaOD") return bordaOD;
     if (id === "bordaOE") return bordaOE;
     if (id === "avDA") return avDA || { x: pupilaDir.x, y: pupilaDir.y };
@@ -1202,6 +1215,18 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       const nextX = Math.max(x, ponteEsqX + 6);
       setPonteDirX(nextX);
       setCentroNasal((ponteEsqX + nextX) / 2);
+      return;
+    }
+    if (id === "cartaoEsq") {
+      const nextX = Math.min(x, cartaoDirX - 10);
+      setCartaoEsqX(nextX);
+      setCartaoY(y);
+      return;
+    }
+    if (id === "cartaoDir") {
+      const nextX = Math.max(x, cartaoEsqX + 10);
+      setCartaoDirX(nextX);
+      setCartaoY(y);
       return;
     }
     if (id === "bordaOD") {
@@ -1599,6 +1624,77 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
         isFocusMode ? "fixed inset-0 z-[90] overflow-auto bg-white p-0" : ""
       }`}
     >
+      {/* GUIA DE MEDIDAS POR ETAPA (STEPPER INTERATIVO GUIADO) */}
+      <div className="bg-slate-900 text-white rounded-3xl p-5 shadow-lg space-y-4 border border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-950 px-3 py-1 rounded-full border border-cyan-800">
+              Guia de Medição Técnica
+            </span>
+            <h3 className="text-lg font-black text-white mt-1">
+              {etapaGuia === 1 && "1. Calibração por Cartão (ISO 85.6mm) ou Armação"}
+              {etapaGuia === 2 && "2. Distância Naso-Pupilar (DNP OD / OE)"}
+              {etapaGuia === 3 && "3. Altura de Montagem (CO) nas Lentes"}
+              {etapaGuia === 4 && "4. Conferência dos Resultados & Emissão do Laudo"}
+            </h3>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={etapaGuia === 1}
+              onClick={() => setEtapaGuia((prev) => Math.max(1, prev - 1) as any)}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-xs font-bold transition-all text-slate-200"
+            >
+              ← Anterior
+            </button>
+            <button
+              type="button"
+              disabled={etapaGuia === 4}
+              onClick={() => setEtapaGuia((prev) => Math.min(4, prev + 1) as any)}
+              className="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-30 text-xs font-black transition-all text-white shadow-sm"
+            >
+              Próxima Etapa →
+            </button>
+          </div>
+        </div>
+
+        {/* Pílulas de Navegação por Etapa */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          {[
+            { step: 1, title: "1. Foto & Calibração", desc: "Cartão (85.6mm) / Ponte" },
+            { step: 2, title: "2. DNP Pupilar", desc: "Pupilas OD, OE e Eixo Nasal" },
+            { step: 3, title: "3. Altura (CO)", desc: "Borda Inferior da Lente" },
+            { step: 4, title: "4. Laudo & Final", desc: "PDF e Resumo de Medidas" },
+          ].map((item) => (
+            <button
+              key={item.step}
+              type="button"
+              onClick={() => setEtapaGuia(item.step as any)}
+              className={`p-3 rounded-2xl text-left border transition-all ${
+                etapaGuia === item.step
+                  ? "bg-cyan-600 border-cyan-400 text-white shadow-md"
+                  : etapaGuia > item.step
+                  ? "bg-slate-800 border-slate-700 text-cyan-300"
+                  : "bg-slate-950/40 border-slate-800 text-slate-400 hover:bg-slate-800/60"
+              }`}
+            >
+              <span className="text-xs font-black block">{item.title}</span>
+              <span className="text-[10px] opacity-80 mt-0.5 block">{item.desc}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="p-3 bg-cyan-950/60 rounded-xl border border-cyan-800/60 text-xs text-cyan-200 flex items-center justify-between">
+          <span>
+            {etapaGuia === 1 && "💡 **Dica Etapa 1:** Solicite ao cliente para segurar um cartão padrão (85.6 mm) abaixo do queixo e ajuste os marcadores azuis nas bordas do cartão."}
+            {etapaGuia === 2 && "💡 **Dica Etapa 2:** Centralize os marcadores cianos exatamente sobre a pupila direita (OD) e esquerda (OE) e alinhe a linha branca no centro do nariz."}
+            {etapaGuia === 3 && "💡 **Dica Etapa 3:** Arraste as guias verdes para a borda inferior interna das lentes na armação para calcular o Centro Óptico (CO)."}
+            {etapaGuia === 4 && "💡 **Dica Etapa 4:** Confira os valores totais de DP e alturas. Clique em 'Salvar Medidas' para gerar o laudo timbrado em PDF para o cliente."}
+          </span>
+        </div>
+      </div>
+
       <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
         <div className="flex flex-col gap-4 border-b border-slate-50 pb-4 md:flex-row md:items-center md:justify-between md:flex-wrap">
           <div className="flex items-center gap-3">
@@ -1609,8 +1705,26 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-cyan-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-700">
-              Modo Armacao
+            {/* Seletor de Modo de Calibração */}
+            <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setModo("cartao")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                  modo === "cartao" ? "bg-cyan-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                💳 Cartão ISO (85.6mm)
+              </button>
+              <button
+                type="button"
+                onClick={() => setModo("armacao")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                  modo === "armacao" ? "bg-cyan-600 text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                👓 Ponte Armação (mm)
+              </button>
             </div>
 
             {/* controles de zoom/pan movidos para Ajuste fino (barra lateral) */}
@@ -1972,7 +2086,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   </svg>
                 )}
 
-                {showPonte && (
+                {modo === "armacao" && showPonte && (
                   <>
                   <div
                     className={`absolute inset-y-0 w-px cursor-ew-resize ${
@@ -2001,6 +2115,43 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
                   >
                     Ponte {ponteMedidaMm} mm
                   </div>
+                  </>
+                )}
+
+                {/* MARCADORES DE CALIBRAÇÃO POR CARTÃO DE CRÉDITO (ISO 85.60 mm) */}
+                {modo === "cartao" && (
+                  <>
+                    <Marcador
+                      label="Cartão Esq"
+                      color="border-blue-400"
+                      x={cartaoEsqX}
+                      y={cartaoY}
+                      active={markerSelecionado === "cartaoEsq"}
+                      dimmed={marcadorDimmed("cartaoEsq")}
+                      onPointerDown={() => startDrag("cartaoEsq")}
+                      zoomLevel={zoomLevel}
+                    />
+                    <Marcador
+                      label="Cartão Dir"
+                      color="border-blue-400"
+                      x={cartaoDirX}
+                      y={cartaoY}
+                      active={markerSelecionado === "cartaoDir"}
+                      dimmed={marcadorDimmed("cartaoDir")}
+                      onPointerDown={() => startDrag("cartaoDir")}
+                      zoomLevel={zoomLevel}
+                    />
+                    <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: guiaOpacity(["cartaoEsq", "cartaoDir"]) }}>
+                      <line x1={cartaoEsqX} y1={cartaoY} x2={cartaoDirX} y2={cartaoY} stroke="#3b82f6" strokeWidth={Math.max(2, lineWidth + 1)} />
+                      <line x1={cartaoEsqX} y1={cartaoY - 8} x2={cartaoEsqX} y2={cartaoY + 8} stroke="#3b82f6" strokeWidth={Math.max(2, lineWidth + 1)} />
+                      <line x1={cartaoDirX} y1={cartaoY - 8} x2={cartaoDirX} y2={cartaoY + 8} stroke="#3b82f6" strokeWidth={Math.max(2, lineWidth + 1)} />
+                    </svg>
+                    <div
+                      className="pointer-events-none absolute -translate-x-1/2 rounded-full bg-blue-600 text-white px-2.5 py-1 text-[9px] font-black uppercase shadow-md border border-blue-400"
+                      style={{ left: (cartaoEsqX + cartaoDirX) / 2, top: cartaoY - 24 }}
+                    >
+                      💳 Cartão ISO (85.60 mm)
+                    </div>
                   </>
                 )}
 
