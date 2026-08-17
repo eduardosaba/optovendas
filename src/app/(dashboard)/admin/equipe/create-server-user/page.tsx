@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 type Clinica = { id: string; nome?: string | null };
 
 // Server action moved to top-level to avoid capturing non-serializable closures
-export async function createUser(formData: FormData) {
+async function createUser(formData: FormData) {
   'use server';
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -52,7 +52,8 @@ export async function createUser(formData: FormData) {
   redirect('/admin/equipe');
 }
 
-export default async function Page({ searchParams }: { searchParams?: Record<string, string> }) {
+export default async function Page({ searchParams }: { searchParams?: Promise<Record<string, string>> }) {
+  const sp = (await searchParams) || {};
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRole) throw new Error('Server not configured');
@@ -62,11 +63,11 @@ export default async function Page({ searchParams }: { searchParams?: Record<str
   const clinics: Clinica[] = clinicsRes.error ? [] : (clinicsRes.data || []);
 
   const pref = {
-    clinica_id: searchParams?.clinica_id || '',
-    nome_completo: searchParams?.nome_completo || '',
-    email: searchParams?.email || '',
-    perfil: searchParams?.perfil || 'vendedor',
-    password: searchParams?.password || '',
+    clinica_id: sp.clinica_id || '',
+    nome_completo: sp.nome_completo || '',
+    email: sp.email || '',
+    perfil: sp.perfil || 'vendedor',
+    password: sp.password || '',
   };
 
   return (
