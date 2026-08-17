@@ -7,13 +7,10 @@ import {
   Moon, 
   Monitor, 
   ShieldCheck, 
-  Layers, 
   SlidersHorizontal,
-  Eye,
   CheckCircle2,
   AlertTriangle,
-  Info,
-  Maximize2
+  Info
 } from "lucide-react";
 
 type TipoTratamento = "antirreflexo" | "azul" | "fotocromatico" | "combinado";
@@ -25,13 +22,10 @@ export default function SimuladorTratamentos() {
   const [posicaoSlider, setPosicaoSlider] = useState<number>(50);
 
   // Estados de Fotocromático
-  const [nivelUV, setNivelUV] = useState<number>(85);
+  const [nivelUV, setNivelUV] = useState<number>(80);
   const [corFoto, setCorFoto] = useState<CorFotocromatica>("cinza");
 
-  // Fotos de Pessoas usando Óculos (Retratos de Alta Resolução estilo Fittingbox / Óptica)
-  const FOTO_PESSOA_OCULOS = "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?auto=format&fit=crop&w=1200&q=80";
-
-  // Overlay de Fotocromático (CSS Tint)
+  // Cor do overlay fotocromático em HSL/RGBA
   const getCorFotocromaticaOverlay = () => {
     const opacidade = (nivelUV / 100) * 0.85;
     switch (corFoto) {
@@ -44,6 +38,9 @@ export default function SimuladorTratamentos() {
     }
   };
 
+  // Foto de alta definição de pessoa vestindo óculos
+  const FOTO_PESSOA_OCULOS = "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?auto=format&fit=crop&w=1200&q=80";
+
   return (
     <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm space-y-6 max-w-6xl mx-auto">
       
@@ -53,13 +50,13 @@ export default function SimuladorTratamentos() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div>
           <span className="text-[10px] font-black uppercase tracking-widest text-cyan-600 bg-cyan-50 px-2.5 py-1 rounded-full border border-cyan-100">
-            Demonstração Visual no Rosto do Cliente
+            Demonstração de Lentes no Rosto
           </span>
           <h2 className="text-2xl font-black text-slate-900 mt-1 flex items-center gap-2">
-            <Sparkles size={20} className="text-cyan-600" /> Simulador de Tratamentos e Lentes
+            <Sparkles size={20} className="text-cyan-600" /> Simulador Interativo de Tratamentos
           </h2>
           <p className="text-xs text-slate-500">
-            Compare o impacto estético e a transparência real da lente na armação em uso.
+            Compare o brilho das lentes normais contra a transparência e proteção dos tratamentos modernos.
           </p>
         </div>
 
@@ -95,10 +92,10 @@ export default function SimuladorTratamentos() {
          ==================================================================== */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
         {[
-          { id: "antirreflexo", label: "Antirreflexo (AR)", desc: "Elimina brilhos & esbranquiçado", icon: Moon, color: "cyan" },
-          { id: "azul", label: "Filtro Luz Azul", desc: "Proteção contra telas digitais", icon: Monitor, color: "blue" },
-          { id: "combinado", label: "AR + Filtro Azul", desc: "Tratamento 2 em 1 Completo", icon: ShieldCheck, color: "emerald" },
-          { id: "fotocromatico", label: "Fotossensível", desc: "Transitions (Sol / Incolor)", icon: Sun, color: "amber" },
+          { id: "antirreflexo", label: "Antirreflexo (AR)", desc: "Elimina reflexos e brilho leitoso", icon: Moon, color: "cyan" },
+          { id: "azul", label: "Filtro Luz Azul", desc: "Proteção contra telas de celulares/PCs", icon: Monitor, color: "blue" },
+          { id: "combinado", label: "AR + Filtro Azul", desc: "Transparência + Proteção Digital", icon: ShieldCheck, color: "emerald" },
+          { id: "fotocromatico", label: "Fotossensível", desc: "Escurece no Sol (Transitions)", icon: Sun, color: "amber" },
         ].map((tab) => {
           const Icon = tab.icon;
           const isAtivo = tratamentoAtivo === tab.id;
@@ -124,21 +121,21 @@ export default function SimuladorTratamentos() {
       </div>
 
       {/* ====================================================================
-          1. MODO LADO A LADO (COMPARAÇÃO DIRETA ESTILO FITTINGBOX)
+          1. MODO LADO A LADO COM MÁSCARA SVG PRECISA SOBRE AS LENTES
          ==================================================================== */}
       {modoExibicao === "lado_a_lado" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
-          {/* FOTO 1: SEM ANTIRREFLEXO (LENTE COM BRILHO LEITOSO/ESPELHADO) */}
+          {/* FOTO 1: SEM ANTIRREFLEXO (LENTES COM REFLEXO BRANCO/LEITOSO EXACTAMENTE NAS LENTES) */}
           <div className="bg-slate-50 rounded-[28px] border-2 border-rose-200 p-4 space-y-3 shadow-sm">
             <div className="flex items-center justify-between">
               <span className="text-xs font-black uppercase text-rose-700 bg-rose-100 px-3 py-1 rounded-full border border-rose-200 flex items-center gap-1.5">
-                <AlertTriangle size={14} /> SEM ANTIRREFLEXO (CONVENCIONAL)
+                <AlertTriangle size={14} /> SEM ANTIRREFLEXO (LENTE CONVENCIONAL)
               </span>
-              <span className="text-[10px] font-bold text-slate-400">Brilho Espelhado</span>
+              <span className="text-[10px] font-bold text-slate-400">Reflexo Leitoso nas Lentes</span>
             </div>
 
-            {/* Imagem do Rosto da Pessoa com Brilho Leitoso sobre a Lente do Óculos */}
+            {/* Container da Imagem com Máscara SVG sobreposta */}
             <div className="relative rounded-2xl overflow-hidden aspect-[4/3] bg-slate-950 border border-slate-200 shadow-inner">
               <img
                 src={FOTO_PESSOA_OCULOS}
@@ -146,38 +143,71 @@ export default function SimuladorTratamentos() {
                 className="w-full h-full object-cover filter brightness-[0.98]"
               />
 
-              {/* OVERLAY DE REFLEXO LEITOSO/ESBRANQUIÇADO NA LENTE DO ÓCULOS */}
-              <div className="absolute inset-0 pointer-events-none">
-                {/* Reflexo Espelhado Leitoso cobrindo a região dos olhos */}
-                <div className="absolute top-[35%] left-[18%] w-[28%] h-[22%] bg-gradient-to-tr from-white/70 via-white/50 to-transparent rounded-[40%] blur-[2px]" />
-                <div className="absolute top-[35%] right-[18%] w-[28%] h-[22%] bg-gradient-to-tr from-white/70 via-white/50 to-transparent rounded-[40%] blur-[2px]" />
-                {/* Brilho de Lâmpada de Teto */}
-                <div className="absolute top-[38%] left-[24%] w-10 h-10 bg-white/90 rounded-full blur-[6px]" />
-                <div className="absolute top-[38%] right-[24%] w-10 h-10 bg-white/90 rounded-full blur-[6px]" />
-              </div>
+              {/* OVERLAY SVG DE REFLEXO 100% ALINHADO SOBRE AS LENTES DOS ÓCULOS */}
+              <svg 
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox="0 0 100 100" 
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  {/* Formato exato da Lente Esquerda (OD) */}
+                  <clipPath id="lente-od">
+                    <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
+                  </clipPath>
+                  {/* Formato exato da Lente Direita (OE) */}
+                  <clipPath id="lente-oe">
+                    <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
+                  </clipPath>
+                  
+                  {/* Gradiente de Reflexo Leitoso de Lâmpadas */}
+                  <linearGradient id="grad-brilho" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+                    <stop offset="40%" stopColor="#ffffff" stopOpacity="0.60" />
+                    <stop offset="100%" stopColor="#ffffff" stopOpacity="0.10" />
+                  </linearGradient>
+                </defs>
+
+                {/* --- LENTE ESQUERDA (OD) - REFLEXO LEITOSO MASCARADO --- */}
+                <g clipPath="url(#lente-od)">
+                  {/* Camada Branca Leitosa na Lente */}
+                  <rect x="20" y="25" width="30" height="35" fill="url(#grad-brilho)" />
+                  {/* Brilho Intenso de Lâmpada de Teto */}
+                  <ellipse cx="32" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                  <line x1="22" y1="36" x2="44" y2="48" stroke="#ffffff" strokeWidth="2.5" opacity="0.7" />
+                </g>
+
+                {/* --- LENTE DIREITA (OE) - REFLEXO LEITOSO MASCARADO --- */}
+                <g clipPath="url(#lente-oe)">
+                  {/* Camada Branca Leitosa na Lente */}
+                  <rect x="50" y="25" width="30" height="35" fill="url(#grad-brilho)" />
+                  {/* Brilho Intenso de Lâmpada de Teto */}
+                  <ellipse cx="63" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                  <line x1="53" y1="36" x2="75" y2="48" stroke="#ffffff" strokeWidth="2.5" opacity="0.7" />
+                </g>
+              </svg>
 
               <div className="absolute bottom-3 inset-x-3 bg-slate-950/85 backdrop-blur-md p-2.5 rounded-xl border border-slate-800 text-[11px] text-rose-300 font-bold">
-                ⚠️ <strong>Aparência Leitosa:</strong> A lente reflete lâmpadas e janelas, escondendo os olhos e gerando fadiga ocular.
+                ⚠️ <strong>Lente Esbranquiçada:</strong> Os reflexos das luzes do ambiente cobrem os olhos na foto e atrapalham a visão.
               </div>
             </div>
 
             <ul className="text-xs text-slate-600 space-y-1 list-disc list-inside font-medium pt-1">
-              <li>Espelha luzes de janelas, computadores e lâmpadas.</li>
-              <li>Esconde a expressão dos seus olhos para as pessoas.</li>
-              <li>Exige maior esforço visual, causando cansaço ao fim do dia.</li>
+              <li>Reflete lâmpadas do teto, monitores e janelas.</li>
+              <li>Dificulta ver os olhos da pessoa em fotos e conversas.</li>
+              <li>Gera ofuscamento e fadiga ao dirigir à noite.</li>
             </ul>
           </div>
 
-          {/* FOTO 2: COM ANTIRREFLEXO PREMIUM (LENTE 99% TRANSPARENTE E INVISÍVEL) */}
+          {/* FOTO 2: COM ANTIRREFLEXO PREMIUM (TRANSPARÊNCIA TOTAL + REFLEXO RESIDUAL DISCRETO) */}
           <div className="bg-cyan-50/40 rounded-[28px] border-2 border-cyan-500 p-4 space-y-3 shadow-md">
             <div className="flex items-center justify-between">
               <span className="text-xs font-black uppercase text-cyan-900 bg-cyan-500 text-white px-3 py-1 rounded-full shadow-sm flex items-center gap-1.5">
-                <CheckCircle2 size={14} /> COM ANTIRREFLEXO PREMIUM (99.2%)
+                <CheckCircle2 size={14} /> COM TRATAMENTO PREMIUM (99.2% TRANSPARENTE)
               </span>
-              <span className="text-[11px] font-black text-cyan-700">Lente Transparente</span>
+              <span className="text-[11px] font-black text-cyan-700">Visão Cristalina</span>
             </div>
 
-            {/* Imagem do Rosto da Pessoa com Óculos Transparente */}
+            {/* Container com a Foto Nítida e Tratamento Mascarado nas Lentes */}
             <div className="relative rounded-2xl overflow-hidden aspect-[4/3] bg-slate-950 border border-cyan-500/30 shadow-inner">
               <img
                 src={FOTO_PESSOA_OCULOS}
@@ -185,39 +215,77 @@ export default function SimuladorTratamentos() {
                 className="w-full h-full object-cover filter contrast-[1.06] brightness-[1.02]"
               />
 
-              {/* OVERLAY DE TRANSPARÊNCIA COM REFLEXO RESIDUAL DISCRETO (ESTÉTICO) */}
-              <div className="absolute inset-0 pointer-events-none">
-                {/* Apenas um reflexo residual esmeralda ou azul muito discreto no canto da armação */}
-                {tratamentoAtivo === "azul" || tratamentoAtivo === "combinado" ? (
-                  <>
-                    <div className="absolute top-[34%] left-[20%] w-6 h-6 rounded-full border border-blue-400/50 bg-blue-400/10 blur-[1px]" />
-                    <div className="absolute top-[34%] right-[20%] w-6 h-6 rounded-full border border-blue-400/50 bg-blue-400/10 blur-[1px]" />
-                  </>
-                ) : (
-                  <>
-                    <div className="absolute top-[34%] left-[20%] w-6 h-6 rounded-full border border-emerald-400/50 bg-emerald-400/10 blur-[1px]" />
-                    <div className="absolute top-[34%] right-[20%] w-6 h-6 rounded-full border border-emerald-400/50 bg-emerald-400/10 blur-[1px]" />
-                  </>
-                )}
+              {/* OVERLAY SVG DE TRATAMENTOS (ANTIRREFLEXO / FILTRO AZUL / FOTOCROMÁTICO) */}
+              <svg 
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox="0 0 100 100" 
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <clipPath id="lente-od-ar">
+                    <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
+                  </clipPath>
+                  <clipPath id="lente-oe-ar">
+                    <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
+                  </clipPath>
+                </defs>
 
-                {/* Se Fotocromático Ativo */}
-                {tratamentoAtivo === "fotocromatico" && (
-                  <div
-                    className="absolute inset-0 transition-all duration-300"
-                    style={{ backgroundColor: getCorFotocromaticaOverlay() }}
-                  />
-                )}
-              </div>
+                {/* --- LENTE OD (COM TRATAMENTO MASCARADO) --- */}
+                <g clipPath="url(#lente-od-ar)">
+                  {/* Se Filtro Luz Azul / Combinado: Matiz azulada suave */}
+                  {(tratamentoAtivo === "azul" || tratamentoAtivo === "combinado") && (
+                    <rect x="20" y="25" width="30" height="35" fill="#1e40af" opacity="0.18" />
+                  )}
+                  {/* Se Fotocromático: Tint Escura de Acordo com Slider UV */}
+                  {tratamentoAtivo === "fotocromatico" && (
+                    <rect x="20" y="25" width="30" height="35" fill={getCorFotocromaticaOverlay()} />
+                  )}
+
+                  {/* Reflexo Residual Discreto de Alta Lentes (Verde Esmeralda ou Azul Royal no Canto) */}
+                  {tratamentoAtivo !== "fotocromatico" && (
+                    <path
+                      d="M24 33 Q30 31 38 33"
+                      stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"}
+                      strokeWidth="1.2"
+                      fill="none"
+                      opacity="0.75"
+                    />
+                  )}
+                </g>
+
+                {/* --- LENTE OE (COM TRATAMENTO MASCARADO) --- */}
+                <g clipPath="url(#lente-oe-ar)">
+                  {/* Se Filtro Luz Azul / Combinado */}
+                  {(tratamentoAtivo === "azul" || tratamentoAtivo === "combinado") && (
+                    <rect x="50" y="25" width="30" height="35" fill="#1e40af" opacity="0.18" />
+                  )}
+                  {/* Se Fotocromático */}
+                  {tratamentoAtivo === "fotocromatico" && (
+                    <rect x="50" y="25" width="30" height="35" fill={getCorFotocromaticaOverlay()} />
+                  )}
+
+                  {/* Reflexo Residual Discreto no Canto */}
+                  {tratamentoAtivo !== "fotocromatico" && (
+                    <path
+                      d="M55 33 Q61 31 69 33"
+                      stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"}
+                      strokeWidth="1.2"
+                      fill="none"
+                      opacity="0.75"
+                    />
+                  )}
+                </g>
+              </svg>
 
               <div className="absolute bottom-3 inset-x-3 bg-slate-950/85 backdrop-blur-md p-2.5 rounded-xl border border-cyan-900 text-[11px] text-cyan-200 font-bold">
-                ✨ <strong>Lente Praticamente Invisível:</strong> Permite que as pessoas vejam seus olhos com nitidez e reduz o ofuscamento.
+                ✨ <strong>Transparência Estética:</strong> A lente fica totalmente transparente nos olhos, permitindo ver cada expressão.
               </div>
             </div>
 
             <ul className="text-xs text-slate-700 space-y-1 list-disc list-inside font-medium pt-1">
-              <li>Lente quase invisível com 99,2% de transmissão luminosa.</li>
-              <li>Excelente para fotos, videochamadas e conversas presenciais.</li>
-              <li>Diminui os reflexos dos faróis ao dirigir à noite.</li>
+              <li>99.2% de transmissão de luz sem reflexos incômodos.</li>
+              <li>Excelente para fotos, videochamadas e uso diário.</li>
+              <li>Reduz o ofuscamento de faróis ao dirigir à noite.</li>
             </ul>
           </div>
 
@@ -225,19 +293,39 @@ export default function SimuladorTratamentos() {
       )}
 
       {/* ====================================================================
-          2. MODO SLIDER DE REVELAR (ALINHAMENTO EXATO SEM DISTORÇÃO)
+          2. MODO SLIDER DE REVELAR (COMPARATIVO DINÂMICO)
          ==================================================================== */}
       {modoExibicao === "slider" && (
         <div className="space-y-3">
           <div className="relative rounded-3xl overflow-hidden bg-slate-950 aspect-[16/9] border-2 border-slate-800 shadow-xl select-none">
             
-            {/* FOTO BASE: COM ANTIRREFLEXO (RETRATO REAL) */}
+            {/* FOTO BASE: COM ANTIRREFLEXO */}
             <div className="absolute inset-0">
               <img
                 src={FOTO_PESSOA_OCULOS}
                 alt="Com Antirreflexo"
                 className="w-full h-full object-cover filter contrast-[1.05]"
               />
+
+              {/* Overlay SVG com Tratamento em Transparência */}
+              <svg 
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox="0 0 100 100" 
+                preserveAspectRatio="none"
+              >
+                <clipPath id="sl-od">
+                  <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
+                </clipPath>
+                <clipPath id="sl-oe">
+                  <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
+                </clipPath>
+                <g clipPath="url(#sl-od)">
+                  <path d="M24 33 Q30 31 38 33" stroke="#10b981" strokeWidth="1.2" fill="none" opacity="0.8" />
+                </g>
+                <g clipPath="url(#sl-oe)">
+                  <path d="M55 33 Q61 31 69 33" stroke="#10b981" strokeWidth="1.2" fill="none" opacity="0.8" />
+                </g>
+              </svg>
 
               <div className="absolute top-4 right-4 bg-emerald-600 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-lg border border-emerald-400/40">
                 ✨ COM ANTIRREFLEXO (TRANSPARENTE)
@@ -257,11 +345,29 @@ export default function SimuladorTratamentos() {
                 className="w-full h-full object-cover filter brightness-[0.98]"
               />
 
-              {/* Overlay Esbranquiçado Leitoso no Lado Sem AR */}
-              <div className="absolute inset-0">
-                <div className="absolute top-[35%] left-[18%] w-[28%] h-[22%] bg-gradient-to-tr from-white/70 via-white/50 to-transparent rounded-[40%] blur-[2px]" />
-                <div className="absolute top-[35%] right-[18%] w-[28%] h-[22%] bg-gradient-to-tr from-white/70 via-white/50 to-transparent rounded-[40%] blur-[2px]" />
-              </div>
+              {/* Overlay SVG com Brilho Leitoso no Lado Sem AR */}
+              <svg 
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox="0 0 100 100" 
+                preserveAspectRatio="none"
+              >
+                <clipPath id="sl-od-sem">
+                  <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
+                </clipPath>
+                <clipPath id="sl-oe-sem">
+                  <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
+                </clipPath>
+
+                <g clipPath="url(#sl-od-sem)">
+                  <rect x="20" y="25" width="30" height="35" fill="url(#grad-brilho)" />
+                  <ellipse cx="32" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                </g>
+
+                <g clipPath="url(#sl-oe-sem)">
+                  <rect x="50" y="25" width="30" height="35" fill="url(#grad-brilho)" />
+                  <ellipse cx="63" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                </g>
+              </svg>
 
               <div className="absolute top-4 left-4 bg-rose-900 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-lg border border-rose-700">
                 ⚠️ SEM ANTIRREFLEXO (LEITOSO)
@@ -290,23 +396,23 @@ export default function SimuladorTratamentos() {
           </div>
 
           <div className="flex justify-between text-xs font-bold text-slate-500 px-2">
-            <span>← Deslize para a esquerda (Ver Sem AR)</span>
-            <span>Deslize para a direita (Ver Com AR) →</span>
+            <span>← Deslize para a esquerda (Ver Lente com Reflexo Leitoso)</span>
+            <span>Deslize para a direita (Ver Lente Transparente) →</span>
           </div>
         </div>
       )}
 
       {/* ====================================================================
-          CONTROLES DE FOTOCROMÁTICO (SLIDER UV)
+          CONTROLES DE FOTOCROMÁTICO (SLIDER DE INTENSIDADE DE SOL)
          ==================================================================== */}
       {tratamentoAtivo === "fotocromatico" && (
         <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
-              <Sun size={16} className="text-amber-500" /> Intensidade de Radiação UV / Sol:
+              <Sun size={16} className="text-amber-500" /> Simular Intensidade do Sol / Radiação UV:
             </span>
             <span className="text-xs font-black text-cyan-700 bg-cyan-50 px-3 py-1 rounded-full border border-cyan-100">
-              {nivelUV <= 15 ? "Ambiente Interno (100% Incolor)" : nivelUV <= 60 ? "Dia Nublado (Médio)" : "Sol Pleno (Escuro Solar 85%)"}
+              {nivelUV <= 15 ? "Ambiente Interno (100% Incolor)" : nivelUV <= 60 ? "Dia Nublado (Tom Médio)" : "Sol Pleno (Escuro Solar 85%)"}
             </span>
           </div>
 
@@ -321,7 +427,7 @@ export default function SimuladorTratamentos() {
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-slate-200/60">
             <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
-              <SlidersHorizontal size={14} className="text-cyan-600" /> Tonalidade da Lente:
+              <SlidersHorizontal size={14} className="text-cyan-600" /> Cor da Lente Fotossensível:
             </span>
             <div className="flex gap-2">
               {[

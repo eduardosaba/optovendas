@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Eye, CheckCircle2, AlertCircle, Sparkles, Layers, Sliders } from "lucide-react";
+import { Eye, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function ComparadorMultifocal() {
   const [cenarioFoto, setCenarioFoto] = useState<"sala" | "escritorio">("sala");
@@ -19,13 +19,13 @@ export default function ComparadorMultifocal() {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 border border-emerald-200">
-            <Eye size={14} /> Corredor Progressivo em Imagem Real
+            <Eye size={14} /> Corredor Óptico em Ampulheta (Progressivo Real)
           </div>
           <h2 className="text-2xl font-black mt-1 text-slate-900">
-            Comparador de Lentes Multifocais (Convencional vs. Digital Freeform)
+            Simulador de Lentes Multifocais (Ampulheta Óptica)
           </h2>
           <p className="text-xs text-slate-500">
-            Demonstração em fotografia real da expansão do campo de visão nítida e redução dos pontos cegos laterais.
+            Veja a diferença entre a curva de transição estreita tradicional e o campo de visão panorâmico Digital Freeform.
           </p>
         </div>
 
@@ -66,7 +66,7 @@ export default function ComparadorMultifocal() {
             <span className="text-[11px] font-bold text-amber-700">Surfaçagem Tradicional</span>
           </div>
 
-          {/* SIMULAÇÃO EM FOTO REAL DA LENTE CONVENCIONAL */}
+          {/* SIMULAÇÃO EM FOTO REAL DA LENTE CONVENCIONAL COM CURVA EM AMPULHETA */}
           <div className="relative h-80 w-full rounded-2xl overflow-hidden border-2 border-amber-400 shadow-inner bg-slate-950 flex flex-col justify-between p-3 select-none">
             
             {/* Foto de Fundo Inteira */}
@@ -76,49 +76,70 @@ export default function ComparadorMultifocal() {
               className="absolute inset-0 w-full h-full object-cover filter brightness-[0.9]"
             />
 
-            {/* Formato da Lente Impresso sobre a Foto */}
-            <div className="absolute inset-2 border-4 border-white/90 rounded-[40px] pointer-events-none shadow-2xl" />
+            {/* Borda da Lente Impressa sobre a Foto */}
+            <div className="absolute inset-2 border-4 border-white/90 rounded-[40px] pointer-events-none shadow-2xl z-20" />
 
-            {/* ZONAS LATERAIS DE ABERRAÇÃO (DESFOQUE SEVERO NA LENTE CONVENCIONAL) */}
-            {/* Esquerda */}
-            <div className="absolute inset-y-2 left-2 w-[34%] bg-amber-950/40 backdrop-blur-[6px] rounded-l-[36px] flex flex-col items-center justify-center p-2 border-r-2 border-amber-400/60 pointer-events-none">
-              <span className="text-[10px] font-black text-amber-200 uppercase tracking-widest text-center">
-                Aberração Lateral (Desfoque)
-              </span>
-            </div>
+            {/* OVERLAY SVG DE ABERRAÇÕES LATERAIS EM AMPULHETA (CURVA PROGRESSIVA NATIVAMENTE ESTREITA) */}
+            <svg 
+              className="absolute inset-2 w-[calc(100%-16px)] h-[calc(100%-16px)] pointer-events-none z-10" 
+              viewBox="0 0 100 100" 
+              preserveAspectRatio="none"
+            >
+              <defs>
+                {/* Filtro de desfoque suave nas laterais de aberração */}
+                <filter id="blur-aberracao">
+                  <feGaussianBlur stdDeviation="1.5" />
+                </filter>
+              </defs>
 
-            {/* Direita */}
-            <div className="absolute inset-y-2 right-2 w-[34%] bg-amber-950/40 backdrop-blur-[6px] rounded-r-[36px] flex flex-col items-center justify-center p-2 border-l-2 border-amber-400/60 pointer-events-none">
-              <span className="text-[10px] font-black text-amber-200 uppercase tracking-widest text-center">
-                Aberração Lateral (Desfoque)
-              </span>
-            </div>
+              {/* ABERRAÇÃO LATERAL ESQUERDA (CURVA EM AMPULHETA ENTRANDO NO CORREDOR) */}
+              <path
+                d="M 0,0 L 22,0 Q 38,50 26,100 L 0,100 Z"
+                fill="rgba(120, 53, 15, 0.45)"
+                stroke="#f59e0b"
+                strokeWidth="0.8"
+                strokeDasharray="2,2"
+              />
 
-            {/* CORREDOR CENTRAL ESTREITO (NÍTIDO) */}
-            <div className="relative z-10 w-full flex flex-col justify-between h-full py-3 pointer-events-none">
-              <div className="bg-slate-900/80 backdrop-blur-md border border-emerald-400/60 rounded-xl py-1 px-3 text-center text-[10px] font-black text-emerald-300 mx-auto shadow-md">
-                Visão Longe (TV / Cidade)
+              {/* ABERRAÇÃO LATERAL DIREITA (CURVA EM AMPULHETA ENTRANDO NO CORREDOR) */}
+              <path
+                d="M 100,0 L 78,0 Q 62,50 74,100 L 100,100 Z"
+                fill="rgba(120, 53, 15, 0.45)"
+                stroke="#f59e0b"
+                strokeWidth="0.8"
+                strokeDasharray="2,2"
+              />
+
+              {/* LINHAS INDICATIVAS DO CORREDOR PROGRESSIVO CURVO */}
+              <path d="M 22,0 Q 38,50 26,100" stroke="#fbbf24" strokeWidth="1.2" fill="none" />
+              <path d="M 78,0 Q 62,50 74,100" stroke="#fbbf24" strokeWidth="1.2" fill="none" />
+            </svg>
+
+            {/* RÓTULOS DAS ZONAS DO CORREDOR DE AMPULHETA */}
+            <div className="relative z-30 w-full flex flex-col justify-between h-full py-3 pointer-events-none">
+              <div className="bg-slate-900/85 backdrop-blur-md border border-emerald-400/80 rounded-xl py-1 px-3 text-center text-[10px] font-black text-emerald-300 mx-auto shadow-md w-3/5">
+                Visão Longe (Sem Aberrações)
               </div>
 
-              <div className="bg-amber-950/90 backdrop-blur-md border border-amber-400/80 rounded-xl py-1 px-2.5 text-center text-[10px] font-black text-amber-300 mx-auto my-auto shadow-md">
-                Intermediário Estreito
+              <div className="bg-amber-950/90 backdrop-blur-md border border-amber-400/90 rounded-xl py-1 px-3 text-center text-[10px] font-black text-amber-300 mx-auto my-auto shadow-md w-2/5">
+                Corredor Intermediário Estreito (Curvo)
               </div>
 
-              <div className="bg-slate-900/80 backdrop-blur-md border border-emerald-400/60 rounded-xl py-1 px-3 text-center text-[10px] font-black text-emerald-300 mx-auto shadow-md">
-                Visão Perto (Controle / Livro)
+              <div className="bg-slate-900/85 backdrop-blur-md border border-emerald-400/80 rounded-xl py-1 px-3 text-center text-[10px] font-black text-emerald-300 mx-auto shadow-md w-1/2">
+                Visão Perto (Leitura)
               </div>
             </div>
 
           </div>
 
           <ul className="text-xs text-slate-700 space-y-1.5 list-disc list-inside font-medium">
-            <li><strong className="text-amber-800">Corredor Estreito:</strong> O paciente precisa virar toda a cabeça para enxergar aos lados.</li>
-            <li><strong className="text-amber-800">Efeito de Flutuação:</strong> Desfoque lateral acentuado que causa desconforto e tontura ao caminhar.</li>
-            <li><strong className="text-amber-800">Adaptação Difícil:</strong> Transição brusca entre o grau de longe e perto.</li>
+            <li><strong className="text-amber-800">Curva de Ampulheta Estreita:</strong> A transição afunila o campo visual no centro.</li>
+            <li><strong className="text-amber-800">Flutuação e Tontura:</strong> Áreas sombreadas nas laterais exigem virar o pescoço.</li>
+            <li><strong className="text-amber-800">Tecnologia Antiga:</strong> Cálculo mecânico com pouca personalização.</li>
           </ul>
         </div>
 
-        {/* Lente Multifocal Digital Freeform 360° (Alto Valor Agregado) */}
+        {/* Lente Multifocal Digital Freeform 360° (Ampulheta Panorâmica Expandida) */}
         <div className="rounded-3xl border-2 border-emerald-500 bg-emerald-50/40 p-5 space-y-4 shadow-md">
           <div className="flex items-center justify-between">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-600 text-white text-xs font-black shadow-md shadow-emerald-900/20">
@@ -127,7 +148,7 @@ export default function ComparadorMultifocal() {
             <span className="text-[11px] font-bold text-emerald-700">Cálculo Ponto a Ponto CNC</span>
           </div>
 
-          {/* SIMULAÇÃO EM FOTO REAL DA LENTE DIGITAL FREEFORM */}
+          {/* SIMULAÇÃO EM FOTO REAL DA LENTE DIGITAL FREEFORM COM CORREDOR AMPLO E CURVAS SUAVES */}
           <div className="relative h-80 w-full rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-inner bg-slate-950 flex flex-col justify-between p-3 select-none">
             
             {/* Foto de Fundo Inteira Nítida */}
@@ -137,45 +158,59 @@ export default function ComparadorMultifocal() {
               className="absolute inset-0 w-full h-full object-cover filter contrast-[1.08] brightness-[1.02]"
             />
 
-            {/* Formato da Lente Impresso sobre a Foto */}
-            <div className="absolute inset-2 border-4 border-white/95 rounded-[40px] pointer-events-none shadow-2xl" />
+            {/* Borda da Lente Impressa sobre a Foto */}
+            <div className="absolute inset-2 border-4 border-white/95 rounded-[40px] pointer-events-none shadow-2xl z-20" />
 
-            {/* ZONAS LATERAIS SUAVES (ABERRAÇÕES MÍNIMAS) */}
-            {/* Esquerda */}
-            <div className="absolute inset-y-2 left-2 w-[14%] bg-emerald-950/20 backdrop-blur-[1px] rounded-l-[36px] flex flex-col items-center justify-center p-1 border-r border-emerald-400/40 pointer-events-none">
-              <span className="text-[8px] font-black text-emerald-200 uppercase tracking-widest rotate-90">
-                Suave
-              </span>
-            </div>
+            {/* OVERLAY SVG DE CORREDOR DIGITAL AMPLO COM CURVAS SUAVIZADAS */}
+            <svg 
+              className="absolute inset-2 w-[calc(100%-16px)] h-[calc(100%-16px)] pointer-events-none z-10" 
+              viewBox="0 0 100 100" 
+              preserveAspectRatio="none"
+            >
+              {/* ABERRAÇÃO LATERAL ESQUERDA MÍNIMA (CURVA AMPLA E SUAVE) */}
+              <path
+                d="M 0,0 L 8,0 Q 18,50 10,100 L 0,100 Z"
+                fill="rgba(6, 78, 59, 0.22)"
+                stroke="#10b981"
+                strokeWidth="0.8"
+                strokeDasharray="2,2"
+              />
 
-            {/* Direita */}
-            <div className="absolute inset-y-2 right-2 w-[14%] bg-emerald-950/20 backdrop-blur-[1px] rounded-r-[36px] flex flex-col items-center justify-center p-1 border-l border-emerald-400/40 pointer-events-none">
-              <span className="text-[8px] font-black text-emerald-200 uppercase tracking-widest -rotate-90">
-                Suave
-              </span>
-            </div>
+              {/* ABERRAÇÃO LATERAL DIREITA MÍNIMA (CURVA AMPLA E SUAVE) */}
+              <path
+                d="M 100,0 L 92,0 Q 82,50 90,100 L 100,100 Z"
+                fill="rgba(6, 78, 59, 0.22)"
+                stroke="#10b981"
+                strokeWidth="0.8"
+                strokeDasharray="2,2"
+              />
 
-            {/* CORREDOR CENTRAL EXPANDIDO 360° */}
-            <div className="relative z-10 w-full flex flex-col justify-between h-full py-3 pointer-events-none">
-              <div className="bg-emerald-950/80 backdrop-blur-md border border-emerald-400 rounded-xl py-1.5 px-4 text-center text-xs font-black text-white mx-auto shadow-lg w-4/5">
-                Visão de Longe Panorâmica
+              {/* LINHAS GUIDA DO CORREDOR DIGITAL 360° */}
+              <path d="M 8,0 Q 18,50 10,100" stroke="#34d399" strokeWidth="1.2" fill="none" />
+              <path d="M 92,0 Q 82,50 90,100" stroke="#34d399" strokeWidth="1.2" fill="none" />
+            </svg>
+
+            {/* RÓTULOS DAS ZONAS DO CORREDOR PANORÂMICO */}
+            <div className="relative z-30 w-full flex flex-col justify-between h-full py-3 pointer-events-none">
+              <div className="bg-emerald-950/85 backdrop-blur-md border border-emerald-400 rounded-xl py-1.5 px-4 text-center text-xs font-black text-white mx-auto shadow-lg w-4/5">
+                Visão de Longe Panorâmica (92% Aberto)
               </div>
 
-              <div className="bg-emerald-950/85 backdrop-blur-md border border-emerald-400 rounded-xl py-1.5 px-4 text-center text-xs font-black text-emerald-200 mx-auto my-auto shadow-lg w-3/5">
-                Corredor Intermediário 40% Amplo
+              <div className="bg-emerald-950/90 backdrop-blur-md border border-emerald-400 rounded-xl py-1.5 px-4 text-center text-xs font-black text-emerald-200 mx-auto my-auto shadow-lg w-3/4">
+                Corredor Intermediário Curvo Expandido
               </div>
 
-              <div className="bg-emerald-950/80 backdrop-blur-md border border-emerald-400 rounded-xl py-1.5 px-4 text-center text-xs font-black text-white mx-auto shadow-lg w-3/4">
-                Visão de Perto Expandida
+              <div className="bg-emerald-950/85 backdrop-blur-md border border-emerald-400 rounded-xl py-1.5 px-4 text-center text-xs font-black text-white mx-auto shadow-lg w-4/5">
+                Visão de Perto Ampla (Leitura Sem Esforço)
               </div>
             </div>
 
           </div>
 
           <ul className="text-xs text-slate-700 space-y-1.5 list-disc list-inside font-medium">
-            <li><strong className="text-emerald-800">Campo Panorâmico:</strong> 80% menos desfoque nas laterais para leitura e direção.</li>
-            <li><strong className="text-emerald-800">Conforto Imediato:</strong> Sem sensação de tontura ou necessidade de movimentar o pescoço.</li>
-            <li><strong className="text-emerald-800">Foco Dinâmico Rápido:</strong> Transição fluida entre a TV, o computador e o smartphone.</li>
+            <li><strong className="text-emerald-800">Ampulheta Panorâmica 360°:</strong> Até 80% menos desfoque nas laterais.</li>
+            <li><strong className="text-emerald-800">Conforto Visual Absoluto:</strong> Transição óptica fluida sem sensação de tontura.</li>
+            <li><strong className="text-emerald-800">Foco Dinâmico:</strong> Movimente apenas os olhos para ler celulares e monitores.</li>
           </ul>
         </div>
 
