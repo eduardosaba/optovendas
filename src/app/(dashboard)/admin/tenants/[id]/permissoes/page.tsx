@@ -82,6 +82,17 @@ export default function DetalhesTenantPage() {
     }
   }
 
+  async function toggleModuloClinica(campo: "possui_otica" | "possui_consultorio") {
+    const valorAtual = clinica?.[campo] ?? true;
+    const { error } = await supabase.from("clinicas").update({ [campo]: !valorAtual }).eq("id", id);
+    if (!error) {
+      toast.success("Módulo atualizado para o tenant.");
+      setClinica((prev: any) => ({ ...prev, [campo]: !valorAtual }));
+    } else {
+      toast.error("Erro ao atualizar módulo.");
+    }
+  }
+
   if (loading) return <div className="p-20 text-center font-black animate-pulse text-slate-300">MAPEANDO ACESSOS...</div>;
 
   return (
@@ -152,6 +163,41 @@ export default function DetalhesTenantPage() {
         </div>
 
         <div className="space-y-6">
+           <section className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm space-y-4">
+              <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                <Settings size={20} className="text-cyan-600"/> Módulos Contratados
+              </h2>
+              <p className="text-xs text-slate-400">Ative ou desative módulos individuais para esta empresa no SaaS.</p>
+              
+              <div className="space-y-3 pt-2">
+                 <div className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between">
+                    <div>
+                       <p className="text-sm font-black text-slate-800">Módulo Ótica</p>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">Vendas, OS, Armações, Tratamentos</p>
+                    </div>
+                    <button
+                      onClick={() => toggleModuloClinica("possui_otica")}
+                      className={`p-2 rounded-xl transition-all ${ (clinica?.possui_otica ?? true) ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'}`}
+                    >
+                       { (clinica?.possui_otica ?? true) ? <ToggleRight size={28}/> : <ToggleLeft size={28}/>}
+                    </button>
+                 </div>
+
+                 <div className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between">
+                    <div>
+                       <p className="text-sm font-black text-slate-800">Módulo Clínica / Atendimento</p>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">Prontuário, Consultório, Exames, Agenda</p>
+                    </div>
+                    <button
+                      onClick={() => toggleModuloClinica("possui_consultorio")}
+                      className={`p-2 rounded-xl transition-all ${ (clinica?.possui_consultorio ?? true) ? 'text-emerald-500 hover:bg-emerald-50' : 'text-slate-400 hover:bg-slate-100'}`}
+                    >
+                       { (clinica?.possui_consultorio ?? true) ? <ToggleRight size={28}/> : <ToggleLeft size={28}/>}
+                    </button>
+                 </div>
+              </div>
+           </section>
+
            <section className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm">
               <h2 className="text-lg font-black text-slate-800 mb-6 flex items-center gap-2">
                 <UserCircle size={20} className="text-cyan-600"/> Usuários Ativos

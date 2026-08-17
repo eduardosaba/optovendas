@@ -55,9 +55,21 @@ export default function GestaoEquipePage() {
 
   useEffect(() => { carregarEquipe(); }, []);
 
+  function gerarSenhaSegura() {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%";
+    let p = "";
+    for (let i = 0; i < 12; i++) {
+      p += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setSenha(p);
+    setMostrarSenha(true);
+    toast.success("Senha segura gerada!");
+  }
+
   async function handleCriarUsuario(e: FormEvent) {
     e.preventDefault();
     if (!nome || !email || !senha) return toast.info("Preencha todos os campos.");
+    if (senha.length < 8) return toast.info("A senha deve ter no mínimo 8 caracteres por segurança.");
     
     setSalvando(true);
     try {
@@ -141,9 +153,18 @@ export default function GestaoEquipePage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Senha de Acesso</label>
+                <div className="flex justify-between items-center ml-2 mr-1">
+                  <label className="text-[10px] font-black uppercase text-slate-400">Senha de Acesso (Mín. 8 caracteres)</label>
+                  <button
+                    type="button"
+                    onClick={gerarSenhaSegura}
+                    className="text-[10px] font-black uppercase text-blue-600 hover:underline"
+                  >
+                    + Gerar Senha Forte
+                  </button>
+                </div>
                 <div className="relative">
-                  <input type={mostrarSenha ? "text" : "password"} value={senha} onChange={e => setSenha(e.target.value)} className="w-full px-5 py-4 bg-slate-50 rounded-2xl font-bold border-none focus:ring-2 focus:ring-blue-500 shadow-inner" placeholder="Mínimo 6 caracteres" />
+                  <input type={mostrarSenha ? "text" : "password"} value={senha} onChange={e => setSenha(e.target.value)} className="w-full px-5 py-4 bg-slate-50 rounded-2xl font-bold border-none focus:ring-2 focus:ring-blue-500 shadow-inner" placeholder="Mínimo 8 caracteres" />
                   <button type="button" onClick={() => setMostrarSenha(!mostrarSenha)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
                     {mostrarSenha ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>

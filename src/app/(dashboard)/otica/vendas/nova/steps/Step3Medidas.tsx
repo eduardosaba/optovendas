@@ -113,6 +113,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneSizeRef = useRef<{ width: number; height: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
 
@@ -165,7 +166,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   const [pontoArmacaoB, setPontoArmacaoB] = useState<MarkerPoint | null>(null);
   const [armacaoTotalMm, setArmacaoTotalMm] = useState("0.0");
   const [ponteMedidaMm, setPonteMedidaMm] = useState("0.0");
-  const [bloquearSemConferenciaPT, setBloquearSemConferenciaPT] = useState(true);
+  const [bloquearSemConferenciaPT, setBloquearSemConferenciaPT] = useState(false);
   const [isPointerActive, setIsPointerActive] = useState(false);
   const [pointerPos, setPointerPos] = useState<MarkerPoint | null>(null);
   const [inclinacao, setInclinacao] = useState<number | null>(null);
@@ -957,18 +958,25 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
   async function abrirCamera() {
     setCameraError("");
 
-    // Em dispositivos móveis, prefira abrir o app de câmera via input[file] com capture
     try {
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
       const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) || (typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0));
       if (isMobile) {
-        // dispara o input file com capture (atributo já presente no markup)
-        fileInputRef.current?.click();
+        // Dispara o input de câmera nativa do celular (com capture="user")
+        if (cameraInputRef.current) {
+          cameraInputRef.current.click();
+        } else {
+          fileInputRef.current?.click();
+        }
         return;
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError("Este dispositivo/navegador não suporta acesso à câmera.");
+        if (cameraInputRef.current) {
+          cameraInputRef.current.click();
+        } else {
+          setCameraError("Este dispositivo/navegador não suporta acesso à câmera.");
+        }
         return;
       }
 
@@ -981,7 +989,11 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
       setCameraOpen(true);
     } catch (err) {
       console.warn('abrirCamera erro:', err);
-      setCameraError("Não foi possível abrir a câmera. Verifique as permissões e tente novamente.");
+      if (cameraInputRef.current) {
+        cameraInputRef.current.click();
+      } else {
+        setCameraError("Não foi possível abrir a câmera. Verifique as permissões e tente novamente.");
+      }
     }
   }
 
@@ -1679,6 +1691,17 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
               onChange={(e) => void handleFile(e)}
               className="hidden"
               aria-label="Upload de foto para medidas"
+            />
+            <input
+              id="medidas_foto_camera"
+              name="medidas_foto_camera"
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="user"
+              onChange={(e) => void handleFile(e)}
+              className="hidden"
+              aria-label="Capturar foto com a câmera"
             />
             <div className="w-20 h-20 bg-slate-50 text-slate-300 rounded-3xl flex items-center justify-center group-hover:bg-cyan-50 group-hover:text-cyan-500 transition-all mb-4">
               <Camera size={40} />

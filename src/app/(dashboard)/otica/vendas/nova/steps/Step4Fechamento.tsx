@@ -52,6 +52,9 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   const [termoOpen, setTermoOpen] = useState(false);
   const [confirmNoPaymentOpen, setConfirmNoPaymentOpen] = useState(false);
   const [contas, setContas] = useState<any[]>([]);
+  const [showNovaContaModal, setShowNovaContaModal] = useState(false);
+  const [novaContaNome, setNovaContaNome] = useState("");
+  const [criandoConta, setCriandoConta] = useState(false);
   const [descontoManual, setDescontoManual] = useState<number>(0);
   const [modalSenha, setModalSenha] = useState(false);
   const [senhaAutorizador, setSenhaAutorizador] = useState("");
@@ -328,7 +331,11 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   // --- FINALIZAÇÃO ---
   async function finalizar(tipo: 'normal' | 'pendente' = 'normal', skipAutorizacaoCheck = false) {
     if (loading) return;
-    if (tipo === 'normal' && !data.assinatura) return toast.error("Colha a assinatura de compra.");
+    
+    // Se for acionado pelo botão normal do card, chamar o handler unificado da janela se disponível
+    if (tipo === 'normal' && typeof (window as any).__opv_finalize === 'function') {
+      return (window as any).__opv_finalize();
+    }
     
     setLoading(true);
     try {
@@ -565,18 +572,58 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
     }
   }
 
+  async function handleCriarNovaConta(e: React.FormEvent) {
+    e.preventDefault();
+    if (!novaContaNome.trim()) return toast.error("Informe o nome da conta.");
+    setCriandoConta(true);
+    try {
+      const ctx = await resolveClinicaContext();
+      const payload: any = { descricao: novaContaNome.trim(), saldo_atual: 0 };
+      if (ctx.clinicaId && ctx.clinicaId !== 'master') payload.clinica_id = ctx.clinicaId;
+
+      const { data: nova, error } = await supabase.from('conta_corrente').insert(payload).select().single();
+      if (error) throw error;
+
+      setContas(prev => [...prev, nova]);
+      onChange({ ...data, financeiro: { ...data.financeiro, contaDestinoId: nova.id } });
+      toast.success(`Conta "${nova.descricao}" criada e selecionada!`);
+      setNovaContaNome("");
+      setShowNovaContaModal(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao cadastrar conta.");
+    } finally {
+      setCriandoConta(false);
+    }
+  }
+
   useEffect(() => {
     async function carregarContas() {
       try {
         const ctx = await resolveClinicaContext();
-        const contasRes = await supabase.from('conta_corrente').select('*').eq('clinica_id', ctx.clinicaId);
-        setContas(contasRes.data || []);
+        let query = supabase.from('conta_corrente').select('*');
+        if (ctx.clinicaId && ctx.clinicaId !== 'master') {
+          query = query.eq('clinica_id', ctx.clinicaId);
+        }
+        const contasRes = await query.order('descricao');
+        let lista = contasRes.data || [];
+
+        // Auto-heal: Se a clínica não possui nenhuma conta cadastrada, criar "Caixa Geral" automaticamente
+        if (lista.length === 0 && ctx.clinicaId && ctx.clinicaId !== 'master') {
+          const { data: novaConta } = await supabase
+            .from('conta_corrente')
+            .insert({ clinica_id: ctx.clinicaId, descricao: 'Caixa Geral', saldo_atual: 0 })
+            .select()
+            .single();
+          if (novaConta) lista = [novaConta];
+        }
+
+        setContas(lista);
         // default selection if not set
-        if ((data.financeiro?.valorEntrada || 0) > 0 && !data.financeiro?.contaDestinoId && contasRes.data?.[0]) {
-          onChange({ ...data, financeiro: { ...data.financeiro, contaDestinoId: contasRes.data[0].id } });
+        if (!data.financeiro?.contaDestinoId && lista[0]) {
+          onChange({ ...data, financeiro: { ...data.financeiro, contaDestinoId: lista[0].id } });
         }
       } catch (e) {
-        // ignore
+        console.warn('Erro ao carregar contas correntes', e);
       }
     }
     void carregarContas();
@@ -713,11 +760,20 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
 
            {valorEntrada > 0 && (
              <div className="mt-4 p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-               <label className="text-[10px] font-black uppercase text-emerald-600 mb-2 block">Depositar entrada em:</label>
+               <div className="flex justify-between items-center mb-2">
+                 <label className="text-[10px] font-black uppercase text-emerald-600">Depositar entrada em:</label>
+                 <button
+                   type="button"
+                   onClick={() => setShowNovaContaModal(true)}
+                   className="text-[10px] font-black uppercase text-emerald-700 hover:text-emerald-900 underline cursor-pointer"
+                 >
+                   + Nova Conta
+                 </button>
+               </div>
                <select
                  value={data.financeiro?.contaDestinoId || ''}
                  onChange={(e) => onChange({...data, financeiro: {...data.financeiro, contaDestinoId: e.target.value}})}
-                 className="w-full bg-white border-none rounded-xl font-bold text-sm p-3"
+                 className="w-full bg-white border-none rounded-xl font-bold text-sm p-3 focus:ring-2 focus:ring-emerald-500"
                >
                  <option value="">Selecione a conta...</option>
                  {contas.map((c) => (
@@ -725,7 +781,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
                  ))}
                </select>
                {valorEntrada > 0 && !data.financeiro?.contaDestinoId && (
-                 <p className="text-sm text-rose-600 mt-2">Selecione a conta para depositar a entrada.</p>
+                 <p className="text-xs font-bold text-rose-600 mt-2">Selecione a conta para depositar a entrada.</p>
                )}
              </div>
            )}
@@ -991,6 +1047,56 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
            </div>
         </div>
       )}
+
+      {/* MODAL CRIAR NOVA CONTA CORRENTE */}
+      {showNovaContaModal && (
+        <div className="fixed inset-0 z-[380] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
+          <div className="bg-white p-8 rounded-[40px] max-w-md w-full shadow-2xl space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-black text-slate-900">Nova Conta Corrente</h3>
+              <button
+                type="button"
+                onClick={() => setShowNovaContaModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleCriarNovaConta} className="space-y-4">
+              <div>
+                <label className="block text-xs font-black uppercase text-slate-400 mb-1">
+                  Nome da Conta / Banco
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Caixa Principal, Itaú, Nubank"
+                  value={novaContaNome}
+                  onChange={(e) => setNovaContaNome(e.target.value)}
+                  className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold text-sm focus:ring-2 focus:ring-emerald-500"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNovaContaModal(false)}
+                  className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={criandoConta}
+                  className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all"
+                >
+                  {criandoConta ? 'Cadastrando...' : 'Cadastrar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+       )}
     </div>
   );
 }

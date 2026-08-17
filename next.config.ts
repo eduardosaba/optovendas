@@ -13,10 +13,7 @@ try {
 }
 
 const nextConfig: NextConfig = {
-  // Removido uso explícito do Turbopack para evitar conflitos no CI (Vercel).
   reactStrictMode: true,
-  // Habilita uma configuração vazia de Turbopack para evitar erro quando
-  // há custom webpack configs em uso. Mantém comportamento atual.
   turbopack: {},
   images: {
     remotePatterns: supabaseHostname
@@ -36,7 +33,7 @@ const withPWA = withPWAInit({
   dest: "public",
   register: true,
   skipWaiting: true,
-  disable: process.env.NODE_ENV === "development",
+  disable: true,
 });
 
-export default withPWA(nextConfig);
+export default process.env.ENABLE_PWA === "true" ? withPWA(nextConfig) : nextConfig;

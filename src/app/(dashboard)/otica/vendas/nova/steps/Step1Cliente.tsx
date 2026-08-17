@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { AlertTriangle, Eye, FileText, Hash } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { AlertTriangle, Eye, FileText, Hash, Check, Search, User, X } from "lucide-react";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import ReceitaPdf from "@/components/consultorio/ReceitaPdf";
 import Modal from '@/components/ui/Modal';
@@ -35,11 +35,38 @@ function toRefracaoValue(r: ReceitaOptometrica | null | undefined) {
   } as any;
 }
 
+function mascararCPF(cpf?: string | null) {
+  if (!cpf) return "";
+  const limpo = cpf.replace(/\D/g, "");
+  if (limpo.length !== 11) return cpf;
+  return `***.${limpo.slice(3, 6)}.${limpo.slice(6, 9)}-**`;
+}
+
 export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, onChange }: Props) {
   const receitaSelecionada = receitas.find((r) => r.id === data.receitaId) ?? null;
   const [previewReceita, setPreviewReceita] = useState<ReceitaOptometrica | null>(null);
   const [clinicaHeader, setClinicaHeader] = useState<any | null>(null);
   const [osExists, setOsExists] = useState<boolean | null>(null);
+
+  // Estados para Combobox de busca dinâmica de paciente
+  const [buscaPaciente, setBuscaPaciente] = useState("");
+  const [dropdownAberto, setDropdownAberto] = useState(false);
+
+  const pacienteAtual = useMemo(
+    () => pacientes.find((p) => p.id === data.pacienteId) ?? null,
+    [pacientes, data.pacienteId],
+  );
+
+  const pacientesFiltrados = useMemo(() => {
+    if (!buscaPaciente.trim()) return pacientes.slice(0, 20);
+    const termo = buscaPaciente.toLowerCase().trim();
+    return pacientes.filter((p) => {
+      const nomeMatch = (p.nome_completo || "").toLowerCase().includes(termo);
+      const cpfMatch = (p.cpf || "").replace(/\D/g, "").includes(termo.replace(/\D/g, ""));
+      const cidadeMatch = (p.cidade_atendimento || "").toLowerCase().includes(termo);
+      return nomeMatch || cpfMatch || cidadeMatch;
+    });
+  }, [pacientes, buscaPaciente]);
 
   // load otica/clinica branding when preview opens
   useEffect(() => {
@@ -133,9 +160,11 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
         od_esferico: next.odEsferico ?? "",
         od_cilindrico: next.odCilindrico ?? "",
         od_eixo: next.odEixo ?? "",
+        od_av: next.odAv ?? "",
         oe_esferico: next.oeEsferico ?? "",
         oe_cilindrico: next.oeCilindrico ?? "",
         oe_eixo: next.oeEixo ?? "",
+        oe_av: next.oeAv ?? "",
         adicao: next.adicao ?? "",
         dp_dnp: next.dpDnp ?? "",
       },
@@ -224,26 +253,90 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
 
         {!data.vendaManual ? (
           <>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">Selecionar Paciente</label>
-              <select
-                value={data.pacienteId}
-                onChange={(e) =>
-                  onChange({
-                    ...data,
-                    pacienteId: e.target.value,
-                    receitaId: "",
-                  })
-                }
-                className="w-full bg-slate-50 rounded-[20px] border-none p-5 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 transition-all"
-              >
-                <option value="">Buscar na base de dados...</option>
-                {pacientes.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome_completo} {p.cpf ? `(${p.cpf})` : ""}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-2 relative">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest">
+                Buscar Cliente / Paciente
+              </label>
+
+              {/* Paciente já selecionado */}
+              {pacienteAtual ? (
+                <div className="p-5 bg-white rounded-[24px] border border-cyan-100 shadow-sm flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-cyan-50 text-cyan-600 rounded-2xl">
+                      <User size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-slate-900">{pacienteAtual.nome_completo}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">
+                        {pacienteAtual.cpf ? `CPF: ${mascararCPF(pacienteAtual.cpf)}` : "CPF não informado"} •{" "}
+                        {pacienteAtual.cidade_atendimento || "Sem cidade"}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBuscaPaciente("");
+                      onChange({ ...data, pacienteId: "", receitaId: "" });
+                    }}
+                    className="p-2 text-slate-400 hover:text-rose-600 rounded-xl hover:bg-slate-50 transition-all font-bold text-xs flex items-center gap-1"
+                  >
+                    <X size={16} /> Trocar Cliente
+                  </button>
+                </div>
+              ) : (
+                /* Campo de busca em tempo real com dropdown */
+                <div className="relative">
+                  <div className="relative">
+                    <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <input
+                      type="text"
+                      placeholder="Digite o nome, CPF ou cidade do cliente..."
+                      value={buscaPaciente}
+                      onFocus={() => setDropdownAberto(true)}
+                      onChange={(e) => {
+                        setBuscaPaciente(e.target.value);
+                        setDropdownAberto(true);
+                      }}
+                      className="w-full bg-slate-50 rounded-[20px] border-none pl-12 pr-5 py-5 font-bold text-slate-700 focus:ring-2 focus:ring-cyan-500 transition-all text-sm"
+                    />
+                  </div>
+
+                  {dropdownAberto && (
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-[24px] shadow-2xl border border-slate-100 z-30 max-h-64 overflow-y-auto p-2 divide-y divide-slate-50 animate-in fade-in zoom-in-95">
+                      {pacientesFiltrados.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-400 font-bold">
+                          Nenhum paciente encontrado para "{buscaPaciente}".
+                        </div>
+                      ) : (
+                        pacientesFiltrados.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              onChange({ ...data, pacienteId: p.id, receitaId: "" });
+                              setDropdownAberto(false);
+                              setBuscaPaciente("");
+                            }}
+                            className="w-full text-left p-3.5 hover:bg-cyan-50/50 rounded-2xl transition-all flex items-center justify-between group"
+                          >
+                            <div>
+                              <p className="text-sm font-black text-slate-800 group-hover:text-cyan-700">
+                                {p.nome_completo}
+                              </p>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                {p.cpf ? `CPF: ${mascararCPF(p.cpf)}` : "Sem CPF"} •{" "}
+                                {p.cidade_atendimento || "Sem cidade"}
+                              </p>
+                            </div>
+                            <Check size={16} className="text-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {data.pacienteId && (

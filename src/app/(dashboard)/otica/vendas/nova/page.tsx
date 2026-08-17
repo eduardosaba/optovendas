@@ -212,6 +212,22 @@ function NovaVendaStepperContent() {
     [receitas, vendaData.receitaId],
   );
 
+  const temProdutoSelecionado = useMemo(() => {
+    return (
+      Boolean(vendaData.armacaoPropria) ||
+      Boolean(vendaData.armacaoId) ||
+      Boolean(vendaData.armacaoTipoId) ||
+      Boolean(vendaData.lenteId) ||
+      (vendaData.tratamentos?.length ?? 0) > 0
+    );
+  }, [
+    vendaData.armacaoPropria,
+    vendaData.armacaoId,
+    vendaData.armacaoTipoId,
+    vendaData.lenteId,
+    vendaData.tratamentos,
+  ]);
+
   // Atualizador do Relógio
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -429,13 +445,13 @@ function NovaVendaStepperContent() {
       return;
     }
 
-    if (vendaData.armacaoPropria && !vendaData.termoQuebraAceito) {
-      toast.info("Confirme o aceite do termo de responsabilidade.");
+    if (!temProdutoSelecionado) {
+      toast.info("Selecione ao menos um produto (armação, lente ou tratamento) para gerar a O.S.");
       return;
     }
 
-    if (vendaData.armacaoPropria && !vendaData.assinatura) {
-      toast.info("Colete a assinatura do cliente para armação própria.");
+    if (vendaData.armacaoPropria && !vendaData.termoQuebraAceito) {
+      toast.info("Para armação própria do cliente, assine o termo na seção 'Documentação' antes de finalizar.");
       return;
     }
 
@@ -729,7 +745,14 @@ function NovaVendaStepperContent() {
   }, [finalizarVenda, step]);
 
   function nextStep() {
-    // Adicionar lógica de validação aqui se necessário
+    if (step === 1 && !vendaData.pacienteId && !vendaData.vendaManual) {
+      toast.info("Selecione ou informe os dados do cliente para avançar.");
+      return;
+    }
+    if (step === 2 && !temProdutoSelecionado) {
+      toast.info("Selecione pelo menos um produto (armação, lente ou tratamento) para avançar.");
+      return;
+    }
     setStep((s) => Math.min(s + 1, 4));
   }
 
@@ -740,9 +763,12 @@ function NovaVendaStepperContent() {
   // Função para mudar de etapa via clique na barra
   const handleJumpToStep = (targetStep: number) => {
     if (salvando) return;
-    // Bloqueio simples: não permite pular adiante sem selecionar cliente
     if (targetStep > 1 && !vendaData.pacienteId && !vendaData.vendaManual) {
       toast.info("Selecione um cliente primeiro.");
+      return;
+    }
+    if (targetStep > 2 && !temProdutoSelecionado) {
+      toast.info("Selecione pelo menos um produto (armação, lente ou tratamento) antes de prosseguir.");
       return;
     }
     setStep(targetStep);
@@ -785,34 +811,43 @@ function NovaVendaStepperContent() {
       </header>
 
       <nav className="flex justify-between items-center bg-white p-6 rounded-[32px] shadow-sm border border-slate-50">
-        {ETAPAS.map((e, idx) => (
-          <div key={e.id} className="flex items-center flex-1 last:flex-none">
-            <button
-              type="button"
-              onClick={() => handleJumpToStep(e.id)}
-              disabled={salvando}
-              className={`flex items-center gap-3 transition-all hover:opacity-80 group cursor-pointer disabled:cursor-not-allowed ${step >= e.id ? "text-cyan-600" : "text-slate-300"}`}
-            >
-              <div
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black shadow-sm transition-all ${
-                  step === e.id
-                    ? "bg-cyan-600 text-white scale-110 shadow-cyan-100"
-                    : step > e.id
-                      ? "bg-cyan-100 text-cyan-600"
-                      : "bg-slate-50 text-slate-400 group-hover:bg-slate-100"
-                }`}
+        {ETAPAS.map((e, idx) => {
+          const concluida = (
+            e.id === 1 ? Boolean(vendaData.pacienteId || vendaData.vendaManual) :
+            e.id === 2 ? temProdutoSelecionado :
+            e.id === 3 ? Boolean(vendaData.medidas?.od_dnp || vendaData.medidas?.oe_dnp || vendaData.pupilometroFoto) :
+            e.id === 4 ? Boolean(vendaData.financeiro.total > 0) : false
+          );
+
+          return (
+            <div key={e.id} className="flex items-center flex-1 last:flex-none">
+              <button
+                type="button"
+                onClick={() => handleJumpToStep(e.id)}
+                disabled={salvando}
+                className={`flex items-center gap-3 transition-all hover:opacity-80 group cursor-pointer disabled:cursor-not-allowed ${step >= e.id ? "text-cyan-600" : "text-slate-300"}`}
               >
-                {step > e.id ? <CheckCircle2 size={20} /> : e.icon}
-              </div>
-              <span className={`hidden md:block text-[10px] font-black uppercase tracking-widest ${step === e.id ? "opacity-100" : "opacity-60"}`}>
-                {e.label}
-              </span>
-            </button>
-            {idx < ETAPAS.length - 1 && (
-              <div className={`h-[2px] flex-1 mx-4 rounded-full transition-colors ${step > e.id ? "bg-cyan-100" : "bg-slate-50"}`} />
-            )}
-          </div>
-        ))}
+                <div
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black shadow-sm transition-all ${
+                    step === e.id
+                      ? "bg-cyan-600 text-white scale-110 shadow-cyan-100"
+                      : concluida
+                        ? "bg-cyan-100 text-cyan-600"
+                        : "bg-slate-50 text-slate-400 group-hover:bg-slate-100"
+                  }`}
+                >
+                  {concluida && step !== e.id ? <CheckCircle2 size={20} /> : e.icon}
+                </div>
+                <span className={`hidden md:block text-[10px] font-black uppercase tracking-widest ${step === e.id ? "opacity-100" : "opacity-60"}`}>
+                  {e.label}
+                </span>
+              </button>
+              {idx < ETAPAS.length - 1 && (
+                <div className={`h-[2px] flex-1 mx-4 rounded-full transition-colors ${concluida ? "bg-cyan-100" : "bg-slate-50"}`} />
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <main className="animate-in fade-in slide-in-from-right-4 duration-500">

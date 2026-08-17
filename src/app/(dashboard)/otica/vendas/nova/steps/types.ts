@@ -83,6 +83,8 @@ export type ReceitaManualData = {
   oe_cilindrico: string;
   od_eixo: string;
   oe_eixo: string;
+  od_av?: string;
+  oe_av?: string;
   adicao: string;
   dp_dnp: string;
 };

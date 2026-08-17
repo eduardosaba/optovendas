@@ -175,6 +175,19 @@ export default function LoginPage() {
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : "Entrar no Sistema"}
             </button>
+
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                setEmail("demo@optovendas.com.br");
+                setPassword("DemoOpto2026!");
+                toast.info("Credenciais de demonstração inseridas. Clique em Entrar no Sistema.");
+              }}
+              className="w-full bg-slate-100 text-slate-700 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-cyan-50 hover:text-cyan-700 transition-all flex items-center justify-center gap-2"
+            >
+              ✨ Acessar em Modo Demonstração (Demo)
+            </button>
           </div>
         </form>
       </div>

@@ -3,11 +3,12 @@
 import OticaLogoBadge from "@/components/shared/OticaLogoBadge";
 import { DashboardGrid } from "@/components/ui/DashboardGrid";
 import { resolveClinicaContext } from "@/lib/clinica";
-import { ArrowLeft, ClipboardCheck, Ruler } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Ruler, History, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { VendaData } from "../vendas/nova/steps/types";
+import HistoricoMedidas from "@/components/otica/HistoricoMedidas";
 
 const Step3Medidas = dynamic(
   () => import("../vendas/nova/steps/Step3Medidas"),
@@ -73,6 +74,7 @@ const BASE_MEDIDAS: VendaData = {
 export default function MedidasPage() {
   const [clinicaId, setClinicaId] = useState("");
   const [dados, setDados] = useState<VendaData>(BASE_MEDIDAS);
+  const [abaAtiva, setAbaAtiva] = useState<"novo" | "historico">("novo");
 
   useEffect(() => {
     async function carregar() {
@@ -95,10 +97,10 @@ export default function MedidasPage() {
           </Link>
           <div>
             <p className="mb-1 text-xs font-black uppercase tracking-[0.2em] text-cyan-600">
-              Precisao de Montagem
+              Precisao de Montagem & Auditoria
             </p>
             <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">
-              Tomada de Medidas<span className="text-cyan-600">.</span>
+              Pupilômetro Virtual<span className="text-cyan-600">.</span>
             </h1>
           </div>
         </div>
@@ -106,73 +108,106 @@ export default function MedidasPage() {
           <OticaLogoBadge />
         </div>
 
-        <Link
-          href="/otica/vendas/nova"
-          className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-xs font-black uppercase tracking-wider text-white transition-all hover:bg-cyan-600"
-        >
-          <ClipboardCheck size={16} /> Usar na Nova Venda
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/otica/vendas/nova"
+            className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-6 py-3 text-xs font-black uppercase tracking-wider text-white transition-all hover:bg-cyan-600"
+          >
+            <ClipboardCheck size={16} /> Usar na Nova Venda
+          </Link>
 
-        <Link
-          href="/otica/medidas/conferencia"
-          className="inline-flex items-center gap-2 rounded-2xl border border-cyan-100 bg-cyan-50 px-6 py-3 text-xs font-black uppercase tracking-wider text-cyan-700 transition-all hover:bg-cyan-100"
-        >
-          <Ruler size={16} /> Dashboard de Conferencia
-        </Link>
+          <Link
+            href="/otica/medidas/conferencia"
+            className="inline-flex items-center gap-2 rounded-2xl border border-cyan-100 bg-cyan-50 px-6 py-3 text-xs font-black uppercase tracking-wider text-cyan-700 transition-all hover:bg-cyan-100"
+          >
+            <Ruler size={16} /> Dashboard de Conferencia
+          </Link>
+        </div>
       </header>
 
-      <Step3Medidas data={dados} onChange={setDados} clinicaId={clinicaId} />
+      {/* SELETOR DE ABAS DA PÁGINA */}
+      <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("novo")}
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all ${
+            abaAtiva === "novo"
+              ? "bg-cyan-600 text-white shadow-lg shadow-cyan-100"
+              : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
+          }`}
+        >
+          <Sparkles size={16} /> Novo Pupilômetro por Câmera
+        </button>
 
-      <section className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
-        {/* 🟢 CORREÇÃO DA DIV LINHA 114: Removido o aninhamento quebrado */}
-        <div className="flex items-center gap-3 text-cyan-600 mb-4">
-          <Ruler size={18} className="text-cyan-600" />
-          <h2 className="text-sm font-black uppercase tracking-wider text-slate-700">
-            Resumo Tecnico da Medicao
-          </h2>
-        </div>
+        <button
+          type="button"
+          onClick={() => setAbaAtiva("historico")}
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all ${
+            abaAtiva === "historico"
+              ? "bg-cyan-600 text-white shadow-lg shadow-cyan-100"
+              : "bg-white border border-slate-200 text-slate-500 hover:bg-slate-50"
+          }`}
+        >
+          <History size={16} /> Histórico & Fotos de Medidas
+        </button>
+      </div>
 
-        {/* 🟢 INTEGRAÇÃO DA GRADE INTELIGENTE COM A PROP DO TIPO NUMBER */}
-        <DashboardGrid cols={4}>
-          <ResumoItem
-            titulo="OD DNP"
-            valor={`${dados.medidas.od_dnp || "--"} mm`}
-          />
-          <ResumoItem
-            titulo="OE DNP"
-            valor={`${dados.medidas.oe_dnp || "--"} mm`}
-          />
-          <ResumoItem
-            titulo="Altura (H)"
-            valor={`${dados.medidas.altura || "--"} mm`}
-          />
-          <ResumoItem
-            titulo="Escala"
-            valor={
-              dados.medidas.escala_usada
-                ? `${dados.medidas.escala_usada.toFixed(6)} mm/px`
-                : "--"
-            }
-          />
-        </DashboardGrid>
+      {abaAtiva === "novo" ? (
+        <>
+          <Step3Medidas data={dados} onChange={setDados} clinicaId={clinicaId} />
 
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <ResumoItem
-            titulo="Modo de Calibracao"
-            valor={
-              dados.medidas.modo_medicao === "armacao" ? "Armacao" : "Cartao"
-            }
-          />
-          <ResumoItem
-            titulo="Auditoria"
-            valor={
-              dados.pupilometroFotoStorageUrl
-                ? "Foto persistida no storage"
-                : "Sem URL persistida"
-            }
-          />
-        </div>
-      </section>
+          <section className="rounded-[32px] border border-slate-100 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3 text-cyan-600 mb-4">
+              <Ruler size={18} className="text-cyan-600" />
+              <h2 className="text-sm font-black uppercase tracking-wider text-slate-700">
+                Resumo Tecnico da Medicao
+              </h2>
+            </div>
+
+            <DashboardGrid cols={4}>
+              <ResumoItem
+                titulo="OD DNP"
+                valor={`${dados.medidas.od_dnp || "--"} mm`}
+              />
+              <ResumoItem
+                titulo="OE DNP"
+                valor={`${dados.medidas.oe_dnp || "--"} mm`}
+              />
+              <ResumoItem
+                titulo="Altura (H)"
+                valor={`${dados.medidas.altura || "--"} mm`}
+              />
+              <ResumoItem
+                titulo="Escala"
+                valor={
+                  dados.medidas.escala_usada
+                    ? `${dados.medidas.escala_usada.toFixed(6)} mm/px`
+                    : "--"
+                }
+              />
+            </DashboardGrid>
+
+            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <ResumoItem
+                titulo="Modo de Calibracao"
+                valor={
+                  dados.medidas.modo_medicao === "armacao" ? "Armacao" : "Cartao"
+                }
+              />
+              <ResumoItem
+                titulo="Auditoria"
+                valor={
+                  dados.pupilometroFotoStorageUrl
+                    ? "Foto persistida no storage"
+                    : "Sem URL persistida"
+                }
+              />
+            </div>
+          </section>
+        </>
+      ) : (
+        <HistoricoMedidas clinicaId={clinicaId} />
+      )}
     </div>
   );
 }

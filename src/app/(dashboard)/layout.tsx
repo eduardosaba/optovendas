@@ -83,6 +83,7 @@ export default function DashboardLayout({
   const { nomeSistema, logoSistema, corPrimaria } = useConfig();
   const [loading, setLoading] = useState(true);
   const [possuiOtica, setPossuiOtica] = useState(true);
+  const [possuiConsultorio, setPossuiConsultorio] = useState(true);
   const [role, setRole] = useState<string>("");
   const [isMaster, setIsMaster] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -109,10 +110,17 @@ export default function DashboardLayout({
   // Controla apenas a bottom navigation móvel
   const showBottomNav = false;
 
+  const [isDemoUser, setIsDemoUser] = useState(false);
+
   useEffect(() => {
     async function initLayout() {
       setMounted(true);
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.email === "demo@optovendas.com.br") {
+          setIsDemoUser(true);
+        }
+
         const ctx = await resolveClinicaContext();
 
         const f = (ctx.funcao || "").toLowerCase();
@@ -124,11 +132,12 @@ export default function DashboardLayout({
           try {
             const { data } = await supabase
               .from("clinicas")
-              .select("possui_otica, status, data_vencimento")
+              .select("possui_otica, possui_consultorio, status, data_vencimento")
               .eq("id", ctx.clinicaId)
               .single();
 
             setPossuiOtica(data?.possui_otica ?? true);
+            setPossuiConsultorio(data?.possui_consultorio ?? true);
 
             // Bloqueio por expiração / status
             try {
@@ -152,8 +161,10 @@ export default function DashboardLayout({
             setPossuiOtica(true);
           }
         }
-      } catch (err) {
-        console.error("Erro no Layout:", err);
+      } catch (err: any) {
+        if (err?.message !== "Sessao expirada. Faca login novamente.") {
+          console.error("Erro no Layout:", err);
+        }
         router.replace("/login");
       } finally {
         setLoading(false);
@@ -293,7 +304,7 @@ export default function DashboardLayout({
       label: "Consultório",
       iconPath: "M12 21a7 7 0 1 0-7-7 7 7 0 0 0 7 7Zm0 0v-3.5m-3.5 0h7",
       iconClass: "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
-      show: ["master", "admin", "consultorio"].includes(role),
+      show: (isMaster || possuiConsultorio) && ["master", "admin", "consultorio"].includes(role),
     },
     {
       href: "/consultorio/pacientes",
@@ -301,7 +312,7 @@ export default function DashboardLayout({
       iconPath:
         "M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2m17 0h2m-2 0h-3m-8 0H4m5-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 1a3 3 0 1 0 0-6",
       iconClass: "bg-sky-50 text-sky-600 group-hover:bg-sky-100",
-      show: ["master", "admin", "consultorio"].includes(role),
+      show: (isMaster || possuiConsultorio) && ["master", "admin", "consultorio"].includes(role),
     },
     {
       href: "/otica",
@@ -311,6 +322,15 @@ export default function DashboardLayout({
       show:
         (isMaster || possuiOtica) &&
         ["master", "admin", "vendas", "atendente"].includes(role),
+    },
+    {
+      href: "/otica/medidas",
+      label: "Pupilômetro",
+      iconPath: "M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2m0 6a4 4 0 1 1-4 4 4 4 0 0 1 4-4",
+      iconClass: "bg-cyan-50 text-cyan-600 group-hover:bg-cyan-100",
+      show:
+        (isMaster || possuiOtica) &&
+        ["master", "admin", "vendas", "atendente", "consultorio"].includes(role),
     },
     {
       href: "/clientes",
@@ -571,6 +591,22 @@ export default function DashboardLayout({
                     ref={mainRef}
                     className={`flex-1 overflow-y-auto p-4 pb-32 md:p-10 md:pb-10 transition-all duration-500 ${ctx?.isFocusMode ? "md:pl-0" : "md:pl-[20rem]"}`}
                   >
+                    {isDemoUser && (
+                      <div className="mb-6 p-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 rounded-3xl text-slate-950 shadow-lg flex flex-wrap items-center justify-between gap-4 animate-in fade-in">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-slate-950/20 rounded-xl">
+                            <ShieldCheck size={20} className="text-slate-950" />
+                          </div>
+                          <div>
+                            <p className="font-black text-sm uppercase tracking-wide">Você está em Modo Demonstração Interativa</p>
+                            <p className="text-xs font-bold opacity-90">Navegue livremente pelas telas reais de exames, ótica, O.S., pupilômetro e financeiro.</p>
+                          </div>
+                        </div>
+                        <Link href="/cadastro" className="px-5 py-2.5 bg-slate-950 text-white font-black text-xs uppercase rounded-2xl shadow hover:bg-slate-900 transition">
+                          Criar Minha Conta Grátis
+                        </Link>
+                      </div>
+                    )}
                     {children}
                     {layoutHydrated ? <WelcomeTour /> : null}
                   </main>
