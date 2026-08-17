@@ -175,11 +175,18 @@ export default function EstoquePage() {
           <OticaLogoBadge />
         </div>
         <div className="flex gap-3 w-full md:w-auto">
+          <Link
+            href="/otica/estoque/etiquetas"
+            className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-4 rounded-2xl font-black text-sm shadow-lg hover:bg-slate-800 transition-all"
+          >
+            <Tag size={18} className="text-cyan-400" /> Gerar Etiquetas
+          </Link>
           <button 
             onClick={() => { if(mostrarForm) fecharFormulario(); else setMostrarForm(true); }}
             className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-cyan-600 text-white px-6 py-4 rounded-2xl font-black text-sm shadow-xl shadow-cyan-100 hover:bg-cyan-700 transition-all"
           >
-            {mostrarForm ? "Cancelar" : <><Plus size={18}/> Novo Item</>}
+            {mostrarForm ? <X size={20} /> : <Plus size={20} />}
+            {mostrarForm ? "Cancelar" : "Cadastrar Modelo"}
           </button>
           <Link href="/otica/estoque/dashboard" className="p-4 bg-slate-900 text-white rounded-2xl shadow-lg hover:bg-slate-800 transition-all">
             <TrendingUp size={20} />
