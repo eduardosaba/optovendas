@@ -623,96 +623,143 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
     const scaleX = naturalW / sceneRect.width;
     const scaleY = naturalH / sceneRect.height;
 
-    // LÓGICA DE RECORTE CORRIGIDA
-    let cropX: number, cropY: number, cropW: number, cropH: number;
+    // Exportar a imagem em alta resolução (2000px)
+    let cropX = 0;
+    let cropY = 0;
+    let cropW = naturalW;
+    let cropH = naturalH;
 
     if (regionRect) {
-      // Se o usuário marcou uma região, usamos ela exatamente (independente do zoom da tela)
       cropX = regionRect.x * scaleX;
       cropY = regionRect.y * scaleY;
       cropW = regionRect.width * scaleX;
       cropH = regionRect.height * scaleY;
-    } else {
-      // Caso contrário, pega os pontos técnicos com um respiro generoso (evita o zoom excessivo)
-      const points = [
-        { x: pupilaDir.x * scaleX, y: pupilaDir.y * scaleY },
-        { x: pupilaEsq.x * scaleX, y: pupilaEsq.y * scaleY },
-        { x: bordaOD.x * scaleX, y: bordaOD.y * scaleY },
-        { x: bordaOE.x * scaleX, y: bordaOE.y * scaleY },
-      ];
-      const minX = Math.min(...points.map(p => p.x));
-      const maxX = Math.max(...points.map(p => p.x));
-      const minY = Math.min(...points.map(p => p.y));
-      const maxY = Math.max(...points.map(p => p.y));
-
-      const padding = (maxX - minX) * 0.5; // Respiro de 50% para não ficar "colado"
-      cropX = Math.max(0, minX - padding);
-      cropY = Math.max(0, minY - padding);
-      cropW = Math.min(naturalW - cropX, (maxX - minX) + (padding * 2));
-      cropH = Math.min(naturalH - cropY, (maxY - minY) + (padding * 2));
     }
 
     const canvas = document.createElement('canvas');
-    // Mantemos uma resolução alta para impressão (2000px de largura)
     canvas.width = 2000;
-    canvas.height = Math.max(1, (cropH / Math.max(1, cropW)) * 2000);
+    canvas.height = Math.max(1, Math.round((cropH / Math.max(1, cropW)) * 2000));
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
     const drawScale = canvas.width / cropW;
-    const toCanvas = (p: { x: number, y: number }) => ({
+    const toCanvas = (p: { x: number; y: number }) => ({
       x: (p.x * scaleX - cropX) * drawScale,
       y: (p.y * scaleY - cropY) * drawScale
     });
 
-    // Desenhar Imagem
+    // 1. Desenhar Foto do Cliente com Ajustes de Brilho/Contraste
     ctx.filter = `brightness(${brilho}%) contrast(${contraste}%)`;
     ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
     ctx.filter = 'none';
 
-    // Configuração de Estilo baseada no Menu Lateral
-    ctx.lineWidth = lineWidth * (canvas.width / 1000); // Escala a espessura conforme o canvas
+    ctx.lineWidth = Math.max(3, lineWidth * (canvas.width / 800));
     ctx.lineCap = 'round';
 
-    // Desenho das guias (DNP e Altura)
-    const drawLine = (p1: any, p2: any, color: string, isDashed = false) => {
+    // Função de desenho de linha no canvas exportado
+    const drawLine = (p1: { x: number; y: number }, p2: { x: number; y: number }, color: string, isDashed = false) => {
       const c1 = toCanvas(p1);
       const c2 = toCanvas(p2);
       ctx.strokeStyle = color;
-      ctx.setLineDash(isDashed ? [15, 10] : []);
+      ctx.setLineDash(isDashed ? [16, 12] : []);
       ctx.beginPath();
       ctx.moveTo(c1.x, c1.y);
       ctx.lineTo(c2.x, c2.y);
       ctx.stroke();
+      ctx.setLineDash([]);
     };
 
+    // Desenho dos Marcadores Circulares OD e OE
+    const drawCircleMarker = (p: { x: number; y: number }, label: string, color: string) => {
+      const c = toCanvas(p);
+      const radius = 18 * (canvas.width / 1000);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = "rgba(15, 23, 42, 0.75)";
+      ctx.lineWidth = 4 * (canvas.width / 1000);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `black ${Math.max(12, Math.round(14 * (canvas.width / 1000)))}px Inter, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, c.x, c.y);
+    };
+
+    // 2. Desenhar Linhas de DNP e Eixo Nasal
     if (showDNP && showDNPnoCanvas) {
+      const cNasal = toCanvas({ x: centroNasal, y: pupilaDir.y });
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+      ctx.lineWidth = 2 * (canvas.width / 1000);
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath();
+      ctx.moveTo(cNasal.x, 0);
+      ctx.lineTo(cNasal.x, canvas.height);
+      ctx.stroke();
+
       drawLine(pupilaDir, { x: centroNasal, y: pupilaDir.y }, corLinhaDNP, true);
       drawLine(pupilaEsq, { x: centroNasal, y: pupilaEsq.y }, corLinhaDNP, true);
-    }
-    if (showAltura && showAlturanoCanvas) {
-      drawLine(pupilaDir, bordaOD, corLinhaAltura);
-      drawLine(pupilaEsq, bordaOE, corLinhaAltura);
+      drawCircleMarker(pupilaDir, "OD", corLinhaDNP);
+      drawCircleMarker(pupilaEsq, "OE", corLinhaDNP);
     }
 
-    // Adicionar Título Customizado (Se houver)
+    // 3. Desenhar Linhas de Altura (CO)
+    if (showAltura && showAlturanoCanvas) {
+      drawLine(pupilaDir, bordaOD, corLinhaAltura, false);
+      drawLine(pupilaEsq, bordaOE, corLinhaAltura, false);
+    }
+
+    // 4. Desenhar Calibração por Cartão de Crédito
+    if (modo === "cartao") {
+      drawLine({ x: cartaoEsqX, y: cartaoY }, { x: cartaoDirX, y: cartaoY }, "#3b82f6", false);
+      drawCircleMarker({ x: cartaoEsqX, y: cartaoY }, "C1", "#3b82f6");
+      drawCircleMarker({ x: cartaoDirX, y: cartaoY }, "C2", "#3b82f6");
+    }
+
+    // 5. Adicionar Título Customizado
     if (textoCustom) {
-      ctx.fillStyle = "white";
-      ctx.font = `bold ${fontSize * (canvas.width / 1000)}px Inter, sans-serif`;
-      ctx.shadowColor = "black";
-      ctx.shadowBlur = 7;
-      ctx.fillText(textoCustom, 50, 80);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `bold ${Math.round(28 * (canvas.width / 1000))}px Inter, sans-serif`;
+      ctx.shadowColor = "#000000";
+      ctx.shadowBlur = 8;
+      ctx.fillText(textoCustom, 50, 70);
       ctx.shadowBlur = 0;
     }
 
-    // Legenda de Medidas no Canto (Se ativo)
+    // 6. Legenda de Medidas no Canto Inferior
     if (showLabelsNoCanvas) {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(canvas.width - 450, canvas.height - 150, 420, 120);
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 30px Inter';
-      ctx.fillText(`DNP: ${data.medidas.od_dnp} / ${data.medidas.oe_dnp} mm`, canvas.width - 430, canvas.height - 100);
-      ctx.fillText(`ALT: ${alturaVerticalOdMm} / ${alturaVerticalOeMm} mm`, canvas.width - 430, canvas.height - 50);
+      const boxW = 540;
+      const boxH = 160;
+      const boxX = canvas.width - boxW - 30;
+      const boxY = canvas.height - boxH - 30;
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+      ctx.strokeStyle = "#0284c7";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 20);
+      ctx.fill();
+      ctx.stroke();
+
+      const dnpOD_str = data.medidas.od_dnp || (Math.abs(pupilaDir.x - centroNasal) * mmPorPixel).toFixed(1);
+      const dnpOE_str = data.medidas.oe_dnp || (Math.abs(pupilaEsq.x - centroNasal) * mmPorPixel).toFixed(1);
+      const dpTotal_str = dpBinocularMm || (Number(dnpOD_str) + Number(dnpOE_str)).toFixed(1);
+      const altOD_str = alturaOdMm || "--";
+      const altOE_str = alturaOeMm || "--";
+
+      ctx.fillStyle = "#38bdf8";
+      ctx.font = "bold 24px Inter, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(`OPTOVENDAS - LAUDO DE MEDIDAS`, boxX + 24, boxY + 20);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 26px Inter, sans-serif";
+      ctx.fillText(`DP Total: ${dpTotal_str} mm`, boxX + 24, boxY + 60);
+      ctx.fillText(`DNP Naso-Pupilar: OD ${dnpOD_str} | OE ${dnpOE_str} mm`, boxX + 24, boxY + 92);
+      ctx.fillText(`Altura CO: OD ${altOD_str} | OE ${altOE_str} mm`, boxX + 24, boxY + 122);
     }
 
     return new Promise((resolve) => {

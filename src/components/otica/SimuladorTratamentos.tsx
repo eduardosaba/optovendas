@@ -293,46 +293,69 @@ export default function SimuladorTratamentos() {
       )}
 
       {/* ====================================================================
-          2. MODO SLIDER DE REVELAR (COMPARATIVO DINÂMICO)
+          2. MODO SLIDER DE REVELAR (COMPARATIVO DINÂMICO COMPLETO)
          ==================================================================== */}
       {modoExibicao === "slider" && (
         <div className="space-y-3">
           <div className="relative rounded-3xl overflow-hidden bg-slate-950 aspect-[16/9] border-2 border-slate-800 shadow-xl select-none">
             
-            {/* FOTO BASE: COM ANTIRREFLEXO */}
+            {/* FOTO BASE: COM TRATAMENTO SELECIONADO */}
             <div className="absolute inset-0">
               <img
                 src={FOTO_PESSOA_OCULOS}
-                alt="Com Antirreflexo"
+                alt="Com Tratamento"
                 className="w-full h-full object-cover filter contrast-[1.05]"
               />
 
-              {/* Overlay SVG com Tratamento em Transparência */}
+              {/* Overlay SVG com Tratamento em Transparência Mascarado nas Lentes */}
               <svg 
                 className="absolute inset-0 w-full h-full pointer-events-none"
                 viewBox="0 0 100 100" 
                 preserveAspectRatio="none"
               >
-                <clipPath id="sl-od">
+                <clipPath id="sl-od-tratado">
                   <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
                 </clipPath>
-                <clipPath id="sl-oe">
+                <clipPath id="sl-oe-tratado">
                   <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
                 </clipPath>
-                <g clipPath="url(#sl-od)">
-                  <path d="M24 33 Q30 31 38 33" stroke="#10b981" strokeWidth="1.2" fill="none" opacity="0.8" />
+
+                {/* --- LENTE OD (COM TRATAMENTO) --- */}
+                <g clipPath="url(#sl-od-tratado)">
+                  {(tratamentoAtivo === "azul" || tratamentoAtivo === "combinado") && (
+                    <rect x="20" y="25" width="30" height="35" fill="#1e40af" opacity="0.2" />
+                  )}
+                  {tratamentoAtivo === "fotocromatico" && (
+                    <rect x="20" y="25" width="30" height="35" fill={getCorFotocromaticaOverlay()} />
+                  )}
+                  {tratamentoAtivo !== "fotocromatico" && (
+                    <path d="M24 33 Q30 31 38 33" stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"} strokeWidth="1.2" fill="none" opacity="0.8" />
+                  )}
                 </g>
-                <g clipPath="url(#sl-oe)">
-                  <path d="M55 33 Q61 31 69 33" stroke="#10b981" strokeWidth="1.2" fill="none" opacity="0.8" />
+
+                {/* --- LENTE OE (COM TRATAMENTO) --- */}
+                <g clipPath="url(#sl-oe-tratado)">
+                  {(tratamentoAtivo === "azul" || tratamentoAtivo === "combinado") && (
+                    <rect x="50" y="25" width="30" height="35" fill="#1e40af" opacity="0.2" />
+                  )}
+                  {tratamentoAtivo === "fotocromatico" && (
+                    <rect x="50" y="25" width="30" height="35" fill={getCorFotocromaticaOverlay()} />
+                  )}
+                  {tratamentoAtivo !== "fotocromatico" && (
+                    <path d="M55 33 Q61 31 69 33" stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"} strokeWidth="1.2" fill="none" opacity="0.8" />
+                  )}
                 </g>
               </svg>
 
               <div className="absolute top-4 right-4 bg-emerald-600 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-lg border border-emerald-400/40">
-                ✨ COM ANTIRREFLEXO (TRANSPARENTE)
+                {tratamentoAtivo === "antirreflexo" && "✨ COM ANTIRREFLEXO (99.2% TRANSPARENTE)"}
+                {tratamentoAtivo === "azul" && "💻 COM FILTRO DE LUZ AZUL (PROTEÇÃO DIGITAL)"}
+                {tratamentoAtivo === "combinado" && "🛡️ AR + FILTRO AZUL (2 EM 1 PREMIUM)"}
+                {tratamentoAtivo === "fotocromatico" && "☀️ LENTE FOTOSSENSÍVEL (Transitions)"}
               </div>
             </div>
 
-            {/* FOTO REVELADA: SEM ANTIRREFLEXO (CORTADA PELO SLIDER USANDO CLIP-PATH) */}
+            {/* FOTO REVELADA: SEM TRATAMENTO / INCOLOR (CORTADA PELO SLIDER USANDO CLIP-PATH) */}
             <div
               className="absolute inset-0 pointer-events-none"
               style={{
@@ -341,11 +364,11 @@ export default function SimuladorTratamentos() {
             >
               <img
                 src={FOTO_PESSOA_OCULOS}
-                alt="Sem Antirreflexo"
+                alt="Sem Tratamento"
                 className="w-full h-full object-cover filter brightness-[0.98]"
               />
 
-              {/* Overlay SVG com Brilho Leitoso no Lado Sem AR */}
+              {/* Overlay SVG com Brilho Leitoso no Lado Sem Tratamento */}
               <svg 
                 className="absolute inset-0 w-full h-full pointer-events-none"
                 viewBox="0 0 100 100" 
@@ -358,19 +381,23 @@ export default function SimuladorTratamentos() {
                   <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
                 </clipPath>
 
-                <g clipPath="url(#sl-od-sem)">
-                  <rect x="20" y="25" width="30" height="35" fill="url(#grad-brilho)" />
-                  <ellipse cx="32" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
-                </g>
-
-                <g clipPath="url(#sl-oe-sem)">
-                  <rect x="50" y="25" width="30" height="35" fill="url(#grad-brilho)" />
-                  <ellipse cx="63" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
-                </g>
+                {/* Se não for fotocromático, exibe o reflexo leitoso convencional */}
+                {tratamentoAtivo !== "fotocromatico" && (
+                  <>
+                    <g clipPath="url(#sl-od-sem)">
+                      <rect x="20" y="25" width="30" height="35" fill="url(#grad-brilho)" />
+                      <ellipse cx="32" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                    </g>
+                    <g clipPath="url(#sl-oe-sem)">
+                      <rect x="50" y="25" width="30" height="35" fill="url(#grad-brilho)" />
+                      <ellipse cx="63" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                    </g>
+                  </>
+                )}
               </svg>
 
               <div className="absolute top-4 left-4 bg-rose-900 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-lg border border-rose-700">
-                ⚠️ SEM ANTIRREFLEXO (LEITOSO)
+                {tratamentoAtivo === "fotocromatico" ? "🏠 AMBIENTE INTERNO (INCOLOR 100%)" : "⚠️ LENTE CONVENCIONAL (SEM TRATAMENTO)"}
               </div>
             </div>
 

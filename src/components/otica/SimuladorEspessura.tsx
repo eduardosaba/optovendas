@@ -116,10 +116,25 @@ export default function SimuladorEspessura() {
 
   // Estado de Visualização
   const [indiceSelecionado, setIndiceSelecionado] = useState<number>(1.67);
-  const [anguloRotacao3D, setAnguloRotacao3D] = useState<number>(25);
+  const [anguloRotacao3D, setAnguloRotacao3D] = useState<number>(45);
+  const [autoGirar3D, setAutoGirar3D] = useState<boolean>(false);
 
   const canvas2DRef = useRef<HTMLCanvasElement | null>(null);
   const canvas3DRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Arraste 360° no Canvas 3D
+  const isDragging3DRef = useRef<boolean>(false);
+  const startX3DRef = useRef<number>(0);
+  const startAngle3DRef = useRef<number>(0);
+
+  // Loop de Auto-Giro 360°
+  useEffect(() => {
+    if (!autoGirar3D) return;
+    const interval = setInterval(() => {
+      setAnguloRotacao3D((prev) => (prev + 2) % 360);
+    }, 30);
+    return () => clearInterval(interval);
+  }, [autoGirar3D]);
 
   // Atualiza presets
   const handleTrocarPreset = (preset: PresetTamanho) => {
@@ -787,38 +802,97 @@ export default function SimuladorEspessura() {
               </div>
             </div>
 
-            {/* Canvas 3D - Perspectiva Realista */}
+            {/* Canvas 3D - Perspectiva Realista 360° */}
             <div className="bg-white rounded-[28px] border border-slate-100 p-5 shadow-sm flex flex-col justify-between">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                  <RotateCw size={14} className="text-cyan-600" /> Simulação em 3D
+                  <RotateCw size={14} className="text-cyan-600 animate-spin-slow" /> Simulação 3D (360°)
                 </span>
-                <span className="text-[10px] font-bold text-cyan-600 bg-cyan-50 px-2 py-0.5 rounded-lg">
-                  Ângulo: {anguloRotacao3D}°
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAutoGirar3D((prev) => !prev)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                      autoGirar3D
+                        ? "bg-cyan-600 text-white shadow-sm"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {autoGirar3D ? "⏸ Pausar Giro" : "🔄 Auto Giro 360°"}
+                  </button>
+                  <span className="text-[10px] font-bold text-cyan-600 bg-cyan-50 px-2 py-1 rounded-lg border border-cyan-100">
+                    {anguloRotacao3D}°
+                  </span>
+                </div>
               </div>
 
-              <div className="relative flex items-center justify-center bg-gradient-to-b from-slate-50/80 to-slate-100/60 rounded-2xl p-2 border border-slate-100 h-56">
+              {/* Canvas 3D Interativo com Arraste 360° */}
+              <div 
+                className="relative flex items-center justify-center bg-gradient-to-b from-slate-50/80 to-slate-100/60 rounded-2xl p-2 border border-slate-100 h-56 cursor-ew-resize select-none"
+                onPointerDown={(e) => {
+                  isDragging3DRef.current = true;
+                  startX3DRef.current = e.clientX;
+                  startAngle3DRef.current = anguloRotacao3D;
+                  setAutoGirar3D(false);
+                }}
+                onPointerMove={(e) => {
+                  if (!isDragging3DRef.current) return;
+                  const delta = e.clientX - startX3DRef.current;
+                  let newAngle = (startAngle3DRef.current + Math.round(delta * 1.2)) % 360;
+                  if (newAngle < 0) newAngle += 360;
+                  setAnguloRotacao3D(newAngle);
+                }}
+                onPointerUp={() => {
+                  isDragging3DRef.current = false;
+                }}
+                onPointerLeave={() => {
+                  isDragging3DRef.current = false;
+                }}
+              >
                 <canvas
                   ref={canvas3DRef}
                   width={340}
                   height={200}
-                  className="max-w-full max-h-full"
+                  className="max-w-full max-h-full pointer-events-none"
                 />
+                <span className="absolute bottom-2 left-3 text-[9px] font-bold text-slate-400 pointer-events-none">
+                  ↔ Arraste na tela para girar 360°
+                </span>
               </div>
 
-              {/* Slider de Rotação 3D */}
-              <div className="mt-3 pt-2 border-t border-slate-50">
-                <div className="flex justify-between text-[10px] font-bold text-slate-400 mb-1">
-                  <span>Girar Lente em Perspectiva</span>
-                  <span>{anguloRotacao3D}°</span>
+              {/* Slider de Rotação 360° & Atalhos de Ângulo */}
+              <div className="mt-3 pt-2 border-t border-slate-50 space-y-2">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                  <span>Controle de Ângulo (0° a 360°)</span>
+                  <div className="flex gap-1">
+                    {[0, 45, 90, 180, 270].map((ang) => (
+                      <button
+                        key={ang}
+                        type="button"
+                        onClick={() => {
+                          setAutoGirar3D(false);
+                          setAnguloRotacao3D(ang);
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-black transition-all ${
+                          anguloRotacao3D === ang
+                            ? "bg-slate-900 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {ang}°
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <input
                   type="range"
                   min="0"
-                  max="60"
+                  max="360"
                   value={anguloRotacao3D}
-                  onChange={(e) => setAnguloRotacao3D(parseInt(e.target.value))}
+                  onChange={(e) => {
+                    setAutoGirar3D(false);
+                    setAnguloRotacao3D(parseInt(e.target.value));
+                  }}
                   className="w-full accent-cyan-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
                 />
               </div>

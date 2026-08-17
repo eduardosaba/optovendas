@@ -59,8 +59,8 @@ export default function HistoricoMedidas({ clinicaId }: { clinicaId: string }) {
     if (!clinicaId) return;
     setLoading(true);
     try {
-      // Buscar Ordens de Serviço com foto de pupilômetro cadastrada
-      let query = supabase
+      // 1. Buscar Ordens de Serviço com foto de pupilômetro cadastrada
+      let queryOS = supabase
         .from("ordens_servico")
         .select(`
           id,
@@ -92,53 +92,53 @@ export default function HistoricoMedidas({ clinicaId }: { clinicaId: string }) {
         .limit(100);
 
       if (clinicaId !== "master") {
-        query = query.eq("clinica_id", clinicaId);
+        queryOS = queryOS.eq("clinica_id", clinicaId);
       }
 
-      const { data, error } = await query;
+      const { data: dataOS } = await queryOS;
 
-      if (error) {
-        console.warn("Erro no PostgREST query ordens_servico:", error.message || error);
-        // Fallback: busca basica sem juncao aninhada
-        const fallbackRes = await supabase
-          .from("ordens_servico")
-          .select("id, numero_os, venda_id, pupilometro_foto_url, od_dnp, oe_dnp, altura_vertical_od, altura_vertical_oe, co_od, co_oe, criado_em, status_os")
-          .not("pupilometro_foto_url", "is", null)
-          .order("criado_em", { ascending: false })
-          .limit(100);
+      // 2. Buscar Vendas com foto de pupilômetro cadastrada
+      let queryVendas = supabase
+        .from("vendas")
+        .select(`
+          id,
+          criado_em,
+          pupilometro_foto_url,
+          pupilometro_foto_medida_url,
+          medidas,
+          paciente_id,
+          cliente_manual_nome,
+          cliente_manual_cpf,
+          cliente_manual_cidade,
+          pacientes (
+            id,
+            nome_completo,
+            cpf,
+            cidade_atendimento,
+            celular
+          )
+        `)
+        .not("pupilometro_foto_url", "is", null)
+        .order("criado_em", { ascending: false })
+        .limit(100);
 
-        if (fallbackRes.error) throw fallbackRes.error;
-        const fallbackData = fallbackRes.data || [];
-        
-        setMedidas(fallbackData.map((os: any) => ({
-          id: os.id,
-          numero_os: os.numero_os || "Sem O.S.",
-          venda_id: os.venda_id,
-          paciente_id: null,
-          pupilometro_foto_url: os.pupilometro_foto_url,
-          od_dnp: os.od_dnp,
-          oe_dnp: os.oe_dnp,
-          altura_vertical_od: os.altura_vertical_od,
-          altura_vertical_oe: os.altura_vertical_oe,
-          co_od: os.co_od,
-          co_oe: os.co_oe,
-          criado_em: os.criado_em,
-          status_os: os.status_os,
-          paciente_nome: `O.S. #${os.numero_os || os.id}`,
-          paciente_cpf: "",
-          paciente_cidade: "",
-        })));
-        return;
+      if (clinicaId !== "master") {
+        queryVendas = queryVendas.eq("clinica_id", clinicaId);
       }
 
-      const formatados: MedidaItem[] = (data || []).map((os: any) => {
+      const { data: dataVendas } = await queryVendas;
+
+      const mapMedidas = new Map<string, MedidaItem>();
+
+      // Adicionar itens de ordens_servico
+      (dataOS || []).forEach((os: any) => {
         const v = pickFirst(os.vendas);
         const p = pickFirst(v?.pacientes);
         const nome = p?.nome_completo || v?.cliente_manual_nome || `O.S. #${os.numero_os || "Sem Nome"}`;
         const cpf = p?.cpf || v?.cliente_manual_cpf || "";
         const cidade = p?.cidade_atendimento || v?.cliente_manual_cidade || "";
 
-        return {
+        mapMedidas.set(os.id, {
           id: os.id,
           numero_os: os.numero_os || "Sem O.S.",
           venda_id: os.venda_id,
@@ -155,10 +155,46 @@ export default function HistoricoMedidas({ clinicaId }: { clinicaId: string }) {
           paciente_nome: nome,
           paciente_cpf: cpf,
           paciente_cidade: cidade,
-        };
+        });
       });
 
-      setMedidas(formatados);
+      // Adicionar itens de vendas (caso ainda não existam em OS)
+      (dataVendas || []).forEach((venda: any) => {
+        const p = pickFirst(venda.pacientes);
+        const fotoUrl = venda.pupilometro_foto_medida_url || venda.pupilometro_foto_url;
+        if (!fotoUrl) return;
+
+        const key = `venda-${venda.id}`;
+        if (!mapMedidas.has(key)) {
+          const medObj = typeof venda.medidas === "object" ? venda.medidas || {} : {};
+          mapMedidas.set(key, {
+            id: key,
+            numero_os: `Venda #${venda.id.slice(0, 6)}`,
+            venda_id: venda.id,
+            paciente_id: p?.id || null,
+            pupilometro_foto_url: fotoUrl,
+            od_dnp: medObj.od_dnp || null,
+            oe_dnp: medObj.oe_dnp || null,
+            altura_vertical_od: medObj.altura_vertical_od || medObj.altura || null,
+            altura_vertical_oe: medObj.altura_vertical_oe || medObj.altura || null,
+            co_od: medObj.co_od || null,
+            co_oe: medObj.co_oe || null,
+            criado_em: venda.criado_em,
+            status_os: "Concluido",
+            paciente_nome: p?.nome_completo || venda.cliente_manual_nome || `Venda #${venda.id.slice(0, 6)}`,
+            paciente_cpf: p?.cpf || venda.cliente_manual_cpf || "",
+            paciente_cidade: p?.cidade_atendimento || venda.cliente_manual_cidade || "",
+          });
+        }
+      });
+
+      const listaConsolidada = Array.from(mapMedidas.values()).sort((a, b) => {
+        const dA = a.criado_em ? new Date(a.criado_em).getTime() : 0;
+        const dB = b.criado_em ? new Date(b.criado_em).getTime() : 0;
+        return dB - dA;
+      });
+
+      setMedidas(listaConsolidada);
     } catch (err: any) {
       console.error("Erro ao carregar histórico de medidas:", err?.message || JSON.stringify(err));
       toast.error("Não foi possível carregar o histórico de medidas.");
