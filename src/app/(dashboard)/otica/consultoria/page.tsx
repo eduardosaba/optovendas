@@ -5,87 +5,102 @@ import SimuladorEspessura from "@/components/otica/SimuladorEspessura";
 import SimuladorTratamentos from "@/components/otica/SimuladorTratamentos";
 import ComparadorMultifocal from "@/components/otica/ComparadorMultifocal";
 import ComparadorFotosArmacao from "@/components/otica/ComparadorFotosArmacao";
-import { Sparkles, Layers, Eye, Camera, CheckCircle2 } from "lucide-react";
+import CalculadoraDiametro from "@/components/otica/CalculadoraDiametro";
+import { Sparkles, Layers, Eye, Camera, CircleDot } from "lucide-react";
 
 export default function ConsultoriaPage() {
-  const [activeTab, setActiveTab] = useState<"espessura" | "tratamentos" | "multifocal" | "visagismo">("espessura");
+  const [activeTab, setActiveTab] = useState<"espessura" | "tratamentos" | "multifocal" | "visagismo" | "diametro">("espessura");
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Banner Principal */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-cyan-950 to-blue-950 p-8 text-white shadow-2xl border border-slate-800">
+      {/* Banner Principal com Identidade OptoVendas */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-cyan-950 to-slate-900 p-8 text-white shadow-xl border border-slate-800">
         <div className="relative z-10 max-w-3xl space-y-2">
-          <div className="inline-flex items-center gap-2 rounded-full bg-cyan-500/10 px-3.5 py-1 text-xs font-black text-cyan-400 border border-cyan-500/20">
+          <div className="inline-flex items-center gap-2 rounded-full bg-cyan-500/20 px-3.5 py-1 text-xs font-black text-cyan-300 border border-cyan-500/30">
             <Sparkles size={14} /> Terminal de Atendimento & Consultoria Visual
           </div>
-          <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-transparent">
-            Demonstração Óptica Interativa
+          <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">
+            Suíte de Demonstração Óptica Interativa
           </h1>
           <p className="text-sm text-slate-300 leading-relaxed">
-            Ferramenta desenvolvida para ser utilizada em tablets de balcão e monitores de vendas, aumentando a taxa de conversão de tratamentos e lentes de alto índice.
+            Ferramenta desenvolvida para ser utilizada em tablets de balcão e monitores de atendimento, aumentando a taxa de conversão de lentes de alto índice e tratamentos de alto valor agregado.
           </p>
         </div>
 
-        {/* Efeito Neon de Fundo */}
-        <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
+        {/* Efeito Glow Neon de Fundo */}
+        <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />
       </div>
 
-      {/* Navegação por Abas Principais */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Navegação por Abas Principais no Padrão OptoVendas */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <button
           onClick={() => setActiveTab("espessura")}
-          className={`p-4 rounded-2xl border text-left transition-all ${
+          className={`p-4 rounded-3xl border text-left transition-all ${
             activeTab === "espessura"
-              ? "bg-cyan-950/90 border-cyan-400 text-white shadow-lg shadow-cyan-950/50"
-              : "bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              ? "bg-cyan-600 border-cyan-600 text-white shadow-lg shadow-cyan-900/20"
+              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
           }`}
         >
-          <div className="flex items-center gap-2 text-sm font-black text-cyan-400">
-            <Layers size={18} /> Espessura de Lente
+          <div className="flex items-center gap-2 text-sm font-black">
+            <Layers size={18} /> Espessura Lente
           </div>
-          <p className="text-xs text-slate-400 mt-1">Cálculo de Sagita (1.50 a 1.74)</p>
+          <p className="text-xs opacity-90 mt-1">Cálculo 3D (1.50 a 1.74)</p>
         </button>
 
         <button
           onClick={() => setActiveTab("tratamentos")}
-          className={`p-4 rounded-2xl border text-left transition-all ${
+          className={`p-4 rounded-3xl border text-left transition-all ${
             activeTab === "tratamentos"
-              ? "bg-blue-950/90 border-blue-400 text-white shadow-lg shadow-blue-950/50"
-              : "bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-900/20"
+              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
           }`}
         >
-          <div className="flex items-center gap-2 text-sm font-black text-blue-400">
-            <Sparkles size={18} /> Tratamentos & Filtros
+          <div className="flex items-center gap-2 text-sm font-black">
+            <Sparkles size={18} /> Tratamentos
           </div>
-          <p className="text-xs text-slate-400 mt-1">Antirreflexo, Luz Azul e UV</p>
+          <p className="text-xs opacity-90 mt-1">Antirreflexo & Luz Azul</p>
         </button>
 
         <button
           onClick={() => setActiveTab("multifocal")}
-          className={`p-4 rounded-2xl border text-left transition-all ${
+          className={`p-4 rounded-3xl border text-left transition-all ${
             activeTab === "multifocal"
-              ? "bg-emerald-950/90 border-emerald-400 text-white shadow-lg shadow-emerald-950/50"
-              : "bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              ? "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-900/20"
+              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
           }`}
         >
-          <div className="flex items-center gap-2 text-sm font-black text-emerald-400">
-            <Eye size={18} /> Campos Multifocais
+          <div className="flex items-center gap-2 text-sm font-black">
+            <Eye size={18} /> Multifocais
           </div>
-          <p className="text-xs text-slate-400 mt-1">Convencional vs. Freeform</p>
+          <p className="text-xs opacity-90 mt-1">Corredor Progressivo</p>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("diametro")}
+          className={`p-4 rounded-3xl border text-left transition-all ${
+            activeTab === "diametro"
+              ? "bg-amber-600 border-amber-600 text-white shadow-lg shadow-amber-900/20"
+              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <div className="flex items-center gap-2 text-sm font-black">
+            <CircleDot size={18} /> Diâmetro Bloco
+          </div>
+          <p className="text-xs opacity-90 mt-1">Cálculo Índio Lab (Ømín)</p>
         </button>
 
         <button
           onClick={() => setActiveTab("visagismo")}
-          className={`p-4 rounded-2xl border text-left transition-all ${
+          className={`p-4 rounded-3xl border text-left transition-all ${
             activeTab === "visagismo"
-              ? "bg-purple-950/90 border-purple-400 text-white shadow-lg shadow-purple-950/50"
-              : "bg-slate-900/60 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              ? "bg-purple-600 border-purple-600 text-white shadow-lg shadow-purple-900/20"
+              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
           }`}
         >
-          <div className="flex items-center gap-2 text-sm font-black text-purple-400">
-            <Camera size={18} /> Provador Multi-Foto
+          <div className="flex items-center gap-2 text-sm font-black">
+            <Camera size={18} /> Multi-Foto
           </div>
-          <p className="text-xs text-slate-400 mt-1">Visagismo e Comparador 2x2</p>
+          <p className="text-xs opacity-90 mt-1">Visagismo 2x2</p>
         </button>
       </div>
 
@@ -94,6 +109,7 @@ export default function ConsultoriaPage() {
         {activeTab === "espessura" && <SimuladorEspessura />}
         {activeTab === "tratamentos" && <SimuladorTratamentos />}
         {activeTab === "multifocal" && <ComparadorMultifocal />}
+        {activeTab === "diametro" && <CalculadoraDiametro />}
         {activeTab === "visagismo" && <ComparadorFotosArmacao />}
       </div>
     </div>

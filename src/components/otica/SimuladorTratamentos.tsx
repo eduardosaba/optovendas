@@ -1,193 +1,289 @@
 "use client";
 
 import React, { useState } from "react";
-import { Sun, Moon, ShieldAlert, Sparkles, Sliders } from "lucide-react";
+import { 
+  Sparkles, 
+  Sun, 
+  Moon, 
+  Monitor, 
+  ShieldCheck, 
+  Layers, 
+  SlidersHorizontal,
+  Eye
+} from "lucide-react";
+
+type TipoTratamento = "antirreflexo" | "azul" | "fotocromatico";
+type CorFotocromatica = "cinza" | "marrom" | "verde";
 
 export default function SimuladorTratamentos() {
-  const [activeTab, setActiveTab] = useState<"antirreflexo" | "luz_azul" | "fotossensivel">("antirreflexo");
-  const [sliderVal, setSliderVal] = useState<number>(80);
+  const [tratamentoAtivo, setTratamentoAtivo] = useState<TipoTratamento>("antirreflexo");
+  
+  // Estados de Antirreflexo
+  const [tipoReflexoResidual, setTipoReflexoResidual] = useState<"verde" | "azul" | "premium">("verde");
+
+  // Estados Fotocromáticos
+  const [nivelUV, setNivelUV] = useState<number>(85); // 0 a 100%
+  const [corFoto, setCorFoto] = useState<CorFotocromatica>("cinza");
+
+  // Paleta da Lente Fotocromática
+  const getCorFotocromaticaCSS = () => {
+    const opacidade = (nivelUV / 100) * 0.85;
+    switch (corFoto) {
+      case "cinza":
+        return `rgba(30, 41, 59, ${opacidade})`;
+      case "marrom":
+        return `rgba(120, 53, 15, ${opacidade})`;
+      case "verde":
+        return `rgba(20, 83, 45, ${opacidade})`;
+    }
+  };
 
   return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 text-white shadow-2xl space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+    <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm space-y-6 max-w-5xl mx-auto">
+      
+      {/* Header com Navegação de Tratamentos */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-blue-950/80 px-3 py-1 text-xs font-bold text-blue-400 border border-blue-800/50">
-            <Sparkles size={14} /> Educação Visual Interativa
-          </div>
-          <h2 className="text-2xl font-black mt-1 bg-gradient-to-r from-white via-slate-200 to-blue-400 bg-clip-text text-transparent">
-            Simulador de Tratamentos & Tecnologias de Lentes
-          </h2>
-          <p className="text-xs text-slate-400">
-            Demonstre os benefícios reais de Antirreflexo Noturno, Filtro Azul e Lentes Fotossensíveis ao cliente.
-          </p>
-        </div>
-
-        {/* Abas dos Tratamentos */}
-        <div className="flex gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
-          <button
-            onClick={() => { setActiveTab("antirreflexo"); setSliderVal(80); }}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === "antirreflexo"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-900/50"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Antirreflexo Noturno
-          </button>
-
-          <button
-            onClick={() => { setActiveTab("luz_azul"); setSliderVal(75); }}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === "luz_azul"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-900/50"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Filtro de Luz Azul
-          </button>
-
-          <button
-            onClick={() => { setActiveTab("fotossensivel"); setSliderVal(50); }}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-              activeTab === "fotossensivel"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-900/50"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Lente Fotossensível (Transitions)
-          </button>
-        </div>
-      </div>
-
-      {/* Conteúdo Dinâmico com base na aba */}
-      <div className="space-y-4">
-        {/* Controle do Slider Interativo */}
-        <div className="flex items-center justify-between bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
-          <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
-            <Sliders size={16} className="text-blue-400" />
-            Nível do Tratamento Aplicado: <span className="text-blue-400 font-mono font-black">{sliderVal}%</span>
+          <span className="text-[10px] font-black uppercase tracking-widest text-cyan-600 bg-cyan-50 px-2.5 py-1 rounded-full border border-cyan-100">
+            Fittingbox Experience Standard
           </span>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={sliderVal}
-            onChange={(e) => setSliderVal(parseInt(e.target.value))}
-            className="w-1/2 accent-blue-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
-          />
+          <h2 className="text-xl md:text-2xl font-black text-slate-900 mt-1 flex items-center gap-2">
+            <Sparkles size={20} className="text-cyan-600" /> Simulador de Tratamentos e Tecnologias
+          </h2>
         </div>
 
-        {/* Renderização do Simulador Antirreflexo Noturno */}
-        {activeTab === "antirreflexo" && (
-          <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center">
-            {/* Imagem de Fundo (Visão Noturna com Faróis) */}
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black flex items-center justify-center">
-              {/* Simulador de Luzes de Farol */}
-              <div className="relative w-full h-full flex items-center justify-center">
-                {/* Farol OD sem AR (Halos e Reflexos Intensos) */}
-                <div
-                  className="absolute w-48 h-48 rounded-full bg-yellow-200/90 blur-2xl transition-all duration-300"
-                  style={{ opacity: 1 - sliderVal / 120 }}
-                />
-                <div
-                  className="absolute w-72 h-72 rounded-full bg-white/40 blur-3xl transition-all duration-300"
-                  style={{ opacity: 1 - sliderVal / 140 }}
-                />
-
-                {/* Nitidez com Antirreflexo */}
-                <div
-                  className="absolute z-10 text-center transition-all duration-300"
-                  style={{ opacity: sliderVal / 100 }}
-                >
-                  <div className="w-16 h-16 mx-auto rounded-full border-2 border-cyan-400/80 bg-cyan-950/30 flex items-center justify-center shadow-lg shadow-cyan-500/20 backdrop-blur-sm">
-                    <Moon size={32} className="text-cyan-300" />
-                  </div>
-                  <span className="inline-block mt-3 px-4 py-1.5 rounded-full bg-cyan-950/90 text-cyan-300 text-xs font-black border border-cyan-800">
-                    Visão Noturna Transparente Sem Halos
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Marcadores de Antes / Depois */}
-            <div className="absolute bottom-4 left-4 z-20 text-[11px] bg-slate-900/90 backdrop-blur-sm border border-slate-700 px-3 py-1.5 rounded-xl font-bold text-slate-300">
-              {sliderVal < 30 ? "Sem Antirreflexo (Halos Ofuscantes)" : `Tratamento AR Ativo (${sliderVal}%)`}
-            </div>
-          </div>
-        )}
-
-        {/* Renderização do Simulador Filtro de Luz Azul */}
-        {activeTab === "luz_azul" && (
-          <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
-            <div
-              className="absolute inset-0 transition-all duration-500"
-              style={{
-                backgroundColor: `rgba(234, 179, 8, ${0.15 * (sliderVal / 100)})`,
-                boxShadow: `inset 0 0 100px rgba(59, 130, 246, ${1 - sliderVal / 100})`,
-              }}
-            />
-
-            <div className="relative z-10 max-w-md space-y-3">
-              <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shadow-xl">
-                <ShieldAlert size={32} />
-              </div>
-              <h3 className="text-lg font-black text-white">Proteção contra Luz Azul de Telas Digitais</h3>
-              <p className="text-xs text-slate-300">
-                Bloqueia a radiação nociva de celulares, monitores e LEDs (415nm-455nm), reduzindo a fadiga ocular e dores de cabeça.
-              </p>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/90 text-amber-300 text-xs font-bold border border-amber-500/30">
-                Filtro de Espectro Azul Ativo: <span className="font-black text-white">{sliderVal}% Proteção</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Renderização do Simulador Fotossensível (Transitions) */}
-        {activeTab === "fotossensivel" && (
-          <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 flex items-center justify-center p-6">
-            <div
-              className="absolute inset-0 transition-all duration-700 flex items-center justify-center"
-              style={{
-                backgroundColor: `rgba(15, 23, 42, ${sliderVal / 110})`,
-              }}
-            >
-              <div className="text-center z-10 space-y-3">
-                <div
-                  className="w-20 h-20 mx-auto rounded-full border-4 transition-all duration-500 flex items-center justify-center"
-                  style={{
-                    backgroundColor: `rgba(30, 41, 59, ${sliderVal / 100})`,
-                    borderColor: sliderVal > 50 ? "#f59e0b" : "#38bdf8",
-                  }}
-                >
-                  {sliderVal > 50 ? (
-                    <Sun size={36} className="text-amber-400 animate-pulse" />
-                  ) : (
-                    <Sun size={36} className="text-sky-300" />
-                  )}
-                </div>
-
-                <div className="bg-slate-900/90 backdrop-blur-md px-5 py-2.5 rounded-2xl border border-slate-700 text-center max-w-xs mx-auto">
-                  <div className="text-xs font-black text-amber-400 uppercase tracking-wider">
-                    {sliderVal < 25 ? "Ambiente Interno (Lente Totalmente Incolor)" : sliderVal > 70 ? "Incidência UV Sol Forte (Lente Escura Solar 85%)" : "Ambiente Externo Sombra (Tonalidade Média)"}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-1">
-                    Escurecimento UV: {sliderVal}%
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Abas de Tratamento */}
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl">
+          {[
+            { id: "antirreflexo", label: "Antirreflexo (AR)", icon: Moon },
+            { id: "azul", label: "Filtro Azul", icon: Monitor },
+            { id: "fotocromatico", label: "Fotossensível", icon: Sun },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isAtivo = tratamentoAtivo === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setTratamentoAtivo(tab.id as TipoTratamento)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
+                  isAtivo
+                    ? "bg-white text-cyan-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
+                }`}
+              >
+                <Icon size={14} /> {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Rodapé Informativo */}
-      <div className="rounded-2xl bg-slate-950/60 border border-slate-800/80 p-4 text-xs text-slate-400 flex items-start gap-3">
-        <Sparkles size={18} className="text-blue-400 shrink-0 mt-0.5" />
-        <p>
-          Tratamentos combinados (Antirreflexo + Filtro Azul + Fotossensível) aumentam o conforto visual em até 95% e protegem os olhos contra envelhecimento precoce da retina e catarata.
-        </p>
-      </div>
+      {/* ====================================================================
+          1. SIMULADOR DE ANTIRREFLEXO (VISÃO NOTURNA E TRANSPARÊNCIA)
+         ==================================================================== */}
+      {tratamentoAtivo === "antirreflexo" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Cenário 1: Sem Antirreflexo (Com Halos e Reflexos) */}
+            <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-[4/3] flex flex-col justify-between p-4 border border-slate-800 shadow-inner">
+              <div className="flex justify-between items-center z-10">
+                <span className="text-[10px] font-black uppercase tracking-wider text-rose-400 bg-rose-950/80 px-2.5 py-1 rounded-lg border border-rose-800/60">
+                  Lente Convencional (Sem AR)
+                </span>
+              </div>
+
+              {/* Simulação Visual: Halos Ofuscantes */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="relative flex items-center justify-center">
+                  {/* Farol Central 1 */}
+                  <div className="h-16 w-16 rounded-full bg-amber-200/90 blur-md animate-pulse" />
+                  <div className="absolute h-36 w-36 rounded-full bg-amber-400/30 blur-2xl" />
+                  <div className="absolute h-64 w-2 bg-gradient-to-b from-transparent via-amber-200/50 to-transparent rotate-45" />
+                  <div className="absolute h-64 w-2 bg-gradient-to-b from-transparent via-amber-200/50 to-transparent -rotate-45" />
+                </div>
+              </div>
+
+              {/* Reflexo Espelho na Superfície */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-white/15 via-transparent to-white/10 pointer-events-none" />
+
+              <div className="z-10 bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-slate-800 text-xs text-slate-300">
+                ⚠️ <strong>Ofuscamento e Reflexos:</strong> 8% a 12% da luz é refletida na lente, gerando cansaço visual e visão embaçada ao dirigir à noite.
+              </div>
+            </div>
+
+            {/* Cenário 2: Com Antirreflexo Noturno */}
+            <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-[4/3] flex flex-col justify-between p-4 border border-cyan-500/30 shadow-inner">
+              <div className="flex justify-between items-center z-10">
+                <span className="text-[10px] font-black uppercase tracking-wider text-cyan-300 bg-cyan-950/80 px-2.5 py-1 rounded-lg border border-cyan-700/60 flex items-center gap-1">
+                  <ShieldCheck size={12} /> Com Antirreflexo Premium (99% Transparência)
+                </span>
+              </div>
+
+              {/* Simulação Visual: Luz Nítida e Sem Halos */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="relative flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full bg-amber-100 shadow-[0_0_15px_rgba(251,191,36,0.8)]" />
+                </div>
+              </div>
+
+              {/* Reflexo Residual Suave */}
+              <div className="absolute top-4 right-4 h-12 w-12 rounded-full border border-emerald-400/40 bg-emerald-400/5 blur-[1px] pointer-events-none" />
+
+              <div className="z-10 bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-cyan-900 text-xs text-cyan-200">
+                ✨ <strong>Nitidez e Conforto:</strong> Transmissão luminosa de 99,2%. Elimina reflexos parasitas e aumenta a segurança no trânsito.
+              </div>
+            </div>
+
+          </div>
+
+          {/* Seleção do Reflexo Residual Estético */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Layers size={14} className="text-cyan-600" /> Tonalidade do Reflexo Residual (Estética):
+            </span>
+            <div className="flex gap-2">
+              {[
+                { id: "verde", label: "Verde Esmeralda (Clássico)" },
+                { id: "azul", label: "Azul Royal (Digital)" },
+                { id: "premium", label: "Acromático / Invisível" },
+              ].map((ref) => (
+                <button
+                  key={ref.id}
+                  type="button"
+                  onClick={() => setTipoReflexoResidual(ref.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    tipoReflexoResidual === ref.id
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "bg-white text-slate-600 border border-slate-200"
+                  }`}
+                >
+                  {ref.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          2. SIMULADOR DE FILTRO DE LUZ AZUL (BLUE LIGHT BLOCK)
+         ==================================================================== */}
+      {tratamentoAtivo === "azul" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Monitor Sem Filtro */}
+            <div className="relative rounded-2xl overflow-hidden bg-slate-100 aspect-[4/3] flex flex-col justify-between p-4 border border-slate-200">
+              <span className="text-[10px] font-black uppercase text-slate-600 bg-white/90 px-2.5 py-1 rounded-lg w-fit">
+                Sem Proteção Azul
+              </span>
+              <div className="text-center space-y-1">
+                <p className="text-xs font-black text-slate-700">Incidência Direta de Luz Azul-Violeta</p>
+                <p className="text-[10px] text-slate-500">Comprimento de onda de 415 a 455 nm atinge diretamente a retina.</p>
+              </div>
+              <div className="bg-white/80 p-2.5 rounded-xl text-xs text-rose-600 font-bold">
+                ⚠️ Provoca ressecamento ocular, fadiga visual e insônia.
+              </div>
+            </div>
+
+            {/* Monitor Com Filtro Azul */}
+            <div className="relative rounded-2xl overflow-hidden bg-amber-50/60 aspect-[4/3] flex flex-col justify-between p-4 border border-amber-200">
+              <span className="text-[10px] font-black uppercase text-amber-900 bg-amber-200/80 px-2.5 py-1 rounded-lg w-fit flex items-center gap-1">
+                <ShieldCheck size={12} /> Com Filtro Blue Protect
+              </span>
+              <div className="text-center space-y-1">
+                <p className="text-xs font-black text-amber-950">Atenuação do Espectro Nocivo</p>
+                <p className="text-[10px] text-amber-800">Contraste aprimorado e relaxamento imediato da musculatura ocular.</p>
+              </div>
+              <div className="bg-white/90 p-2.5 rounded-xl text-xs text-emerald-700 font-bold">
+                ✅ Conforto prolongado para computadores, tablets e smartphones.
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          3. SIMULADOR FOTOCROMÁTICO DINÂMICO (TRANSITIONS / FOTOSSENSÍVEL)
+         ==================================================================== */}
+      {tratamentoAtivo === "fotocromatico" && (
+        <div className="space-y-6">
+          
+          {/* Visualizador da Lente Fotocromática com Slider UV */}
+          <div className="relative rounded-3xl overflow-hidden bg-gradient-to-b from-sky-100 to-amber-50 p-6 border border-slate-100 min-h-[300px] flex flex-col justify-between">
+            
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-800 bg-white/80 px-3 py-1.5 rounded-xl shadow-sm">
+                Incidência Solar / Radiação UV: {nivelUV}%
+              </span>
+              <span className="text-xs font-bold text-slate-600">
+                {nivelUV < 20 ? "Ambiente Interno (Claro)" : nivelUV < 60 ? "Dia Nublado (Médio)" : "Sol Pleno (Escuro Solar)"}
+              </span>
+            </div>
+
+            {/* Simulação da Lente com a Cor e Opacidade Ativas */}
+            <div className="flex items-center justify-center my-6">
+              <div
+                className="h-44 w-44 rounded-full border-4 border-slate-900 shadow-2xl transition-all duration-300 flex items-center justify-center relative backdrop-blur-[0.5px]"
+                style={{ backgroundColor: getCorFotocromaticaCSS() }}
+              >
+                <Eye size={36} className="text-slate-400 opacity-40 pointer-events-none" />
+                <div className="absolute top-4 right-6 h-8 w-8 rounded-full bg-white/30 blur-[2px]" />
+              </div>
+            </div>
+
+            {/* Slider de UV */}
+            <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-sm space-y-2">
+              <div className="flex justify-between text-xs font-bold text-slate-700">
+                <span className="flex items-center gap-1"><Moon size={14} /> Sombra / Escritório (0%)</span>
+                <span className="flex items-center gap-1"><Sun size={14} className="text-amber-500" /> Praia / Sol Direto (100%)</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={nivelUV}
+                onChange={(e) => setNivelUV(parseInt(e.target.value))}
+                className="w-full accent-cyan-600 h-2 bg-slate-200 rounded-lg cursor-pointer"
+              />
+            </div>
+
+          </div>
+
+          {/* Seleção da Cor da Lente */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <SlidersHorizontal size={14} className="text-cyan-600" /> Escolha a Cor do Fotossensível:
+            </span>
+            <div className="flex gap-2">
+              {[
+                { id: "cinza", label: "Cinza Neutro", cor: "bg-slate-700" },
+                { id: "marrom", label: "Marrom Conforto", cor: "bg-amber-800" },
+                { id: "verde", label: "Verde Grafite / G15", cor: "bg-emerald-900" },
+              ].map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCorFoto(c.id as CorFotocromatica)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+                    corFoto === c.id
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "bg-white text-slate-600 border border-slate-200"
+                  }`}
+                >
+                  <span className={`h-3 w-3 rounded-full ${c.cor}`} />
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+
     </div>
   );
 }
