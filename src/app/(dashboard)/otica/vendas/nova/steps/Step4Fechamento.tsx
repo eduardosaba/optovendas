@@ -496,6 +496,12 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
         material_lente: lenteIdPayload || lenteLabel || (data as any).material_lente || null,
         previsao_entrega: (data as any).previsao_entrega || (data.financeiro?.primeiroVencimento) || null,
         pupilometro_foto_url: (data as any).pupilometroFotoMedidaStorageUrl || (data as any).pupilometro_foto_url || null,
+        od_dnp: data.medidas?.od_dnp || null,
+        oe_dnp: data.medidas?.oe_dnp || null,
+        co_od: data.medidas?.co_od || null,
+        co_oe: data.medidas?.co_oe || null,
+        altura_vertical_od: data.medidas?.altura_vertical_od || null,
+        altura_vertical_oe: data.medidas?.altura_vertical_oe || null,
       };
 
       // anexar também os ids simples no payload principal (a API usa esses keys ao buscar precos)

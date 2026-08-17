@@ -333,6 +333,15 @@ export default function DashboardLayout({
         ["master", "admin", "vendas", "atendente", "consultorio"].includes(role),
     },
     {
+      href: "/otica/consultoria",
+      label: "Consultoria Visual",
+      iconPath: "M12 3v18m9-9H3m14-5-5-5-5 5m10 10-5 5-5-5",
+      iconClass: "bg-blue-50 text-blue-600 group-hover:bg-blue-100",
+      show:
+        (isMaster || possuiOtica) &&
+        ["master", "admin", "vendas", "atendente", "consultorio"].includes(role),
+    },
+    {
       href: "/clientes",
       label: "Clientes",
       iconPath:

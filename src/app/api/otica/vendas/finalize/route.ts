@@ -449,15 +449,15 @@ export async function POST(request: Request) {
         previsao_entrega: osDetalhe.previsao_entrega || financeiroTyped?.primeiroVencimento || financeiroTyped?.primeiro_vencimento || null,
 
         // Medidas Técnicas
-        od_dnp: osDetalhe.od_dnp ?? null,
-        oe_dnp: osDetalhe.oe_dnp ?? null,
-        co_od: osDetalhe.co_od ?? null,
-        co_oe: osDetalhe.co_oe ?? null,
-        altura_vertical_od: osDetalhe.altura_vertical_od ?? null,
-        altura_vertical_oe: osDetalhe.altura_vertical_oe ?? null,
-        armacao_total_mm: osDetalhe.armacao_total_mm ?? null,
-        armacao_ponte_pt: osDetalhe.armacao_ponte_pt ?? null,
-        escala_usada: osDetalhe.escala_usada ?? null,
+        od_dnp: osDetalhe.od_dnp ?? (body as any).medidas?.od_dnp ?? (body as any).od_dnp ?? null,
+        oe_dnp: osDetalhe.oe_dnp ?? (body as any).medidas?.oe_dnp ?? (body as any).oe_dnp ?? null,
+        co_od: osDetalhe.co_od ?? (body as any).medidas?.co_od ?? (body as any).co_od ?? null,
+        co_oe: osDetalhe.co_oe ?? (body as any).medidas?.co_oe ?? (body as any).co_oe ?? null,
+        altura_vertical_od: osDetalhe.altura_vertical_od ?? (body as any).medidas?.altura_vertical_od ?? (body as any).altura_vertical_od ?? null,
+        altura_vertical_oe: osDetalhe.altura_vertical_oe ?? (body as any).medidas?.altura_vertical_oe ?? (body as any).altura_vertical_oe ?? null,
+        armacao_total_mm: osDetalhe.armacao_total_mm ?? (body as any).medidas?.armacao_total_mm ?? (body as any).armacao_total_mm ?? null,
+        armacao_ponte_pt: osDetalhe.armacao_ponte_pt ?? (body as any).medidas?.armacao_ponte_pt ?? (body as any).armacao_ponte_pt ?? null,
+        escala_usada: osDetalhe.escala_usada ?? (body as any).medidas?.escala_usada ?? (body as any).escala_usada ?? null,
 
         // Fotos e assinaturas
         pupilometro_foto_url: osDetalhe.pupilometro_foto_url || body.pupilometro_foto_url || null,
