@@ -276,11 +276,11 @@ export default function ComparadorFotosArmacao() {
       {/* Header com Navegação de 3 Módulos */}
       <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-100">
+          <span className="text-[10px] font-black uppercase tracking-widest text-cyan-600 bg-cyan-50 px-2.5 py-1 rounded-full border border-cyan-100">
             Fernand Aubry Visagismo Standard
           </span>
           <h2 className="text-2xl font-black text-slate-900 mt-1 flex items-center gap-2">
-            <Sparkles size={20} className="text-purple-600" /> Consultoria de Visagismo & Estilo Óptico
+            <Sparkles size={20} className="text-cyan-600" /> Consultoria de Visagismo & Estilo Óptico
           </h2>
         </div>
 
@@ -291,7 +291,7 @@ export default function ComparadorFotosArmacao() {
             onClick={() => setModoAtivo("visagismo")}
             className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
               modoAtivo === "visagismo"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-900/20"
+                ? "bg-cyan-600 text-white shadow-md shadow-cyan-900/20"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
@@ -303,7 +303,7 @@ export default function ComparadorFotosArmacao() {
             onClick={() => setModoAtivo("guia")}
             className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
               modoAtivo === "guia"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-900/20"
+                ? "bg-cyan-600 text-white shadow-md shadow-cyan-900/20"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
@@ -315,7 +315,7 @@ export default function ComparadorFotosArmacao() {
             onClick={() => setModoAtivo("provador")}
             className={`px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all ${
               modoAtivo === "provador"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-900/20"
+                ? "bg-cyan-600 text-white shadow-md shadow-cyan-900/20"
                 : "text-slate-600 hover:text-slate-900"
             }`}
           >
@@ -334,14 +334,14 @@ export default function ComparadorFotosArmacao() {
           <div className="lg:col-span-5 bg-white rounded-[28px] border border-slate-100 p-5 shadow-sm space-y-4 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-slate-50 pb-3">
               <span className="text-xs font-black uppercase text-slate-700 flex items-center gap-1.5">
-                <Scan size={14} className="text-purple-600" /> Mapeamento Facial
+                <Scan size={14} className="text-cyan-600" /> Mapeamento Facial
               </span>
               <label className="flex items-center gap-1.5 text-xs font-bold text-slate-500 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={mostrarMalhaFacial}
                   onChange={(e) => setMostrarMalhaFacial(e.target.checked)}
-                  className="accent-purple-600 h-3.5 w-3.5 rounded"
+                  className="accent-cyan-600 h-3.5 w-3.5 rounded"
                 />
                 Exibir Malha
               </label>
@@ -370,11 +370,11 @@ export default function ComparadorFotosArmacao() {
                 </>
               ) : (
                 <div className="text-center p-8 space-y-3">
-                  <div className="h-14 w-14 bg-purple-950 text-purple-300 rounded-full flex items-center justify-center mx-auto border border-purple-800">
+                  <div className="h-14 w-14 bg-slate-900 text-cyan-400 rounded-full flex items-center justify-center mx-auto border border-slate-800">
                     <Camera size={24} />
                   </div>
                   <p className="text-xs font-black text-slate-300">Nenhuma foto carregada</p>
-                  <label className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-md transition-colors">
+                  <label className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-black rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-md transition-colors">
                     <Upload size={14} /> Carregar Foto do Cliente
                     <input
                       type="file"
@@ -395,7 +395,7 @@ export default function ComparadorFotosArmacao() {
                   <button
                     type="button"
                     onClick={resetarAjustesFoto}
-                    className="text-purple-600 hover:underline flex items-center gap-1 font-bold"
+                    className="text-cyan-600 hover:underline flex items-center gap-1 font-bold"
                   >
                     <RefreshCw size={10} /> Redefinir
                   </button>
@@ -410,7 +410,7 @@ export default function ComparadorFotosArmacao() {
                       max="200"
                       value={zoomFoto}
                       onChange={(e) => setZoomFoto(Number(e.target.value))}
-                      className="w-full accent-purple-600 h-1.5 bg-slate-200 rounded"
+                      className="w-full accent-cyan-600 h-1.5 bg-slate-200 rounded"
                     />
                   </div>
                   <div>
@@ -421,7 +421,7 @@ export default function ComparadorFotosArmacao() {
                       max="30"
                       value={rotacao}
                       onChange={(e) => setRotacao(Number(e.target.value))}
-                      className="w-full accent-purple-600 h-1.5 bg-slate-200 rounded"
+                      className="w-full accent-cyan-600 h-1.5 bg-slate-200 rounded"
                     />
                   </div>
                 </div>
@@ -441,7 +441,7 @@ export default function ComparadorFotosArmacao() {
                     onClick={() => setFormatoSelecionado(f)}
                     className={`py-2 rounded-xl text-[11px] font-black capitalize transition-all ${
                       formatoSelecionado === f
-                        ? "bg-purple-600 text-white shadow-sm"
+                        ? "bg-cyan-600 text-white shadow-sm"
                         : "bg-slate-50 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
@@ -456,17 +456,17 @@ export default function ComparadorFotosArmacao() {
           <div className="lg:col-span-7 space-y-5">
             
             {/* Card Principal */}
-            <div className="bg-gradient-to-br from-slate-900 via-purple-950 to-slate-900 rounded-[28px] p-6 text-white shadow-lg space-y-3 border border-purple-900/40">
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-[28px] p-6 text-white shadow-lg space-y-3 border border-slate-700/60">
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-purple-300 bg-purple-500/20 px-3 py-1 rounded-full border border-purple-500/30">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-cyan-300 bg-cyan-500/20 px-3 py-1 rounded-full border border-cyan-500/30">
                     Diagnóstico Técnico de Visagismo
                   </span>
                   <h3 className="text-2xl font-black text-white mt-1">
                     {recomendacao.nome}
                   </h3>
                 </div>
-                <span className="text-xs font-black text-purple-300 bg-purple-950/80 px-3 py-1.5 rounded-xl border border-purple-700/60">
+                <span className="text-xs font-black text-cyan-300 bg-slate-800 px-3 py-1.5 rounded-xl border border-cyan-700/60">
                   {recomendacao.estilosRecomendadosBadge}
                 </span>
               </div>
@@ -474,7 +474,7 @@ export default function ComparadorFotosArmacao() {
               <p className="text-xs text-slate-300 leading-relaxed">
                 <strong>Anatomia:</strong> {recomendacao.caracteristicas}
               </p>
-              <div className="pt-2 border-t border-purple-900/60 text-xs text-cyan-300 font-bold flex items-center gap-1.5">
+              <div className="pt-2 border-t border-slate-800 text-xs text-cyan-300 font-bold flex items-center gap-1.5">
                 <TargetIcon /> Objetivo Visual: {recomendacao.objetivoVisual}
               </div>
             </div>
@@ -516,9 +516,9 @@ export default function ComparadorFotosArmacao() {
             <div className="bg-slate-900 text-white rounded-[24px] p-4 shadow-sm flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Mensagem & Intenção de Imagem</span>
-                <p className="text-sm font-black text-purple-300">{recomendacao.intencaoImagem}</p>
+                <p className="text-sm font-black text-cyan-300">{recomendacao.intencaoImagem}</p>
               </div>
-              <User size={24} className="text-purple-400" />
+              <User size={24} className="text-cyan-400" />
             </div>
 
           </div>
@@ -538,7 +538,7 @@ export default function ComparadorFotosArmacao() {
             <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-slate-50 pb-3">
                 <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
-                  <Palette size={16} className="text-purple-600" /> Colorimetria & Tom de Pele
+                  <Palette size={16} className="text-cyan-600" /> Colorimetria & Tom de Pele
                 </h3>
                 <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-bold">
                   <button
@@ -593,21 +593,21 @@ export default function ComparadorFotosArmacao() {
             <div className="bg-white rounded-[28px] border border-slate-100 p-6 shadow-sm space-y-4">
               <div className="border-b border-slate-50 pb-3">
                 <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2">
-                  <ShieldCheck size={16} className="text-purple-600" /> Regras de Ajuste Físico & Conforto
+                  <ShieldCheck size={16} className="text-cyan-600" /> Regras de Ajuste Físico & Conforto
                 </h3>
               </div>
 
               <ul className="space-y-3 text-xs text-slate-700 font-medium">
                 <li className="flex items-start gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                  <span className="font-black text-purple-600">1. Proporção da Face:</span>
+                  <span className="font-black text-cyan-600">1. Proporção da Face:</span>
                   <span>A largura total da armação deve coincidir com a largura da têmpora do cliente sem apertar ou ultrapassar.</span>
                 </li>
                 <li className="flex items-start gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                  <span className="font-black text-purple-600">2. Encaixe do Nariz (Ponte):</span>
+                  <span className="font-black text-cyan-600">2. Encaixe do Nariz (Ponte):</span>
                   <span>Armações com plaquetas metálicas ajustáveis são ideais para pontes nasais baixas; aros de acetato exigem encaixe perfeito na anatomia nasal.</span>
                 </li>
                 <li className="flex items-start gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                  <span className="font-black text-purple-600">3. Sobrancelha:</span>
+                  <span className="font-black text-cyan-600">3. Sobrancelha:</span>
                   <span>O aro superior deve acompanhar a linha da sobrancelha sem cobri-la completamente.</span>
                 </li>
               </ul>
@@ -626,7 +626,7 @@ export default function ComparadorFotosArmacao() {
           
           <div className="flex items-center justify-between bg-white rounded-2xl p-4 border border-slate-100">
             <div className="flex items-center gap-2 text-xs font-black text-slate-700">
-              <Grid size={16} className="text-purple-600" /> Grade 2x2 de Comparação Simultânea
+              <Grid size={16} className="text-cyan-600" /> Grade 2x2 de Comparação Simultânea
             </div>
             <span className="text-[10px] font-bold text-slate-400">
               Registre até 4 opções do mostruário para o cliente decidir sem insegurança.
@@ -688,7 +688,7 @@ export default function ComparadorFotosArmacao() {
                       <span className="text-[10px] font-bold text-slate-400 block">
                         Slot {slot.id} Sem Foto
                       </span>
-                      <label className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm">
+                      <label className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm">
                         <Upload size={12} /> Carregar Foto
                         <input
                           type="file"

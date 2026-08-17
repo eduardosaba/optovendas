@@ -150,13 +150,13 @@ export default function SimuladorTratamentos() {
                 preserveAspectRatio="none"
               >
                 <defs>
-                  {/* Formato exato da Lente Esquerda (OD) */}
+                  {/* Formato exato da Lente Esquerda (OD) ajustado à armação da foto */}
                   <clipPath id="lente-od">
-                    <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
+                    <rect x="27.5" y="47.5" width="20" height="33.5" rx="4" ry="12" />
                   </clipPath>
-                  {/* Formato exato da Lente Direita (OE) */}
+                  {/* Formato exato da Lente Direita (OE) ajustado à armação da foto */}
                   <clipPath id="lente-oe">
-                    <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
+                    <rect x="52.5" y="47.5" width="20" height="33.5" rx="4" ry="12" />
                   </clipPath>
                   
                   {/* Gradiente de Reflexo Leitoso de Lâmpadas */}
@@ -170,19 +170,19 @@ export default function SimuladorTratamentos() {
                 {/* --- LENTE ESQUERDA (OD) - REFLEXO LEITOSO MASCARADO --- */}
                 <g clipPath="url(#lente-od)">
                   {/* Camada Branca Leitosa na Lente */}
-                  <rect x="20" y="25" width="30" height="35" fill="url(#grad-brilho)" />
+                  <rect x="25" y="45" width="25" height="38" fill="url(#grad-brilho)" />
                   {/* Brilho Intenso de Lâmpada de Teto */}
-                  <ellipse cx="32" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
-                  <line x1="22" y1="36" x2="44" y2="48" stroke="#ffffff" strokeWidth="2.5" opacity="0.7" />
+                  <ellipse cx="37.5" cy="62" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                  <line x1="29" y1="56" x2="45" y2="68" stroke="#ffffff" strokeWidth="2.5" opacity="0.7" />
                 </g>
 
                 {/* --- LENTE DIREITA (OE) - REFLEXO LEITOSO MASCARADO --- */}
                 <g clipPath="url(#lente-oe)">
                   {/* Camada Branca Leitosa na Lente */}
-                  <rect x="50" y="25" width="30" height="35" fill="url(#grad-brilho)" />
+                  <rect x="50" y="45" width="25" height="38" fill="url(#grad-brilho)" />
                   {/* Brilho Intenso de Lâmpada de Teto */}
-                  <ellipse cx="63" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
-                  <line x1="53" y1="36" x2="75" y2="48" stroke="#ffffff" strokeWidth="2.5" opacity="0.7" />
+                  <ellipse cx="62.5" cy="62" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                  <line x1="54" y1="56" x2="70" y2="68" stroke="#ffffff" strokeWidth="2.5" opacity="0.7" />
                 </g>
               </svg>
 
@@ -223,10 +223,10 @@ export default function SimuladorTratamentos() {
               >
                 <defs>
                   <clipPath id="lente-od-ar">
-                    <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
+                    <rect x="27.5" y="47.5" width="20" height="33.5" rx="4" ry="12" />
                   </clipPath>
                   <clipPath id="lente-oe-ar">
-                    <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
+                    <rect x="52.5" y="47.5" width="20" height="33.5" rx="4" ry="12" />
                   </clipPath>
                 </defs>
 
@@ -234,17 +234,17 @@ export default function SimuladorTratamentos() {
                 <g clipPath="url(#lente-od-ar)">
                   {/* Se Filtro Luz Azul / Combinado: Matiz azulada suave */}
                   {(tratamentoAtivo === "azul" || tratamentoAtivo === "combinado") && (
-                    <rect x="20" y="25" width="30" height="35" fill="#1e40af" opacity="0.18" />
+                    <rect x="25" y="45" width="25" height="38" fill="#1e40af" opacity="0.22" />
                   )}
                   {/* Se Fotocromático: Tint Escura de Acordo com Slider UV */}
                   {tratamentoAtivo === "fotocromatico" && (
-                    <rect x="20" y="25" width="30" height="35" fill={getCorFotocromaticaOverlay()} />
+                    <rect x="25" y="45" width="25" height="38" fill={getCorFotocromaticaOverlay()} />
                   )}
 
                   {/* Reflexo Residual Discreto de Alta Lentes (Verde Esmeralda ou Azul Royal no Canto) */}
                   {tratamentoAtivo !== "fotocromatico" && (
                     <path
-                      d="M24 33 Q30 31 38 33"
+                      d="M29 55 Q35 53 45 55"
                       stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"}
                       strokeWidth="1.2"
                       fill="none"
@@ -257,17 +257,17 @@ export default function SimuladorTratamentos() {
                 <g clipPath="url(#lente-oe-ar)">
                   {/* Se Filtro Luz Azul / Combinado */}
                   {(tratamentoAtivo === "azul" || tratamentoAtivo === "combinado") && (
-                    <rect x="50" y="25" width="30" height="35" fill="#1e40af" opacity="0.18" />
+                    <rect x="50" y="45" width="25" height="38" fill="#1e40af" opacity="0.22" />
                   )}
                   {/* Se Fotocromático */}
                   {tratamentoAtivo === "fotocromatico" && (
-                    <rect x="50" y="25" width="30" height="35" fill={getCorFotocromaticaOverlay()} />
+                    <rect x="50" y="45" width="25" height="38" fill={getCorFotocromaticaOverlay()} />
                   )}
 
                   {/* Reflexo Residual Discreto no Canto */}
                   {tratamentoAtivo !== "fotocromatico" && (
                     <path
-                      d="M55 33 Q61 31 69 33"
+                      d="M54 55 Q60 53 70 55"
                       stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"}
                       strokeWidth="1.2"
                       fill="none"
@@ -297,7 +297,7 @@ export default function SimuladorTratamentos() {
          ==================================================================== */}
       {modoExibicao === "slider" && (
         <div className="space-y-3">
-          <div className="relative rounded-3xl overflow-hidden bg-slate-950 aspect-[16/9] border-2 border-slate-800 shadow-xl select-none">
+          <div className="relative rounded-3xl overflow-hidden bg-slate-950 aspect-[4/3] max-h-[520px] mx-auto border-2 border-slate-800 shadow-xl select-none">
             
             {/* FOTO BASE: COM TRATAMENTO SELECIONADO */}
             <div className="absolute inset-0">
@@ -314,35 +314,35 @@ export default function SimuladorTratamentos() {
                 preserveAspectRatio="none"
               >
                 <clipPath id="sl-od-tratado">
-                  <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
+                  <rect x="27.5" y="47.5" width="20" height="33.5" rx="4" ry="12" />
                 </clipPath>
                 <clipPath id="sl-oe-tratado">
-                  <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
+                  <rect x="52.5" y="47.5" width="20" height="33.5" rx="4" ry="12" />
                 </clipPath>
 
                 {/* --- LENTE OD (COM TRATAMENTO) --- */}
                 <g clipPath="url(#sl-od-tratado)">
                   {(tratamentoAtivo === "azul" || tratamentoAtivo === "combinado") && (
-                    <rect x="20" y="25" width="30" height="35" fill="#1e40af" opacity="0.2" />
+                    <rect x="25" y="45" width="25" height="38" fill="#1e40af" opacity="0.22" />
                   )}
                   {tratamentoAtivo === "fotocromatico" && (
-                    <rect x="20" y="25" width="30" height="35" fill={getCorFotocromaticaOverlay()} />
+                    <rect x="25" y="45" width="25" height="38" fill={getCorFotocromaticaOverlay()} />
                   )}
                   {tratamentoAtivo !== "fotocromatico" && (
-                    <path d="M24 33 Q30 31 38 33" stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"} strokeWidth="1.2" fill="none" opacity="0.8" />
+                    <path d="M29 55 Q35 53 45 55" stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"} strokeWidth="1.2" fill="none" opacity="0.8" />
                   )}
                 </g>
 
                 {/* --- LENTE OE (COM TRATAMENTO) --- */}
                 <g clipPath="url(#sl-oe-tratado)">
                   {(tratamentoAtivo === "azul" || tratamentoAtivo === "combinado") && (
-                    <rect x="50" y="25" width="30" height="35" fill="#1e40af" opacity="0.2" />
+                    <rect x="50" y="45" width="25" height="38" fill="#1e40af" opacity="0.22" />
                   )}
                   {tratamentoAtivo === "fotocromatico" && (
-                    <rect x="50" y="25" width="30" height="35" fill={getCorFotocromaticaOverlay()} />
+                    <rect x="50" y="45" width="25" height="38" fill={getCorFotocromaticaOverlay()} />
                   )}
                   {tratamentoAtivo !== "fotocromatico" && (
-                    <path d="M55 33 Q61 31 69 33" stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"} strokeWidth="1.2" fill="none" opacity="0.8" />
+                    <path d="M54 55 Q60 53 70 55" stroke={tratamentoAtivo === "azul" ? "#3b82f6" : "#10b981"} strokeWidth="1.2" fill="none" opacity="0.8" />
                   )}
                 </g>
               </svg>
@@ -375,22 +375,22 @@ export default function SimuladorTratamentos() {
                 preserveAspectRatio="none"
               >
                 <clipPath id="sl-od-sem">
-                  <rect x="23.5" y="32" width="22" height="23" rx="5" ry="5" />
+                  <rect x="27.5" y="47.5" width="20" height="33.5" rx="4" ry="12" />
                 </clipPath>
                 <clipPath id="sl-oe-sem">
-                  <rect x="54.5" y="32" width="22" height="23" rx="5" ry="5" />
+                  <rect x="52.5" y="47.5" width="20" height="33.5" rx="4" ry="12" />
                 </clipPath>
 
                 {/* Se não for fotocromático, exibe o reflexo leitoso convencional */}
                 {tratamentoAtivo !== "fotocromatico" && (
                   <>
                     <g clipPath="url(#sl-od-sem)">
-                      <rect x="20" y="25" width="30" height="35" fill="url(#grad-brilho)" />
-                      <ellipse cx="32" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                      <rect x="25" y="45" width="25" height="38" fill="url(#grad-brilho)" />
+                      <ellipse cx="37.5" cy="62" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
                     </g>
                     <g clipPath="url(#sl-oe-sem)">
-                      <rect x="50" y="25" width="30" height="35" fill="url(#grad-brilho)" />
-                      <ellipse cx="63" cy="40" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
+                      <rect x="50" y="45" width="25" height="38" fill="url(#grad-brilho)" />
+                      <ellipse cx="62.5" cy="62" rx="7" ry="5" fill="#ffffff" opacity="0.95" filter="blur(1px)" />
                     </g>
                   </>
                 )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type FiltrosOSValue = {
   cidade: string;
@@ -9,11 +9,20 @@ export type FiltrosOSValue = {
 
 export default function FiltrosOS({
   aoFiltrar,
+  value,
 }: {
   aoFiltrar: (filtros: FiltrosOSValue) => void;
+  value?: FiltrosOSValue;
 }) {
-  const [cidade, setCidade] = useState("");
-  const [data, setData] = useState("");
+  const [cidade, setCidade] = useState(value?.cidade || "");
+  const [data, setData] = useState(value?.data || "");
+
+  useEffect(() => {
+    if (value) {
+      setCidade(value.cidade || "");
+      setData(value.data || "");
+    }
+  }, [value]);
 
   function aplicar() {
     aoFiltrar({ cidade, data });
@@ -41,7 +50,7 @@ export default function FiltrosOS({
       </div>
 
       <div>
-        <label htmlFor="filtros_data" className="block text-xs font-bold uppercase text-gray-500">Previsao de Entrega</label>
+        <label htmlFor="filtros_data" className="block text-xs font-bold uppercase text-gray-500">Previsão de Entrega</label>
         <input id="filtros_data" name="filtros_data" aria-label="Filtro por data de entrega" type="date" value={data} onChange={(e) => setData(e.target.value)} className="mt-1 w-full rounded border p-2" />
       </div>
 
@@ -49,16 +58,16 @@ export default function FiltrosOS({
         <button
           type="button"
           onClick={aplicar}
-          className="flex-1 rounded bg-blue-600 px-4 py-2 font-medium text-white"
+          className="flex-1 rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 transition"
         >
           Filtrar
         </button>
         <button
           type="button"
           onClick={limpar}
-          className="flex-1 rounded bg-gray-100 px-4 py-2 font-medium text-gray-600"
+          className="flex-1 rounded bg-gray-100 px-4 py-2 font-medium text-gray-600 hover:bg-gray-200 transition"
         >
-          Limpar
+          Limpar Filtros
         </button>
       </div>
     </div>

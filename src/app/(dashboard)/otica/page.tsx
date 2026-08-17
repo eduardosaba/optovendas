@@ -539,11 +539,20 @@ export default function OticaPage() {
           badge="Atenção"
         />
 
+        <MenuCard
+          href="/otica/vendas"
+          title="Vendas Realizadas"
+          desc="Histórico de vendas da loja, emissão de carnês e 2ª via de O.S."
+          icon={<ShoppingBag size={24} />}
+          color="text-cyan-600"
+          bgColor="bg-cyan-50"
+        />
+
         {/* ... Outros MenuCards permanecem iguais ... */}
         <MenuCard
-          href="/financeiro"
-          title="Financeiro"
-          desc="Crediário, boletos e fluxo de caixa da ótica."
+          href="/otica/financeiro"
+          title="Financeiro & Carnês"
+          desc="Gestão de crediário, carnês, 2ª via de O.S. e fluxo de caixa da ótica."
           icon={<DollarSign size={24} />}
           color="text-emerald-600"
           bgColor="bg-emerald-50"

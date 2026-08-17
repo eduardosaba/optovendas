@@ -498,16 +498,17 @@ export default function DashboardOS() {
               setFiltros({ cidade: "", data: "" });
               setApenasAtrasadas(false);
               setStatusRapido("");
-              toast?.info?.("Filtros limpos: mostrando todas as OS");
+              setCidadePronto("");
+              toast?.info?.("Filtros redefinidos: mostrando todas as Ordens de Serviço.");
             }}
-            className="rounded-xl border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-xl border border-cyan-300 bg-cyan-50 px-4 py-2 font-bold text-cyan-800 hover:bg-cyan-100 transition-all shadow-xs"
           >
-            Mostrar Todas as OS
+            Exibir 100% das O.S.
           </button>
         </div>
       </div>
 
-      <FiltrosOS aoFiltrar={setFiltros} />
+      <FiltrosOS aoFiltrar={setFiltros} value={filtros} />
 
       <div className="mb-6 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200/80 bg-white/95 p-4 shadow-sm md:grid-cols-4">
         <button

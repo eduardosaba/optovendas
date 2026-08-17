@@ -506,20 +506,51 @@ export default function AcompanhamentoVendasPage() {
       )}
 
       {/* ====================================================================
-          MODAL 2: 2ª VIA DE O.S. (FICHA TÉCNICA DO LABORATORIO)
+          MODAL 2: 2ª VIA DE O.S. (FORMULÁRIO TIMBRADO DO LABORATÓRIO COM LOGO)
          ==================================================================== */}
       {vendaOSModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-white rounded-[32px] border border-slate-100 shadow-2xl max-w-3xl w-full p-6 md:p-8 space-y-6 max-h-[90vh] overflow-y-auto">
+          
+          {/* ESTILOS EXCLUSIVOS DE IMPRESSÃO A4 TIMBRADA */}
+          <style>{`
+            @media print {
+              body * {
+                visibility: hidden !important;
+              }
+              #ficha-os-impressao, #ficha-os-impressao * {
+                visibility: visible !important;
+              }
+              #ficha-os-impressao {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 24px !important;
+                background: white !important;
+                color: black !important;
+                font-family: system-ui, sans-serif !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+              @page {
+                size: A4 portrait;
+                margin: 10mm;
+              }
+            }
+          `}</style>
+
+          <div className="bg-white rounded-[32px] border border-slate-100 shadow-2xl max-w-3xl w-full p-6 md:p-8 space-y-6 max-h-[90vh] overflow-y-auto no-print">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-wider text-cyan-600 bg-cyan-50 px-2.5 py-1 rounded-full border border-cyan-100">
-                  Ficha do Laboratório
+                  Ficha Oficial do Laboratório
                 </span>
                 <h3 className="text-xl font-black text-slate-900 mt-1 flex items-center gap-2">
                   <Glasses size={20} className="text-cyan-600" />
-                  2ª Via de O.S. — #{vendaOSModal.ordens_servico?.[0]?.numero_os || "N/D"}
+                  2ª Via de O.S. — #{vendaOSModal.ordens_servico?.[0]?.numero_os || vendaOSModal.id.slice(0, 6)}
                 </h3>
               </div>
               <button
@@ -531,72 +562,170 @@ export default function AcompanhamentoVendasPage() {
               </button>
             </div>
 
-            {/* CORPO DA FICHA DE LABORATÓRIO */}
-            <div className="space-y-4 text-xs">
+            {/* FORMULÁRIO TÉCNICO INTERATIVO */}
+            <div id="ficha-os-impressao" className="space-y-5 text-xs text-slate-800 bg-white">
               
-              {/* DADOS DA ORDEM DE SERVIÇO */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-900 text-white p-4 rounded-2xl">
+              {/* CABEÇALHO TIMBRADO DA ÓTICA */}
+              <div className="border-b-2 border-slate-900 pb-3 flex items-center justify-between">
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 block uppercase">Nº da O.S.</span>
-                  <span className="font-black text-cyan-400 text-sm">#{vendaOSModal.ordens_servico?.[0]?.numero_os || "N/D"}</span>
+                  <h1 className="text-2xl font-black tracking-tight text-slate-900">
+                    ÓTICA OPTOVENDAS
+                  </h1>
+                  <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mt-0.5">
+                    Ordem de Serviço Óptica — Ficha do Laboratório & Balcão
+                  </p>
+                  <p className="text-[9px] text-slate-500 font-medium">
+                    Documento Oficial • Data: {new Date(vendaOSModal.criado_em || Date.now()).toLocaleDateString("pt-BR")}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-black text-slate-900 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-300 inline-block">
+                    O.S. #{vendaOSModal.ordens_servico?.[0]?.numero_os || vendaOSModal.id.slice(0, 6)}
+                  </span>
+                </div>
+              </div>
+
+              {/* DADOS DO PACIENTE / CLIENTE */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 block uppercase">Paciente / Cliente</span>
+                  <span className="font-black text-slate-900 text-xs">{vendaOSModal.pacientes?.nome_completo || vendaOSModal.clienteManualNome || "Cliente"}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-400 block uppercase">Cliente</span>
-                  <span className="font-bold truncate block">{vendaOSModal.pacientes?.nome_completo || "Cliente"}</span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-bold text-slate-400 block uppercase">Laboratório</span>
-                  <span className="font-bold text-slate-200">{vendaOSModal.ordens_servico?.[0]?.laboratorio_nome || "Laboratório Padrão"}</span>
+                  <span className="text-[9px] font-bold text-slate-400 block uppercase">CPF</span>
+                  <span className="font-bold text-slate-800">{vendaOSModal.pacientes?.cpf || "Não Informado"}</span>
                 </div>
                 <div>
                   <span className="text-[9px] font-bold text-slate-400 block uppercase">Previsão Entrega</span>
-                  <span className="font-black text-amber-400">
+                  <span className="font-black text-slate-900">
                     {vendaOSModal.ordens_servico?.[0]?.previsao_entrega ? new Date(vendaOSModal.ordens_servico[0].previsao_entrega).toLocaleDateString("pt-BR") : "A combinar"}
                   </span>
                 </div>
               </div>
 
-              {/* MEDIDAS PUPILARES E ALTURA DE BALCÃO */}
-              <div className="bg-cyan-50/60 p-4 rounded-2xl border border-cyan-100 space-y-2">
-                <h4 className="text-xs font-black text-cyan-900 uppercase flex items-center gap-1.5">
-                  <CheckCircle2 size={14} className="text-cyan-600" /> Medidas de Balcão (Pupilômetro Digital)
+              {/* TABELA DE GRAU DO RECEITUARIO (LONGE E PERTO) */}
+              <div className="space-y-1.5">
+                <h4 className="text-[10px] font-black uppercase text-slate-700 tracking-wider">
+                  Prescrição Óptica (Graus)
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-                  <div className="bg-white p-2.5 rounded-xl border border-cyan-100">
-                    <span className="text-[9px] font-bold text-slate-400 block">DNP OD</span>
-                    <span className="text-base font-black text-cyan-700">{vendaOSModal.medidas?.od_dnp || "--"} mm</span>
+                <table className="w-full border border-slate-900 text-center border-collapse">
+                  <thead className="bg-slate-900 text-white font-black text-[9px] uppercase">
+                    <tr>
+                      <th className="p-2 border border-slate-900">Olho</th>
+                      <th className="p-2 border border-slate-900">Esférico</th>
+                      <th className="p-2 border border-slate-900">Cilíndrico</th>
+                      <th className="p-2 border border-slate-900">Eixo</th>
+                      <th className="p-2 border border-slate-900">Adição</th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-bold text-xs">
+                    <tr>
+                      <td className="p-2 border border-slate-300 font-black bg-slate-100">OD</td>
+                      <td className="p-2 border border-slate-300">{vendaOSModal.receita?.od_esferico || vendaOSModal.medidas?.od_esferico || "0.00"}</td>
+                      <td className="p-2 border border-slate-300">{vendaOSModal.receita?.od_cilindrico || vendaOSModal.medidas?.od_cilindrico || "0.00"}</td>
+                      <td className="p-2 border border-slate-300">{vendaOSModal.receita?.od_eixo || vendaOSModal.medidas?.od_eixo || "0"}°</td>
+                      <td className="p-2 border border-slate-300" rowSpan={2}>
+                        {vendaOSModal.receita?.adicao || vendaOSModal.medidas?.adicao ? `+${vendaOSModal.receita?.adicao || vendaOSModal.medidas?.adicao}` : "--"}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2 border border-slate-300 font-black bg-slate-100">OE</td>
+                      <td className="p-2 border border-slate-300">{vendaOSModal.receita?.oe_esferico || vendaOSModal.medidas?.oe_esferico || "0.00"}</td>
+                      <td className="p-2 border border-slate-300">{vendaOSModal.receita?.oe_cilindrico || vendaOSModal.medidas?.oe_cilindrico || "0.00"}</td>
+                      <td className="p-2 border border-slate-300">{vendaOSModal.receita?.oe_eixo || vendaOSModal.medidas?.oe_eixo || "0"}°</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* MEDIDAS PUPILARES DE BALCÃO (DNP E ALTURA CO) */}
+              <div className="border border-slate-900 rounded-xl p-3 bg-slate-50 space-y-2">
+                <h4 className="text-[10px] font-black uppercase text-slate-800 tracking-wider">
+                  Medidas de Balcão (Pupilômetro Digital OptoVendas)
+                </h4>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="bg-white p-2 rounded-lg border border-slate-300">
+                    <span className="text-[8px] font-bold text-slate-500 block">DNP OD</span>
+                    <span className="text-sm font-black text-slate-900">{vendaOSModal.medidas?.od_dnp || "--"} mm</span>
                   </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-cyan-100">
-                    <span className="text-[9px] font-bold text-slate-400 block">DNP OE</span>
-                    <span className="text-base font-black text-cyan-700">{vendaOSModal.medidas?.oe_dnp || "--"} mm</span>
+                  <div className="bg-white p-2 rounded-lg border border-slate-300">
+                    <span className="text-[8px] font-bold text-slate-500 block">DNP OE</span>
+                    <span className="text-base font-black text-slate-900">{vendaOSModal.medidas?.oe_dnp || "--"} mm</span>
                   </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-cyan-100">
-                    <span className="text-[9px] font-bold text-slate-400 block">ALTURA OD</span>
-                    <span className="text-base font-black text-slate-800">{vendaOSModal.medidas?.altura_vertical_od || "--"} mm</span>
+                  <div className="bg-white p-2 rounded-lg border border-slate-300">
+                    <span className="text-[8px] font-bold text-slate-500 block">ALTURA OD</span>
+                    <span className="text-base font-black text-slate-900">{vendaOSModal.medidas?.altura_vertical_od || "--"} mm</span>
                   </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-cyan-100">
-                    <span className="text-[9px] font-bold text-slate-400 block">ALTURA OE</span>
-                    <span className="text-base font-black text-slate-800">{vendaOSModal.medidas?.altura_vertical_oe || "--"} mm</span>
+                  <div className="bg-white p-2 rounded-lg border border-slate-300">
+                    <span className="text-[8px] font-bold text-slate-500 block">ALTURA OE</span>
+                    <span className="text-base font-black text-slate-900">{vendaOSModal.medidas?.altura_vertical_oe || "--"} mm</span>
                   </div>
                 </div>
               </div>
 
               {/* DETALHES DE LENTES & ARMAÇÃO */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-1">
-                  <span className="text-[10px] font-black uppercase text-slate-400 block">Lente Selecionada</span>
-                  <p className="font-black text-slate-900">{vendaOSModal.ordens_servico?.[0]?.material_lente || "Lente Monofocal / Multifocal"}</p>
+              <div className="grid grid-cols-2 gap-3 border border-slate-300 p-3 rounded-xl">
+                <div>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Especificação da Lente</span>
+                  <p className="font-black text-slate-900">{vendaOSModal.ordens_servico?.[0]?.material_lente || "Lente Monofocal / Multifocal Digital"}</p>
                 </div>
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-1">
-                  <span className="text-[10px] font-black uppercase text-slate-400 block">Armação</span>
-                  <p className="font-black text-slate-900">{vendaOSModal.ordens_servico?.[0]?.armacao_modelo || "Armação Cadastrada"}</p>
+                <div>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Armação do Cliente</span>
+                  <p className="font-black text-slate-900">{vendaOSModal.ordens_servico?.[0]?.armacao_modelo || "Armação Mostruário"}</p>
                 </div>
+              </div>
+
+              {/* TERMO DE RECEBIMENTO & ASSINATURA */}
+              <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-6 text-center text-[9px] font-bold text-slate-600">
+                <div>
+                  <div className="border-b border-slate-400 mb-1 h-8" />
+                  <span>Assinatura do Cliente / Paciente</span>
+                </div>
+                <div>
+                  <div className="border-b border-slate-400 mb-1 h-8" />
+                  <span>Responsável Óptico / Laboratório</span>
+                </div>
+              </div>
+
+              {/* ATUALIZADOR DE ETAPA DO LABORATÓRIO */}
+              <div className="border border-cyan-200 p-3.5 rounded-xl bg-cyan-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 no-print">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-cyan-900 block">Etapa de Confecção no Laboratório</span>
+                  <p className="text-[10px] font-bold text-cyan-700">Atualize o status para o paciente acompanhar na linha do tempo pública.</p>
+                </div>
+                <select
+                  value={vendaOSModal.ordens_servico?.[0]?.status_laboratorio || "orcamento"}
+                  onChange={async (e) => {
+                    const novoStatus = e.target.value;
+                    const osId = vendaOSModal.ordens_servico?.[0]?.id;
+                    if (!osId) return;
+                    await supabase.from("ordens_servico").update({ status_laboratorio: novoStatus }).eq("id", osId);
+                    toast.success("Etapa do laboratório atualizada!");
+                    setVendaOSModal((prev: any) =>
+                      prev
+                        ? {
+                            ...prev,
+                            ordens_servico: prev.ordens_servico?.map((o: any) =>
+                              o.id === osId ? { ...o, status_laboratorio: novoStatus } : o
+                            ),
+                          }
+                        : null
+                    );
+                  }}
+                  className="px-3 py-1.5 bg-white border border-cyan-300 rounded-xl text-xs font-black text-cyan-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  <option value="orcamento">1. Pedido Recebido</option>
+                  <option value="surfacagem">2. Confecção (Surfaçagem)</option>
+                  <option value="montagem">3. Montagem na Armação</option>
+                  <option value="controle_qualidade">4. Controle de Qualidade</option>
+                  <option value="pronto">5. Pronto para Retirada! ✨</option>
+                </select>
               </div>
 
             </div>
 
-            {/* BOTÕES DE AÇÃO */}
-            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-100">
+            {/* BOTÕES DE AÇÃO DO MODAL */}
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-100 no-print">
               <button
                 type="button"
                 onClick={() => {
@@ -604,7 +733,24 @@ export default function AcompanhamentoVendasPage() {
                 }}
                 className="w-full sm:w-auto px-6 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-2 transition-all"
               >
-                <Printer size={16} /> Imprimir 2ª Via O.S.
+                <Printer size={16} /> Imprimir 2ª Via O.S. Timbrada (A4)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const fone = vendaOSModal.pacientes?.celular || "";
+                  const foneClean = fone.replace(/\D/g, "");
+                  const hashOS = vendaOSModal.ordens_servico?.[0]?.hash_publico || vendaOSModal.id.slice(0, 8);
+                  const urlRastreio = `${window.location.origin}/os/${hashOS}`;
+                  const msg = encodeURIComponent(
+                    `Olá ${vendaOSModal.pacientes?.nome_completo || "Cliente"}! Acompanhe a confecção dos seus óculos em tempo real pelo link: ${urlRastreio}`
+                  );
+                  window.open(foneClean ? `https://wa.me/55${foneClean}?text=${msg}` : `https://wa.me/?text=${msg}`, "_blank");
+                }}
+                className="w-full sm:w-auto px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-2 transition-all"
+              >
+                <MessageSquare size={16} /> WhatsApp com Rastreio
               </button>
             </div>
 
