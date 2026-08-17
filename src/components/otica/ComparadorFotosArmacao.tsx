@@ -11,8 +11,11 @@ import {
   Scan, 
   Maximize2, 
   Trash2,
-  ChevronRight,
-  Info
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Move,
+  RefreshCw
 } from "lucide-react";
 
 export type FormatoRosto = "oval" | "redondo" | "quadrado" | "coracao" | "diamante";
@@ -97,6 +100,12 @@ export default function ComparadorFotosArmacao() {
   const [fotoVisagismoUrl, setFotoVisagismoUrl] = useState<string | null>(null);
   const [mostrarMalhaFacial, setMostrarMalhaFacial] = useState<boolean>(true);
 
+  // Ajustes da Foto do Paciente (Enquadramento Manual)
+  const [zoomFoto, setZoomFoto] = useState<number>(100); // 50% a 200%
+  const [panX, setPanX] = useState<number>(0);
+  const [panY, setPanY] = useState<number>(0);
+  const [rotacao, setRotacao] = useState<number>(0);
+
   // Estado do Provador Multi-Foto (Grade 2x2)
   const [slotsFotos, setSlotsFotos] = useState<SlotFoto[]>([
     { id: 1, label: "Armação 1: Acetato Preto Gatinho", url: null },
@@ -106,8 +115,6 @@ export default function ComparadorFotosArmacao() {
   ]);
 
   const [slotZoomed, setSlotZoomed] = useState<SlotFoto | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [slotCarregando, setSlotCarregando] = useState<number | null>(null);
 
   // Manipulação de Upload para Provador
   const handleUploadSlot = (slotId: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,11 +145,74 @@ export default function ComparadorFotosArmacao() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       setFotoVisagismoUrl(ev.target?.result as string);
+      setZoomFoto(100);
+      setPanX(0);
+      setPanY(0);
+      setRotacao(0);
     };
     reader.readAsDataURL(file);
   };
 
+  const resetarAjustesFoto = () => {
+    setZoomFoto(100);
+    setPanX(0);
+    setPanY(0);
+    setRotacao(0);
+  };
+
   const recomendacao = DADOS_VISAGISMO[formatoSelecionado];
+
+  // Renderização SVG da Malha Anatômica conforme o Formato de Rosto Ativo
+  const renderMalhaFacialSVG = () => {
+    switch (formatoSelecionado) {
+      case "oval":
+        return (
+          <svg className="w-full h-full text-purple-400" viewBox="0 0 200 260" fill="none">
+            <ellipse cx="100" cy="130" rx="75" ry="110" stroke="currentColor" strokeWidth="2.5" strokeDasharray="6 4" className="animate-pulse" />
+            <line x1="25" y1="80" x2="175" y2="80" stroke="rgba(216,180,254,0.6)" strokeWidth="1" strokeDasharray="3 3" />
+            <text x="100" y="75" textAnchor="middle" fill="#e9d5ff" fontSize="9" fontWeight="bold">LINHA DA TESTA</text>
+            <line x1="20" y1="130" x2="180" y2="130" stroke="rgba(103,232,249,0.8)" strokeWidth="1.5" strokeDasharray="4 4" />
+            <text x="100" y="125" textAnchor="middle" fill="#67e8f9" fontSize="9" fontWeight="bold">LARGURA DOS MALARES</text>
+            <line x1="35" y1="185" x2="165" y2="185" stroke="rgba(216,180,254,0.6)" strokeWidth="1" strokeDasharray="3 3" />
+            <text x="100" y="180" textAnchor="middle" fill="#e9d5ff" fontSize="9" fontWeight="bold">MANDÍBULA SUAVE</text>
+          </svg>
+        );
+      case "redondo":
+        return (
+          <svg className="w-full h-full text-cyan-400" viewBox="0 0 200 260" fill="none">
+            <circle cx="100" cy="130" r="95" stroke="currentColor" strokeWidth="2.5" strokeDasharray="6 4" className="animate-pulse" />
+            <line x1="10" y1="130" x2="190" y2="130" stroke="rgba(103,232,249,0.8)" strokeWidth="1.5" strokeDasharray="4 4" />
+            <text x="100" y="125" textAnchor="middle" fill="#67e8f9" fontSize="9" fontWeight="bold">LARGURA = ALTURA (CIRCULAR)</text>
+          </svg>
+        );
+      case "quadrado":
+        return (
+          <svg className="w-full h-full text-amber-400" viewBox="0 0 200 260" fill="none">
+            <rect x="25" y="25" width="150" height="210" rx="28" stroke="currentColor" strokeWidth="2.5" strokeDasharray="6 4" className="animate-pulse" />
+            <line x1="25" y1="190" x2="175" y2="190" stroke="rgba(252,211,77,0.8)" strokeWidth="1.5" strokeDasharray="4 4" />
+            <text x="100" y="185" textAnchor="middle" fill="#fcd34d" fontSize="9" fontWeight="bold">ANGULARIDADE DA MANDÍBULA</text>
+          </svg>
+        );
+      case "coracao":
+        return (
+          <svg className="w-full h-full text-pink-400" viewBox="0 0 200 260" fill="none">
+            <path d="M 20,40 Q 100,20 180,40 Q 170,140 100,235 Q 30,140 20,40 Z" stroke="currentColor" strokeWidth="2.5" strokeDasharray="6 4" className="animate-pulse" />
+            <line x1="20" y1="50" x2="180" y2="50" stroke="rgba(244,114,182,0.8)" strokeWidth="1.5" strokeDasharray="4 4" />
+            <text x="100" y="45" textAnchor="middle" fill="#f472b6" fontSize="9" fontWeight="bold">TESTA LARGA</text>
+            <circle cx="100" cy="235" r="4" fill="#f472b6" />
+            <text x="100" y="225" textAnchor="middle" fill="#f472b6" fontSize="9" fontWeight="bold">QUEIXO AFUNILADO</text>
+          </svg>
+        );
+      case "diamante":
+        return (
+          <svg className="w-full h-full text-emerald-400" viewBox="0 0 200 260" fill="none">
+            <polygon points="100,20 185,130 100,240 15,130" stroke="currentColor" strokeWidth="2.5" strokeDasharray="6 4" className="animate-pulse" />
+            <line x1="15" y1="130" x2="185" y2="130" stroke="rgba(52,211,153,0.8)" strokeWidth="1.5" strokeDasharray="4 4" />
+            <text x="100" y="125" textAnchor="middle" fill="#34d399" fontSize="9" fontWeight="bold">MAÇÃS DO ROSTO SALIENTES</text>
+          </svg>
+        );
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -192,7 +262,7 @@ export default function ComparadorFotosArmacao() {
       {modoAtivo === "visagismo" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
-          {/* Coluna Esquerda: Foto do Cliente com Malha Facial Overlaid */}
+          {/* Coluna Esquerda: Foto do Cliente com Ajuste Manual + Malha Dinâmica */}
           <div className="lg:col-span-5 bg-white rounded-[28px] border border-slate-100 p-5 shadow-sm space-y-4 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-slate-50 pb-3">
               <span className="text-xs font-black uppercase text-slate-700 flex items-center gap-1.5">
@@ -209,32 +279,25 @@ export default function ComparadorFotosArmacao() {
               </label>
             </div>
 
-            {/* Visualizador de Foto com Overlay de Visagismo */}
-            <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-[3/4] flex items-center justify-center border border-slate-800">
+            {/* Visualizador de Foto com Overlay de Visagismo Dinâmico */}
+            <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-[3/4] flex items-center justify-center border border-slate-800 select-none">
               {fotoVisagismoUrl ? (
                 <>
+                  {/* Foto do Paciente com Transformações de Zoom, Pan X/Y e Rotação */}
                   <img
                     src={fotoVisagismoUrl}
                     alt="Foto do Paciente"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-75"
+                    style={{
+                      transform: `scale(${zoomFoto / 100}) translate(${panX}px, ${panY}px) rotate(${rotacao}deg)`,
+                    }}
                   />
 
-                  {/* Malha Anatômica Interativa por Transparência */}
+                  {/* Malha Anatômica SVG Dinâmica Conforme o Formato Selecionado */}
                   {mostrarMalhaFacial && (
-                    <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
-                      <div className="w-48 h-64 border-2 border-dashed border-purple-400/70 rounded-[50%] flex flex-col justify-between p-4 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
-                        {/* Linha da Testa */}
-                        <div className="w-full border-t border-purple-300/50 text-[9px] font-black text-purple-200 text-center -mt-2">
-                          TESTA
-                        </div>
-                        {/* Linha dos Olhos / Malares */}
-                        <div className="w-full border-t border-cyan-300/50 text-[9px] font-black text-cyan-200 text-center">
-                          LARGURA DOS MALARES
-                        </div>
-                        {/* Linha do Queixo */}
-                        <div className="w-full border-t border-purple-300/50 text-[9px] font-black text-purple-200 text-center -mb-2">
-                          MANDÍBULA
-                        </div>
+                    <div className="absolute inset-0 pointer-events-none p-6 flex items-center justify-center">
+                      <div className="w-56 h-72">
+                        {renderMalhaFacialSVG()}
                       </div>
                     </div>
                   )}
@@ -258,10 +321,76 @@ export default function ComparadorFotosArmacao() {
               )}
             </div>
 
+            {/* CONTROLES DE ENQUADRAMENTO MANUAL DA FOTO */}
+            {fotoVisagismoUrl && (
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-2">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-500">
+                  <span>Enquadrar Foto com o Pontilhado</span>
+                  <button
+                    type="button"
+                    onClick={resetarAjustesFoto}
+                    className="text-purple-600 hover:underline flex items-center gap-1"
+                  >
+                    <RefreshCw size={10} /> Redefinir
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 block mb-1">Zoom ({zoomFoto}%)</span>
+                    <input
+                      type="range"
+                      min="60"
+                      max="200"
+                      value={zoomFoto}
+                      onChange={(e) => setZoomFoto(Number(e.target.value))}
+                      className="w-full accent-purple-600 h-1.5 bg-slate-200 rounded"
+                    />
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 block mb-1">Girar ({rotacao}°)</span>
+                    <input
+                      type="range"
+                      min="-30"
+                      max="30"
+                      value={rotacao}
+                      onChange={(e) => setRotacao(Number(e.target.value))}
+                      className="w-full accent-purple-600 h-1.5 bg-slate-200 rounded"
+                    />
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 block mb-1">Mover Horizontal (X)</span>
+                    <input
+                      type="range"
+                      min="-60"
+                      max="60"
+                      value={panX}
+                      onChange={(e) => setPanX(Number(e.target.value))}
+                      className="w-full accent-purple-600 h-1.5 bg-slate-200 rounded"
+                    />
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 block mb-1">Mover Vertical (Y)</span>
+                    <input
+                      type="range"
+                      min="-60"
+                      max="60"
+                      value={panY}
+                      onChange={(e) => setPanY(Number(e.target.value))}
+                      className="w-full accent-purple-600 h-1.5 bg-slate-200 rounded"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Seletor do Formato de Rosto Detectado */}
             <div className="space-y-2 pt-2 border-t border-slate-50">
               <span className="text-[10px] font-black uppercase text-slate-400 block">
-                Selecione o Formato Anatômico Detectado:
+                Selecione o Formato Anatômico para Diagnóstico:
               </span>
               <div className="grid grid-cols-3 gap-1.5">
                 {(["oval", "redondo", "quadrado", "coracao", "diamante"] as FormatoRosto[]).map((f) => (
