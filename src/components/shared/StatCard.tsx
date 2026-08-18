@@ -24,41 +24,43 @@ export default function StatCard({ label, value, trend, icon, color = "emerald",
 
   if (empty) {
     return (
-      <div className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all h-40 flex flex-col justify-between">
-        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">{label}</p>
+      <div className="bg-white p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between min-h-[150px] overflow-hidden">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 truncate">{label}</p>
         <div className="flex items-center justify-between">
-          <div className="text-sm italic text-slate-400">Sem dados no período</div>
-          <div className="flex items-center gap-2">
-            <div className={`p-1.5 rounded-lg ${colors[color]}`}>{icon}</div>
-          </div>
+          <div className="text-xs italic text-slate-400">Sem dados no período</div>
+          {icon && <div className={`p-2 rounded-xl shrink-0 ${colors[color]}`}>{icon}</div>}
         </div>
-        <div className="mt-4">
-          <span className="text-[10px] font-bold text-slate-400 uppercase">{trend}</span>
-        </div>
+        {trend && <div className="mt-2"><span className="text-[10px] font-bold text-slate-400 uppercase truncate">{trend}</span></div>}
       </div>
     );
   }
 
   return (
-    <div className="bg-white p-8 rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all h-40 flex flex-col justify-between">
-      <div className="relative">
-        <div className="flex items-center gap-2">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+    <div className="bg-white p-6 sm:p-8 rounded-[32px] sm:rounded-[40px] border border-slate-50 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between min-h-[150px] overflow-hidden group">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{label}</p>
           {hint && (
-            <div className="relative group">
-              <Info size={14} className="text-slate-400" />
-              <div className="pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-8 w-56 bg-slate-900 text-white text-xs rounded-md p-2 shadow-lg z-50">
+            <div className="relative group/hint shrink-0">
+              <Info size={13} className="text-slate-400" />
+              <div className="pointer-events-none opacity-0 group-hover/hint:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 mt-2 w-48 bg-slate-900 text-white text-[11px] rounded-lg p-2 shadow-lg z-50">
                 {hint}
               </div>
             </div>
           )}
         </div>
+        {icon && <div className={`p-2 rounded-xl shrink-0 transition-transform group-hover:scale-105 ${colors[color]}`}>{icon}</div>}
       </div>
-      <h3 className="text-3xl font-black text-slate-900 mb-4">{value}</h3>
-      <div className="flex items-center gap-2">
-        <div className={`p-1.5 rounded-lg ${colors[color]}`}>{icon}</div>
-        <span className="text-[10px] font-bold text-slate-400 uppercase">{trend}</span>
-      </div>
+
+      <h3 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight my-1 truncate whitespace-nowrap">
+        {value}
+      </h3>
+
+      {trend && (
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[10px] font-bold text-slate-400 uppercase truncate">{trend}</span>
+        </div>
+      )}
     </div>
   );
 }

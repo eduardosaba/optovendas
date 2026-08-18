@@ -151,31 +151,36 @@ export default function ReguaAutomacaoWhatsAppPage() {
       const adaptacaoItens: FilaItem[] = [];
 
       (vendas || []).forEach((v: any) => {
-        if (!v.pacientes || !v.pacientes.celular) return;
+        const paciente = Array.isArray(v.pacientes) ? v.pacientes[0] : v.pacientes;
+        const celular = paciente?.celular || v.cliente_manual_celular;
+        const nomeCompleto = paciente?.nome_completo || v.cliente_manual_nome;
+        if (!celular || !nomeCompleto) return;
+
         const dataVenda = new Date(v.criado_em || Date.now());
         const diffDias = Math.floor((hoje.getTime() - dataVenda.getTime()) / (1000 * 3600 * 24));
 
-        // Elegível se estiver entre 10 e 30 dias de entrega
-        if (diffDias >= 10 && diffDias <= 30) {
-          const pNome = v.pacientes.nome_completo.split(" ")[0];
+        // Elegível se esteve nos últimos 60 dias
+        if (diffDias >= 1 && diffDias <= 60) {
+          const pNome = nomeCompleto.split(" ")[0];
           const armacao = v.ordens_servico?.[0]?.armacao_modelo || "escolhida";
           const lente = v.ordens_servico?.[0]?.material_lente || "selecionada";
 
           const template = reguas.find((r) => r.chave_regua === "adaptacao_15dias")?.mensagem_template || REGREAS_PADRAO[0].mensagem_template;
           const msg = template
-            .replace(/{nome}/g, v.pacientes.nome_completo)
+            .replace(/{nome}/g, nomeCompleto)
             .replace(/{primeiro_nome}/g, pNome)
             .replace(/{armacao}/g, armacao)
             .replace(/{lente}/g, lente)
             .replace(/{dias}/g, String(diffDias));
 
-          const chaveEv = `${v.pacientes.id}_adaptacao_15dias`;
+          const pacId = paciente?.id || v.id;
+          const chaveEv = `${pacId}_adaptacao_15dias`;
 
           adaptacaoItens.push({
             id: v.id,
-            paciente_id: v.pacientes.id,
-            paciente_nome: v.pacientes.nome_completo,
-            celular: v.pacientes.celular,
+            paciente_id: pacId,
+            paciente_nome: nomeCompleto,
+            celular: celular,
             tipo_regua: "adaptacao_15dias",
             dias_decorridos: diffDias,
             detalhes: { armacao, lente },
@@ -197,7 +202,8 @@ export default function ReguaAutomacaoWhatsAppPage() {
       const renovacaoItens: FilaItem[] = [];
 
       (receitas || []).forEach((r: any) => {
-        if (!r.pacientes || !r.pacientes.celular) return;
+        const paciente = Array.isArray(r.pacientes) ? r.pacientes[0] : r.pacientes;
+        if (!paciente || !paciente.celular) return;
         const dataEx = new Date(r.data_exame || Date.now());
         const diffDias = Math.floor((hoje.getTime() - dataEx.getTime()) / (1000 * 3600 * 24));
 

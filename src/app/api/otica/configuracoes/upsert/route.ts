@@ -33,6 +33,8 @@ export async function POST(req: Request) {
       endereco: body.endereco,
       cidade: body.cidade,
       logo_url: body.logo_url,
+      logo_bg_color: body.logo_bg_color || '#ffffff',
+      logo_scale: Number(body.logo_scale || 100),
       mensagem_rodape: body.mensagem_rodape,
       cobrar_comissao: !!body.cobrar_comissao,
       comissao_padrao_porcentagem: Number(body.comissao_padrao_porcentagem || 0),

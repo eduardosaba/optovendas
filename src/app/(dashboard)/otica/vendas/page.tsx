@@ -56,7 +56,7 @@ export default function AcompanhamentoVendasPage() {
           *,
           pacientes (*),
           ordens_servico (*),
-          vendas_parcelas (*)
+          financeiro_parcelas (*)
         `,
         )
         .eq("clinica_id", ctx.clinicaId)
@@ -409,7 +409,7 @@ export default function AcompanhamentoVendasPage() {
             {/* TABELA DE PARCELAS DO CARNÊ */}
             <div className="space-y-2">
               <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">
-                Parcelas Cadastradas ({vendaCarneModal.vendas_parcelas?.length || 0})
+                Parcelas Cadastradas ({(vendaCarneModal.financeiro_parcelas || vendaCarneModal.vendas_parcelas)?.length || 0})
               </h4>
 
               <div className="border border-slate-100 rounded-2xl overflow-hidden text-xs">
@@ -423,15 +423,15 @@ export default function AcompanhamentoVendasPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium">
-                    {Array.isArray(vendaCarneModal.vendas_parcelas) && vendaCarneModal.vendas_parcelas.length > 0 ? (
-                      vendaCarneModal.vendas_parcelas.map((parc: any, idx: number) => (
+                    {Array.isArray(vendaCarneModal.financeiro_parcelas || vendaCarneModal.vendas_parcelas) && (vendaCarneModal.financeiro_parcelas || vendaCarneModal.vendas_parcelas).length > 0 ? (
+                      (vendaCarneModal.financeiro_parcelas || vendaCarneModal.vendas_parcelas).map((parc: any, idx: number) => (
                         <tr key={parc.id || idx}>
                           <td className="p-3 font-bold">Parcela #{parc.numero_parcela || idx + 1}</td>
                           <td className="p-3">{parc.data_vencimento ? new Date(parc.data_vencimento).toLocaleDateString("pt-BR") : "--"}</td>
                           <td className="p-3 font-black text-slate-900">R$ {Number(parc.valor_parcela || 0).toFixed(2)}</td>
                           <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${parc.pago ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                              {parc.pago ? "Pago" : "Pendente"}
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${(parc.pago || parc.status === 'pago') ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                              {(parc.pago || parc.status === 'pago') ? "Pago" : "Pendente"}
                             </span>
                           </td>
                         </tr>
@@ -460,7 +460,7 @@ export default function AcompanhamentoVendasPage() {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                         venda: vendaCarneModal,
-                        parcelas: vendaCarneModal.vendas_parcelas || [],
+                        parcelas: vendaCarneModal.financeiro_parcelas || vendaCarneModal.vendas_parcelas || [],
                         cliente: vendaCarneModal.pacientes,
                         clinicaId,
                       }),

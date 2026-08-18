@@ -48,7 +48,14 @@ export default function PacienteRichFichaPage() {
 
   function formatDateSafe(raw?: string | null) {
     if (!raw) return "Sem data";
-    const d = new Date(raw);
+    const str = String(raw).trim();
+    const datePart = str.split("T")[0].split(" ")[0];
+    const parts = datePart.split("-");
+    if (parts.length === 3 && parts[0].length === 4) {
+      const [year, month, day] = parts;
+      return `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
+    }
+    const d = new Date(str);
     if (Number.isNaN(d.getTime())) return "Sem data";
     return d.toLocaleDateString('pt-BR');
   }
@@ -74,21 +81,14 @@ export default function PacienteRichFichaPage() {
 
         async function fetchHistoricoCompat(table: string, pacienteId: string) {
           if (table === 'vendas') {
-            const selectStr = '*, ordens_servico(numero_os,status_os), pagamentos(*)';
+            const selectStr = '*, ordens_servico(numero_os,status_os), financeiro_parcelas(*)';
             let res = await supabase
               .from('vendas')
               .select(selectStr)
               .eq('paciente_id', pacienteId)
               .order('criado_em', { ascending: false });
 
-            if (res.error && /criado_em|column .* does not exist/i.test(String(res.error.message || res.error))) {
-              res = await supabase
-                .from('vendas')
-                .select(selectStr)
-                .eq('paciente_id', pacienteId)
-                .order('created_at', { ascending: false });
-            }
-            if (res.error && /created_at|column .* does not exist/i.test(String(res.error.message || res.error))) {
+            if (res.error) {
               res = await supabase
                 .from('vendas')
                 .select(selectStr)
@@ -148,8 +148,8 @@ export default function PacienteRichFichaPage() {
 
         setPaciente(currentPaciente);
 
-        // 2. Buscar Todo o Ecossistema do Paciente (Receitas, Vendas, Arquivos, Termos)
-        const [rRes, vResRaw, aRes, tRes, fRes] = await Promise.all([
+        // 2. Buscar Todo o Ecossistema do Paciente (Receitas, Vendas, Arquivos, Termos, Consultas)
+        const [rRes, vResRaw, aRes, tRes, fRes, cRes] = await Promise.all([
           supabase.from('receitas_optometricas').select('*').eq('paciente_id', currentPaciente.id).order('data_exame', { ascending: false }),
           fetchHistoricoCompat('vendas', currentPaciente.id),
           fetchHistoricoCompat('paciente_arquivos', currentPaciente.id),
@@ -158,14 +158,19 @@ export default function PacienteRichFichaPage() {
             .from('fluxo_caixa')
             .select('*, vendas(id, numero_os_manual, ordens_servico(numero_os))')
             .eq('clinica_id', ctx.clinicaId)
-            .order('data_movimento', { ascending: false })
+            .order('data_movimento', { ascending: false }),
+          supabase
+            .from('consultorio_receitas')
+            .select('*')
+            .eq('paciente_id', currentPaciente.id)
+            .order('created_at', { ascending: false }),
         ]);
 
         let vRes = vResRaw;
         if (!vRes?.error && (!vRes?.data || vRes.data.length === 0) && currentPaciente?.nome_completo) {
           const fallbackByNome = await supabase
             .from('vendas')
-            .select('*, ordens_servico(numero_os,status_os), pagamentos(*)')
+            .select('*, ordens_servico(numero_os,status_os), financeiro_parcelas(*)')
             .eq('paciente_nome', currentPaciente.nome_completo)
             .order('id', { ascending: false });
           if (!fallbackByNome.error && fallbackByNome.data?.length) {
@@ -177,7 +182,6 @@ export default function PacienteRichFichaPage() {
         const normalizeReceita = (row: any) => {
           if (!row) return row;
 
-          // DNP/DP pode vir como texto único ou separado por / (ex: "62/64")
           let dnp_od = row.dnp_od ?? null;
           let dnp_oe = row.dnp_oe ?? null;
           if (!dnp_od && !dnp_oe && row.dp_dnp) {
@@ -205,7 +209,7 @@ export default function PacienteRichFichaPage() {
             dp_dnp: row.dp_dnp ?? row.dnp ?? null,
             dnp_od: dnp_od,
             dnp_oe: dnp_oe,
-            optometrista_nome: row.optometrista_nome ?? row.usuario_nome ?? row.usuario ?? null,
+            optometrista_nome: row.optometrista_nome ?? row.profissional_nome ?? row.medico_nome ?? row.usuario_nome ?? row.usuario ?? null,
             observacoes: row.observacoes ?? row.observacoes_clinicas ?? row.observacoes_internas ?? row.nota_rodape ?? null,
             tipo_lente: row.tipo_lente ?? null,
             tratamento_lente: row.tratamento_lente ?? null,
@@ -223,6 +227,7 @@ export default function PacienteRichFichaPage() {
           anexos: aRes.data || [],
           termos: tRes.data || [],
           financeiro: financeiroFiltrado,
+          consultas: cRes.data || [],
         });
 
         // imprimirReceita precisa de contexto da clínica; carregamos aqui em memória leve
@@ -467,73 +472,250 @@ export default function PacienteRichFichaPage() {
           )}
 
           {activeTab === 'financeiro' && (
-            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-              <div className="flex items-center justify-between px-2">
-                <h2 className="text-xl font-black text-slate-800 tracking-tight">Histórico de Pagamentos</h2>
-                <div className="flex gap-2">
-                  <span className="flex items-center gap-1 text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md uppercase">
-                    <CheckCircle2 size={10}/> Conciliado
-                  </span>
-                  <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-md uppercase">
-                    <Clock size={10}/> Pendente
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+              {/* HISTÓRICO DE ATENDIMENTOS E CONSULTAS */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                    <Wallet className="text-blue-600" size={20} /> Atendimentos Clínicos & Consultas
+                  </h2>
+                  <span className="text-[10px] font-black text-slate-400 uppercase bg-slate-100 px-3 py-1 rounded-full">
+                    {historico.consultas?.length || 0} Atendimentos
                   </span>
                 </div>
-              </div>
 
-              {historico.financeiro.length === 0 ? (
-                <div className="p-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
-                  <Wallet size={48} className="mx-auto text-slate-100 mb-4" />
-                  <p className="font-bold text-slate-400 italic">Nenhum registro financeiro encontrado.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {historico.financeiro.map((f: any) => {
-                    const conciliado = Boolean(f.conciliado || f.status_conciliacao === 'concluido');
-                    const numeroOsFinanceiro =
-                      f.vendas?.ordens_servico?.[0]?.numero_os ||
-                      f.vendas?.numero_os_manual ||
-                      'S/N';
+                {(!historico.consultas || historico.consultas.length === 0) ? (
+                  <div className="p-8 text-center bg-white rounded-[32px] border border-dashed border-slate-200">
+                    <p className="font-bold text-slate-400 italic text-xs">Nenhum histórico financeiro de atendimento clínico registrado.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {historico.consultas.map((c: any) => {
+                      const isGratuito = c.modelo_cobranca === "gratuito" || c.status_pagamento === "isento" || Number(c.valor_final || 0) === 0;
+                      const isPago = c.status_pagamento === "pago";
 
-                    return (
-                      <div key={f.id} className="bg-white p-5 rounded-[30px] border border-slate-100 shadow-sm relative overflow-hidden group hover:border-emerald-200 transition-all">
-                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${conciliado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                      return (
+                        <div key={c.id} className="bg-white p-5 rounded-[30px] border border-slate-100 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all space-y-3">
+                          <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isGratuito ? 'bg-blue-500' : isPago ? 'bg-emerald-500' : 'bg-amber-500'}`} />
 
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2.5 rounded-xl ${f.tipo === 'entrada' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                              {f.tipo === 'entrada' ? <TrendingUp size={18}/> : <X size={18}/>}
-                            </div>
+                          <div className="flex justify-between items-start">
                             <div>
-                              <p className="font-black text-slate-800 text-xs uppercase">{f.descricao || 'Recebimento'}</p>
-                              <p className="text-[10px] font-bold text-slate-400">
-                                {formatDateSafe(f.data_movimento || f.criado_em || f.created_at)} • {f.metodo_pagamento || f.forma_pagamento || 'N/D'}
+                              <span className={`text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                                isGratuito 
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}>
+                                {isGratuito ? "🎁 Atendimento Gratuito (Cortesia)" : "💳 Atendimento Cobrado"}
+                              </span>
+                              <p className="font-black text-slate-900 text-sm mt-2">
+                                Consulta / Refração ({c.tipo_atendimento === 'externo' ? 'Externo' : 'Interno'})
+                              </p>
+                              <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                Data: {formatDateSafe(c.data_atendimento || c.created_at)}
+                              </p>
+                            </div>
+
+                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-xl uppercase flex items-center gap-1 ${
+                              isPago 
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : isGratuito 
+                                ? 'bg-blue-100 text-blue-800' 
+                                : 'bg-amber-100 text-amber-800 animate-pulse'
+                            }`}>
+                              {isPago ? "✅ Quitado" : isGratuito ? "🎁 Isento" : "⏳ Em Aberto"}
+                            </span>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-50 flex justify-between items-center text-xs">
+                            <div>
+                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Forma de Pagamento</p>
+                              <p className="font-bold text-slate-700 capitalize">{c.forma_pagamento || (isGratuito ? 'N/A (Gratuito)' : 'Não informada')}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Valor Cobrado</p>
+                              <p className="font-black text-slate-900 text-sm">
+                                {isGratuito ? "R$ 0,00" : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(c.valor_final || 0))}
                               </p>
                             </div>
                           </div>
-                          {conciliado ? (
-                            <CheckCircle2 size={16} className="text-emerald-500" />
-                          ) : (
-                            <Clock size={16} className="text-amber-500 animate-pulse" />
-                          )}
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
-                        <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                          <div>
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Origem</p>
-                            <p className="text-[10px] font-bold text-slate-600">OS #{numeroOsFinanceiro}</p>
+              {/* HISTÓRICO DE VENDAS E LANÇAMENTOS DE ÓTICA */}
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between px-2">
+                  <h2 className="text-xl font-black text-slate-800 tracking-tight">Lançamentos de Ótica & Vendas</h2>
+                  <div className="flex gap-2">
+                    <span className="flex items-center gap-1 text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md uppercase">
+                      <CheckCircle2 size={10}/> Conciliado
+                    </span>
+                    <span className="flex items-center gap-1 text-[9px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-md uppercase">
+                      <Clock size={10}/> Pendente
+                    </span>
+                  </div>
+                </div>
+
+                {historico.financeiro.length === 0 ? (
+                  <div className="p-12 text-center bg-white rounded-[32px] border border-dashed border-slate-200">
+                    <Wallet size={40} className="mx-auto text-slate-200 mb-2" />
+                    <p className="font-bold text-slate-400 italic text-xs">Nenhum lançamento financeiro de ótica encontrado.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {historico.financeiro.map((f: any) => {
+                      const conciliado = Boolean(f.conciliado || f.status_conciliacao === 'concluido');
+                      const numeroOsFinanceiro =
+                        f.vendas?.ordens_servico?.[0]?.numero_os ||
+                        f.vendas?.numero_os_manual ||
+                        'S/N';
+
+                      return (
+                        <div key={f.id} className="bg-white p-5 rounded-[30px] border border-slate-100 shadow-sm relative overflow-hidden group hover:border-emerald-200 transition-all">
+                          <div className={`absolute left-0 top-0 bottom-0 w-1 ${conciliado ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2.5 rounded-xl ${f.tipo === 'entrada' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                {f.tipo === 'entrada' ? <TrendingUp size={18}/> : <X size={18}/>}
+                              </div>
+                              <div>
+                                <p className="font-black text-slate-800 text-xs uppercase">{f.descricao || 'Recebimento'}</p>
+                                <p className="text-[10px] font-bold text-slate-400">
+                                  {formatDateSafe(f.data_movimento || f.criado_em || f.created_at)} • {f.metodo_pagamento || f.forma_pagamento || 'N/D'}
+                                </p>
+                              </div>
+                            </div>
+                            {conciliado ? (
+                              <CheckCircle2 size={16} className="text-emerald-500" />
+                            ) : (
+                              <Clock size={16} className="text-amber-500 animate-pulse" />
+                            )}
                           </div>
-                          <div className="text-right">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Valor</p>
-                            <p className="font-black text-slate-900">
-                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(f.valor || 0))}
-                            </p>
+
+                          <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                            <div>
+                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Origem</p>
+                              <p className="text-[10px] font-bold text-slate-600">OS #{numeroOsFinanceiro}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Valor</p>
+                              <p className="font-black text-slate-900">
+                                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(f.valor || 0))}
+                              </p>
+                            </div>
                           </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ABA DE DOCUMENTOS (RECEITAS SALVAS & GALERIA DE ARQUIVOS) */}
+          {activeTab === 'arquivos' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+              
+              {/* SEÇÃO DE RECEITAS MÉDICAS / ÓPTICAS SALVAS */}
+              <div className="bg-white rounded-[40px] p-8 border border-slate-100 space-y-6">
+                <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                  <div>
+                    <h3 className="font-black text-slate-900 text-xl tracking-tight flex items-center gap-2">
+                      <FileText className="text-blue-600" size={22} /> Receitas Clínicas Salvas
+                    </h3>
+                    <p className="text-xs text-slate-400 font-bold mt-0.5">
+                      Baixe o PDF ou imprima novamente qualquer receita registrada para este paciente
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                    {historico.receitas.length} Receitas
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {historico.receitas.map((r: any) => (
+                    <div key={r.id} className="bg-slate-50/70 p-5 rounded-[28px] border border-slate-200/80 hover:border-blue-300 transition-all space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-black text-slate-900 text-sm uppercase tracking-tight">
+                            {r.tipo_receita || 'Prescrição de Óculos'}
+                          </p>
+                          <p className="text-[10px] font-bold text-slate-500 mt-0.5 flex items-center gap-1">
+                            <Calendar size={12} /> {formatDateSafe(r.data_exame)}
+                          </p>
+                          <p className="text-[10px] font-bold text-blue-700 mt-0.5">
+                            Profissional: {r.optometrista_nome || r.profissional_nome || r.usuario_nome || 'Profissional Responsável'}
+                          </p>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      {/* Resumo dos Graus */}
+                      <div className="bg-white p-3 rounded-2xl border border-slate-100 text-center font-mono font-bold text-xs text-slate-800 grid grid-cols-3 gap-2">
+                        <div>
+                          <span className="text-[8px] font-black uppercase text-blue-600 block">OD Esférico</span>
+                          {formatSigned(r.longe_od_esferico, { empty: '0.00' })}
+                        </div>
+                        <div>
+                          <span className="text-[8px] font-black uppercase text-blue-600 block">OE Esférico</span>
+                          {formatSigned(r.longe_oe_esferico, { empty: '0.00' })}
+                        </div>
+                        <div>
+                          <span className="text-[8px] font-black uppercase text-emerald-600 block">Adição</span>
+                          {formatSigned(r.perto_adicao, { empty: '---' })}
+                        </div>
+                      </div>
+
+                      {/* Ações de Impressão e Download */}
+                      <div className="pt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => imprimirReceita(r)}
+                          className="flex-1 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition"
+                        >
+                          <Printer size={14} /> Imprimir / PDF
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {historico.receitas.length === 0 && (
+                    <p className="col-span-full text-center py-12 text-slate-400 font-bold italic">
+                      Nenhuma receita registrada até o momento.
+                    </p>
+                  )}
                 </div>
-              )}
+              </div>
+
+              {/* SEÇÃO GALERIA DE ANEXOS E ARQUIVOS */}
+              <div className="bg-white rounded-[40px] p-8 border border-slate-100">
+                <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+                  <h3 className="font-black text-slate-800 text-xl tracking-tight flex items-center gap-2">
+                    <Paperclip className="text-slate-600" size={20} /> Galeria de Anexos
+                  </h3>
+                  <button className="p-2 bg-cyan-50 text-cyan-600 rounded-xl hover:bg-cyan-100 transition-colors"><Plus size={20}/></button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {historico.anexos.map((arq: any) => (
+                    <div key={arq.id} className="group relative aspect-square rounded-3xl overflow-hidden border border-slate-100 bg-slate-50">
+                       <img src={arq.url_arquivo} className="h-full w-full object-cover" alt="" />
+                       <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-all flex flex-col items-center justify-center p-4 text-center">
+                         <p className="text-[9px] font-black text-white uppercase mb-2 line-clamp-2">{arq.descricao || 'Arquivo'}</p>
+                         <div className="flex gap-2">
+                           <button onClick={() => window.open(arq.url_arquivo, '_blank')} className="p-2 bg-white text-slate-900 rounded-lg"><Eye size={14}/></button>
+                           <a href={arq.url_arquivo} download className="p-2 bg-white text-slate-900 rounded-lg"><Download size={14}/></a>
+                         </div>
+                       </div>
+                    </div>
+                  ))}
+                  {historico.anexos.length === 0 && <p className="col-span-full text-center py-12 text-slate-400 font-bold italic">Nenhum documento anexado.</p>}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -649,7 +831,7 @@ export default function PacienteRichFichaPage() {
                 {r.tipo_receita || 'Exame de Refração'}
               </p>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                <Calendar size={12}/> {new Date(r.data_exame).toLocaleDateString('pt-BR')} • Dr(a). {r.optometrista_nome || 'Consultor Técnico'}
+                <Calendar size={12}/> {formatDateSafe(r.data_exame)} • {r.optometrista_nome || r.profissional_nome || r.usuario_nome || 'Profissional Responsável'}
               </p>
             </div>
           </div>

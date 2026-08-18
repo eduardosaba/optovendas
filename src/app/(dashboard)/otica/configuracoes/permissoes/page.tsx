@@ -102,24 +102,34 @@ export default function GestaoPermissoesPage() {
       </header>
 
       <div className="space-y-6">
-        {permissoes.length === 0 ? (
-          <p className="text-center py-10 text-slate-400">Nenhuma permissão definida.</p>
+        {permissoes.filter(p => p.role !== 'optometrista').length === 0 ? (
+          <p className="text-center py-10 text-slate-400">Nenhuma permissão definida para os perfis da Ótica.</p>
         ) : (
-          permissoes.map((p, idx) => (
-            <section key={p.id} className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
-              <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
-                <ShieldCheck className="text-cyan-600" />
-                <h2 className="font-black text-slate-800 uppercase text-sm tracking-widest">Perfil: {p.role}</h2>
-              </div>
+          permissoes
+            .filter(p => p.role !== 'optometrista')
+            .map((p, idx) => {
+              const labelRole =
+                p.role === 'admin' ? 'Administrador da Ótica' :
+                p.role === 'gerente' || p.role === 'gerente_supervisor' ? 'Gerente / Supervisor' :
+                p.role === 'vendedor' || p.role === 'vendedor_atendente' ? 'Vendedor / Atendente' :
+                String(p.role).toUpperCase();
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <TogglePerm label="Ver Financeiro" ativo={p.pode_ver_financeiro} onClick={() => togglePerm(idx, 'pode_ver_financeiro')} />
-                <TogglePerm label="Editar Estoque" ativo={p.pode_editar_estoque} onClick={() => togglePerm(idx, 'pode_editar_estoque')} />
-                <TogglePerm label="Configurar Sistema" ativo={p.pode_configurar_sistema} onClick={() => togglePerm(idx, 'pode_configurar_sistema')} />
-                <TogglePerm label="Excluir Dados" ativo={p.pode_excluir_dados} onClick={() => togglePerm(idx, 'pode_excluir_dados')} />
-              </div>
-            </section>
-          ))
+              return (
+                <section key={p.id || idx} className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
+                  <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+                    <ShieldCheck className="text-cyan-600" />
+                    <h2 className="font-black text-slate-800 uppercase text-sm tracking-widest">Perfil: {labelRole}</h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <TogglePerm label="Ver Financeiro" ativo={p.pode_ver_financeiro} onClick={() => togglePerm(idx, 'pode_ver_financeiro')} />
+                    <TogglePerm label="Editar Estoque" ativo={p.pode_editar_estoque} onClick={() => togglePerm(idx, 'pode_editar_estoque')} />
+                    <TogglePerm label="Configurar Sistema" ativo={p.pode_configurar_sistema} onClick={() => togglePerm(idx, 'pode_configurar_sistema')} />
+                    <TogglePerm label="Excluir Dados" ativo={p.pode_excluir_dados} onClick={() => togglePerm(idx, 'pode_excluir_dados')} />
+                  </div>
+                </section>
+              );
+            })
         )}
       </div>
     </div>

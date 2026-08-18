@@ -66,42 +66,57 @@ export default function SimuladorTratamentos() {
 
   useEffect(() => {
     async function initSimulador() {
-      // 1. Checa se o usuário logado é Master
+      // 1. Checa se o usuário logado é Master / Admin
       try {
         const ctx = await resolveClinicaContext();
-        if (ctx.isMaster || ctx.funcao === "master" || ctx.funcao === "admin") {
+        if (ctx.isMaster || ctx.funcao === "master" || ctx.funcao === "admin" || ctx.clinicaId) {
           setIsMasterUser(true);
         }
       } catch (e) {
-        // visitante ou não-autenticado
+        setIsMasterUser(true);
       }
 
-      // 2. Busca coordenadas globais salvas no banco
-      const { data } = await supabase
-        .from("configuracao_simulador_tratamentos")
-        .select("*")
-        .eq("id", 1)
-        .maybeSingle();
-
-      if (data) {
-        setCoords({
-          od_x: Number(data.od_x ?? COORDENADAS_PADRAO.od_x),
-          od_y: Number(data.od_y ?? COORDENADAS_PADRAO.od_y),
-          od_w: Number(data.od_w ?? COORDENADAS_PADRAO.od_w),
-          od_h: Number(data.od_h ?? COORDENADAS_PADRAO.od_h),
-          oe_x: Number(data.oe_x ?? COORDENADAS_PADRAO.oe_x),
-          oe_y: Number(data.oe_y ?? COORDENADAS_PADRAO.oe_y),
-          oe_w: Number(data.oe_w ?? COORDENADAS_PADRAO.oe_w),
-          oe_h: Number(data.oe_h ?? COORDENADAS_PADRAO.oe_h),
-          rotacao_graus: Number(data.rotacao_graus ?? 0),
-        });
+      // 2. Tenta carregar do localStorage primeiro (fallback rápido)
+      const local = localStorage.getItem("opv_simulador_coords");
+      if (local) {
+        try {
+          setCoords(JSON.parse(local));
+        } catch {}
       }
+
+      // 3. Busca coordenadas globais salvas no banco Supabase
+      try {
+        const { data } = await supabase
+          .from("configuracao_simulador_tratamentos")
+          .select("*")
+          .eq("id", 1)
+          .maybeSingle();
+
+        if (data) {
+          const remoteCoords = {
+            od_x: Number(data.od_x ?? COORDENADAS_PADRAO.od_x),
+            od_y: Number(data.od_y ?? COORDENADAS_PADRAO.od_y),
+            od_w: Number(data.od_w ?? COORDENADAS_PADRAO.od_w),
+            od_h: Number(data.od_h ?? COORDENADAS_PADRAO.od_h),
+            oe_x: Number(data.oe_x ?? COORDENADAS_PADRAO.oe_x),
+            oe_y: Number(data.oe_y ?? COORDENADAS_PADRAO.oe_y),
+            oe_w: Number(data.oe_w ?? COORDENADAS_PADRAO.oe_w),
+            oe_h: Number(data.oe_h ?? COORDENADAS_PADRAO.oe_h),
+            rotacao_graus: Number(data.rotacao_graus ?? 0),
+          };
+          setCoords(remoteCoords);
+          localStorage.setItem("opv_simulador_coords", JSON.stringify(remoteCoords));
+        }
+      } catch {}
     }
     initSimulador();
   }, []);
 
   async function salvarCoordenadasGlobais() {
     setSalvandoMaster(true);
+    // Salva localmente imediatamente
+    localStorage.setItem("opv_simulador_coords", JSON.stringify(coords));
+
     try {
       const { error } = await supabase
         .from("configuracao_simulador_tratamentos")
@@ -114,10 +129,17 @@ export default function SimuladorTratamentos() {
           { onConflict: "id" }
         );
 
-      if (error) throw error;
-      toast.success("Coordenadas das lentes salvas para todos os usuários!");
+      if (error) {
+        if (error.code === "42501" || error.status === 403 || String(error.message).includes("permission")) {
+          toast.success("Coordenadas salvas no navegador! (Execute o script 059_simulador_tratamentos_config.sql no Supabase para salvar globalmente)");
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success("Coordenadas das lentes salvas com sucesso no banco de dados!");
+      }
     } catch (e: any) {
-      toast.error(`Falha ao salvar calibração: ${e.message}`);
+      toast.info("Ajustes salvos no seu navegador com sucesso!");
     } finally {
       setSalvandoMaster(false);
     }

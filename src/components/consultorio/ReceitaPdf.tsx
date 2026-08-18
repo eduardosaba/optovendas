@@ -123,11 +123,28 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
     if (s === "-" || s === "•" || lower === "null" || lower === "undefined") return null;
     return s;
   };
-  const tratamentoTexto = [
-    dados.tratamento_antirreflexo ? "Anti Reflexo" : null,
-    dados.tratamento_fotossensivel ? "Fotossível" : null,
-  ].filter(Boolean).join(" • ") || "-";
+
+  const tipoLenteTexto = sanitizeLabel(dados.tipo_lente) || sanitizeLabel((dados as any)?.tipoLente) || (props as OldProps).refracao?.tipoLente || "-";
+
+  const tratamentosPossiveis = [
+    dados.tratamento_antirreflexo || (dados as any)?.tratamentoAntiReflexo || (props as OldProps).refracao?.tratamentoAntiReflexo ? "Anti Reflexo" : null,
+    dados.tratamento_fotossensivel || (dados as any)?.tratamentoFotossensivel || (props as OldProps).refracao?.tratamentoFotossensivel ? "Fotossensível" : null,
+    sanitizeLabel(dados.tratamento_lente),
+  ].filter(Boolean) as string[];
+
+  const tratamentoTexto = tratamentosPossiveis.length > 0
+    ? Array.from(new Set(tratamentosPossiveis)).join(" • ")
+    : "-";
+
+  const retornoTexto = sanitizeLabel(dados.retorno) || sanitizeLabel((props as OldProps).refracao?.retorno) || null;
+
   const dataConsultaLinha = formatDateBR(dataGeracao);
+
+  const footerString = [
+    endereco,
+    clinica.telefone ? `Tel: ${clinica.telefone}` : null,
+    contatoEmail ? `E-mail: ${contatoEmail}` : null,
+  ].filter(Boolean).join(" • ") || (endereco || "Endereço da Clínica");
 
   const styles = StyleSheet.create({
     documentTitle: {
@@ -179,7 +196,7 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
 
   return (
     <Document>
-      <PDFTemplate clinica={clinica} title="Prescrição de Óculos" includeCarimbo={exibirCarimboAuto} footerText={[v(endereco), v(clinica.telefone)].filter(Boolean).join(' | ')}>
+      <PDFTemplate clinica={clinica} title="Prescrição de Óculos" includeCarimbo={exibirCarimboAuto} footerText={footerString}>
         <View style={styles.patientMetaBox}>
           <Text style={styles.patientMetaLine}>
             <Text style={styles.patientMetaLabel}>Nome Completo: </Text>
@@ -229,15 +246,15 @@ export default function ReceitaPdf(props: NewProps | OldProps) {
             <Text style={styles.detailLabel}>{condicoesTitulo}</Text>
             <Text style={styles.detailValue}>{v(condicoesVisuais)}</Text>
           </View>
-            {dados.retorno && (
-              <View style={styles.detailCard}>
-                <Text style={styles.detailLabel}>Retorno</Text>
-                <Text style={styles.detailValue}>{v(dados.retorno)}</Text>
-              </View>
-            )}
+          {retornoTexto && (
+            <View style={styles.detailCard}>
+              <Text style={styles.detailLabel}>Retorno Programado</Text>
+              <Text style={styles.detailValue}>{v(retornoTexto)}</Text>
+            </View>
+          )}
           <View style={styles.detailCard}>
             <Text style={styles.detailLabel}>Tipo de Lente</Text>
-            <Text style={styles.detailValue}>{v(dados.tipo_lente)}</Text>
+            <Text style={styles.detailValue}>{v(tipoLenteTexto)}</Text>
           </View>
           <View style={styles.detailCard}>
             <Text style={styles.detailLabel}>Tratamento</Text>
@@ -301,9 +318,18 @@ function calcularIdadePorNascimento(dataNascimento?: string | null) {
 
 function formatDateBR(input?: string | null) {
   if (!input) return "-";
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return input;
-  return d.toLocaleDateString("pt-BR");
+  const str = String(input).trim();
+  const dateOnly = str.split("T")[0].split(" ")[0];
+  const parts = dateOnly.split("-");
+  if (parts.length === 3 && parts[0].length === 4) {
+    return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+  }
+  const d = new Date(str);
+  if (Number.isNaN(d.getTime())) return str.slice(0, 10);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
 }
 
 function normalizeVal(v: unknown) {

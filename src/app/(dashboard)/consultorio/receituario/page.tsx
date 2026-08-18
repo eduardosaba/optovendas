@@ -115,7 +115,7 @@ export default function ReceituarioPage() {
                 </h3>
                 <div className="flex flex-wrap gap-4 text-xs font-bold text-slate-400 uppercase tracking-tighter">
                   <span className="flex items-center gap-1"><Calendar size={14}/> {receita.data_exame ? new Date(receita.data_exame).toLocaleDateString('pt-BR') : '-'}</span>
-                  <span className="flex items-center gap-1"><User size={14}/> Profissional Logado</span>
+                  <span className="flex items-center gap-1"><User size={14}/> {receita.optometrista_nome || receita.profissional_nome || receita.usuario_nome || 'Profissional Responsável'}</span>
                 </div>
               </div>
             </div>

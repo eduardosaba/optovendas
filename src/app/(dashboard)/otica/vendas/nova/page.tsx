@@ -113,6 +113,19 @@ async function obterIpOrigem() {
   }
 }
 
+function addBusinessDays(startDate: Date | string, days: number = 10): string {
+  const d = new Date(startDate);
+  let count = 0;
+  while (count < days) {
+    d.setDate(d.getDate() + 1);
+    const dayOfWeek = d.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      count++;
+    }
+  }
+  return d.toISOString().slice(0, 10);
+}
+
 function NovaVendaStepperContent() {
   const searchParams = useSearchParams();
   const pacienteIdFromUrl = searchParams.get("pacienteId") ?? "";
@@ -160,7 +173,7 @@ function NovaVendaStepperContent() {
     lenteId: "",
     tratamentos: [],
     laboratorioNome: "",
-    previsaoEntrega: "",
+    previsaoEntrega: addBusinessDays(new Date(), 10),
     dataEncomenda: new Date().toISOString().slice(0, 10),
     statusOS: "Laboratorio",
     numeroOsManual: "",
@@ -730,11 +743,8 @@ function NovaVendaStepperContent() {
     }
   }, [clinicaId, vendaData, pacientes, receitaSelecionada, lenteSelecionada, armacaoSelecionada, tipoArmacaoSelecionado, pacienteCidadeAtendimento, toast, criarParcelasCrediario]);
 
-  // Exposição da função legado para o objeto window
-  // Na etapa 4, quem deve registrar `__opv_finalize` é o Step4Fechamento
-  // (fluxo novo via endpoint /api/otica/vendas/finalize).
+  // Exposição da função para finalizar a venda no objeto window
   useEffect(() => {
-    if (step === 4) return;
     const win = window as OPVWindow;
     win.__opv_finalize = finalizarVenda;
     return () => {
@@ -742,7 +752,7 @@ function NovaVendaStepperContent() {
         delete win.__opv_finalize;
       }
     };
-  }, [finalizarVenda, step]);
+  }, [finalizarVenda]);
 
   function nextStep() {
     if (step === 1 && !vendaData.pacienteId && !vendaData.vendaManual) {

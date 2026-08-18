@@ -3,6 +3,8 @@ export type PacienteOption = {
   nome_completo: string;
   cidade_atendimento?: string | null;
   cpf?: string | null;
+  celular?: string | null;
+  telefone?: string | null;
 };
 
 export type ReceitaOptometrica = {

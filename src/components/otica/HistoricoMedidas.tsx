@@ -87,7 +87,6 @@ export default function HistoricoMedidas({ clinicaId }: { clinicaId: string }) {
             )
           )
         `)
-        .not("pupilometro_foto_url", "is", null)
         .order("criado_em", { ascending: false })
         .limit(100);
 
@@ -97,7 +96,7 @@ export default function HistoricoMedidas({ clinicaId }: { clinicaId: string }) {
 
       const { data: dataOS } = await queryOS;
 
-      // 2. Buscar Vendas com foto de pupilômetro cadastrada
+      // 2. Buscar Vendas com medidas registradas
       let queryVendas = supabase
         .from("vendas")
         .select(`
@@ -118,7 +117,6 @@ export default function HistoricoMedidas({ clinicaId }: { clinicaId: string }) {
             celular
           )
         `)
-        .not("pupilometro_foto_url", "is", null)
         .order("criado_em", { ascending: false })
         .limit(100);
 

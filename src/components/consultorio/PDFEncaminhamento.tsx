@@ -15,8 +15,6 @@ export default function PDFEncaminhamento({ paciente, texto, clinica }: any) {
   return (
     <Document>
       <PDFTemplate clinica={clinica} title="Termo de Encaminhamento">
-        <Text style={styles.title}>Termo de Encaminhamento</Text>
-
         <View style={styles.content}>
           <Text>{texto}</Text>
         </View>

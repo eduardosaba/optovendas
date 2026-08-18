@@ -110,6 +110,18 @@ function BarcodeSVG({ code, height = 30 }: { code: string; height?: number }) {
   );
 }
 
+function QRCodeSVG({ code, size = 30 }: { code: string; size?: number }) {
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(code || "OPTO")}`;
+  return (
+    <img 
+      src={qrUrl} 
+      alt={`QR Code ${code}`} 
+      style={{ width: size, height: size }} 
+      className="object-contain inline-block"
+    />
+  );
+}
+
 // ============================================================================
 // COMPONENTE PRINCIPAL DE ETIQUETAS
 // ============================================================================
@@ -715,7 +727,7 @@ function RenderEtiquetaItem({
             {tipoCodigo === "barcode" ? (
               <BarcodeSVG code={item.codigo_referencia} height={20} />
             ) : (
-              <div className="text-[7px] font-mono font-bold bg-slate-100 p-0.5 rounded">QR: {item.codigo_referencia}</div>
+              <QRCodeSVG code={item.codigo_referencia} size={22} />
             )}
           </div>
           {exibirCodigoTexto && <span className="font-mono text-[7px] font-bold">{item.codigo_referencia}</span>}
@@ -758,7 +770,7 @@ function RenderEtiquetaItem({
           {tipoCodigo === "barcode" ? (
             <BarcodeSVG code={item.codigo_referencia} height={24} />
           ) : (
-            <div className="text-[7px] font-mono font-bold bg-slate-100 p-0.5 rounded">QR: {item.codigo_referencia}</div>
+            <QRCodeSVG code={item.codigo_referencia} size={24} />
           )}
         </div>
       </div>

@@ -846,7 +846,7 @@ export default function Step3Medidas({ data, onChange, clinicaId }: Props) {
         try {
           const { data: clinicaData } = await supabase
             .from('clinicas')
-            .select('nome_fantasia,logomarca_url,endereco_completo,cnpj')
+            .select('nome_fantasia,logomarca_url,cnpj_cpf,telefone')
             .eq('id', clinicaId)
             .maybeSingle();
 

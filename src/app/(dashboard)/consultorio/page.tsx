@@ -79,6 +79,8 @@ function DocShortcut({ href, label, iconPath, tint }: { href: string; label: str
   );
 }
 
+import ModalNovoAgendamento from "@/components/consultorio/ModalNovoAgendamento";
+
 export default function ConsultorioPage() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -86,6 +88,7 @@ export default function ConsultorioPage() {
   const [currentAgendaId, setCurrentAgendaId] = useState<string | null>(null);
   const [loadingFila, setLoadingFila] = useState(true);
   const [now, setNow] = useState<Date | null>(null);
+  const [showAgendamentoModal, setShowAgendamentoModal] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -206,16 +209,24 @@ export default function ConsultorioPage() {
               </div>
             </Link>
 
-            <ActionTile
-              href="/consultorio/pacientes/novo"
-              title="Novo Paciente"
-              description="Cadastro rápido para atendimento imediato"
-              icon={
-                <IconBox tone="emerald">
-                  <IconStroke path="M12 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 9a7 7 0 0 1 14 0" />
-                </IconBox>
-              }
-            />
+            <div 
+              onClick={() => setShowAgendamentoModal(true)}
+              className="group relative flex h-72 cursor-pointer flex-col justify-between overflow-hidden rounded-[48px] bg-slate-900 p-9 text-white shadow-xl transition-all hover:-translate-y-1 hover:bg-slate-800"
+            >
+              <IconBox tone="emerald">
+                <IconStroke path="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" />
+              </IconBox>
+
+              <div className="relative z-10 text-left">
+                <h2 className="text-3xl font-black leading-tight">Agendar Atendimento</h2>
+                <p className="mt-2 text-sm font-medium text-slate-300">Recepção: agendamento com valor e forma de pagamento</p>
+              </div>
+
+              <div className="absolute -right-16 -top-14 h-44 w-44 rounded-full bg-emerald-500/15 blur-2xl" />
+              <div className="absolute bottom-8 right-8 text-white/40">
+                <IconStroke path="M5 12h14m-5-5 5 5-5 5" />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -293,7 +304,7 @@ export default function ConsultorioPage() {
               />
               <DocShortcut
                 href="/consultorio/fechamento"
-                label="Fechamento"
+                label="Fechamento Financeiro / dia"
                 iconPath="M3 3h18v14H3zM7 7h10"
                 tint="bg-emerald-100 text-emerald-600"
               />
@@ -432,6 +443,8 @@ export default function ConsultorioPage() {
           </div>
         </aside>
       </div>
+
+      <ModalNovoAgendamento open={showAgendamentoModal} onClose={() => setShowAgendamentoModal(false)} />
     </div>
   );
 }

@@ -815,14 +815,14 @@ function TopMetric({ label, value, color, icon, isCurrency }: TopMetricProps) {
 
   return (
     <div
-      className={`flex items-center gap-4 rounded-[28px] border border-slate-50 bg-white px-6 py-4 shadow-sm ${colors[color]}`}
+      className={`flex items-center gap-3 rounded-[28px] border border-slate-50 bg-white px-5 py-4 shadow-sm min-w-0 ${colors[color]}`}
     >
-      <div className="opacity-80">{icon}</div>
-      <div>
-        <p className="text-[9px] font-black uppercase tracking-widest opacity-60">
+      <div className="opacity-80 shrink-0">{icon}</div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[9px] font-black uppercase tracking-widest opacity-60 truncate">
           {label}
         </p>
-        <p className="text-lg font-black leading-none">
+        <p className="text-sm sm:text-base font-black leading-none truncate whitespace-nowrap">
           {isCurrency && typeof value === "number"
             ? `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : value}

@@ -34,6 +34,8 @@ export default function ConfiguracoesOticaPage() {
     endereco: "",
     cidade: "",
     logo_url: "",
+    logo_bg_color: "#ffffff",
+    logo_scale: 100,
     mensagem_rodape: "",
     cobrar_comissao: false,
     comissao_padrao_porcentagem: 0,
@@ -94,6 +96,8 @@ export default function ConfiguracoesOticaPage() {
             ...(data as any),
             cobrar_comissao: !!(data as any).cobrar_comissao,
             comissao_padrao_porcentagem: Number((data as any).comissao_padrao_porcentagem) || 0,
+            logo_bg_color: (data as any).logo_bg_color || "#ffffff",
+            logo_scale: Number((data as any).logo_scale || 100),
             cnpj: formatCpfCnpj(String((data as any).cnpj || '')),
             meta_mensal: Number((data as any).meta_mensal ?? 0)
           };
@@ -237,29 +241,104 @@ export default function ConfiguracoesOticaPage() {
         <div className="space-y-6">
           <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 flex flex-col items-center text-center">
              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Logo da Ótica</h3>
-             
-             <div className="relative group cursor-pointer w-48 h-48 bg-slate-50 rounded-[32px] border-4 border-dashed border-slate-100 flex items-center justify-center overflow-hidden transition-all hover:border-cyan-200">
-               {config.logo_url ? (
-                 <img src={config.logo_url} className="w-full h-full object-contain p-4" alt="Logo" />
-               ) : (
-                 <div className="text-slate-300 flex flex-col items-center gap-2">
-                   <ImageIcon size={48} strokeWidth={1} />
-                   <span className="text-[10px] font-black uppercase">Upload Logo</span>
-                 </div>
-               )}
-               <input 
-                 type="file" 
-                 onChange={handleUploadLogo} 
-                 className="absolute inset-0 opacity-0 cursor-pointer z-20" 
-                 accept="image/*"
-               />
-               <div className="absolute inset-0 bg-cyan-600/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none group-hover:pointer-events-auto">
-                  <Upload className="text-cyan-600" />
-               </div>
-             </div>
-             <p className="text-[9px] text-slate-400 font-bold mt-4 px-4 uppercase leading-relaxed">
-               Recomendado: Fundo transparente (PNG) 500x500px
-             </p>
+             <div
+                className="relative group cursor-pointer w-48 h-48 rounded-[32px] border-4 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all hover:border-cyan-400 p-3"
+                style={{ backgroundColor: config.logo_bg_color || "#ffffff" }}
+              >
+                {config.logo_url ? (
+                  <img
+                    src={config.logo_url}
+                    className="w-full h-full object-contain transition-transform duration-300"
+                    style={{ transform: `scale(${Number(config.logo_scale || 100) / 100})` }}
+                    alt="Logo"
+                  />
+                ) : (
+                  <div className="text-slate-400 flex flex-col items-center gap-2">
+                    <ImageIcon size={48} strokeWidth={1} />
+                    <span className="text-[10px] font-black uppercase">Upload Logo</span>
+                  </div>
+                )}
+                <input 
+                  type="file" 
+                  onChange={handleUploadLogo} 
+                  className="absolute inset-0 opacity-0 cursor-pointer z-20" 
+                  accept="image/*"
+                />
+                <div className="absolute inset-0 bg-cyan-600/10 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity pointer-events-none group-hover:pointer-events-auto">
+                   <Upload className="text-cyan-600" />
+                </div>
+              </div>
+              
+              <p className="text-[9px] text-slate-400 font-bold mt-2 px-4 uppercase leading-relaxed">
+                Recomendado: Fundo transparente (PNG) 500x500px
+              </p>
+
+              {/* PERSONALIZAÇÃO DA COR DE FUNDO E ESCALA DA LOGO */}
+              <div className="w-full mt-6 pt-6 border-t border-slate-100 space-y-5 text-left">
+                
+                {/* 1. Cor do Fundo */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider block">
+                    Cor do Fundo da Logo
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={config.logo_bg_color && config.logo_bg_color !== "transparent" ? config.logo_bg_color : "#ffffff"}
+                      onChange={(e) => setConfig({ ...config, logo_bg_color: e.target.value })}
+                      className="w-10 h-10 rounded-xl border border-slate-200 cursor-pointer p-0.5"
+                    />
+                    <input
+                      type="text"
+                      value={config.logo_bg_color}
+                      onChange={(e) => setConfig({ ...config, logo_bg_color: e.target.value })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold text-slate-800"
+                      placeholder="#ffffff"
+                    />
+                  </div>
+
+                  {/* Paleta Rápida de Cores */}
+                  <div className="flex items-center gap-1.5 pt-1">
+                    {[
+                      { hex: "#ffffff", label: "Branco" },
+                      { hex: "#0A192F", label: "Azul Marinho" },
+                      { hex: "#0F172A", label: "Slate Escuro" },
+                      { hex: "#032B56", label: "Azul Óptica" },
+                      { hex: "#000000", label: "Preto" },
+                      { hex: "transparent", label: "Transparente" },
+                    ].map((c) => (
+                      <button
+                        key={c.hex}
+                        type="button"
+                        onClick={() => setConfig({ ...config, logo_bg_color: c.hex })}
+                        style={{ backgroundColor: c.hex === "transparent" ? "#f1f5f9" : c.hex }}
+                        className={`w-6 h-6 rounded-full border border-slate-300 transition-transform ${
+                          config.logo_bg_color === c.hex ? "scale-125 ring-2 ring-cyan-500" : "hover:scale-110"
+                        }`}
+                        title={c.label}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Ampliação / Zoom */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-500">
+                    <span>Ampliar Logomarca</span>
+                    <span className="text-cyan-600 font-extrabold">{config.logo_scale}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="100"
+                    max="220"
+                    step="5"
+                    value={config.logo_scale}
+                    onChange={(e) => setConfig({ ...config, logo_scale: Number(e.target.value) })}
+                    className="w-full accent-cyan-600 cursor-pointer"
+                  />
+                </div>
+
+              </div>
           </div>
         </div>
 

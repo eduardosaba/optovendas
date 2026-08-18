@@ -171,7 +171,7 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   async function createPDFBlob(base64: string, title: string, content: string) {
     const clienteNome = (pacienteInfo?.nome_completo) || (data.cliente?.nome_completo) || data.clienteManualNome || '---';
     const clienteCpf = (pacienteInfo?.cpf) || ((data.cliente as any)?.cpf) || data.clienteManualCpf || '---';
-    const logoSrc = (config as any)?.logoSistema || (config as any)?.logo_url || null;
+    const logoSrc = (config as any)?.logomarca_url || (config as any)?.logo_unidade_url || (config as any)?.logo_url || (config as any)?.logomarca || (config as any)?.logoSistema || null;
     const opticaNome = (config as any)?.nome_otica || (config as any)?.nome_fantasia || 'Minha Ótica';
     const opticaWhats = (config as any)?.whatsapp || (config as any)?.telefone || '';
 
@@ -332,8 +332,8 @@ export default function Step4Fechamento({ data, onChange, termoTexto, armacaoLab
   async function finalizar(tipo: 'normal' | 'pendente' = 'normal', skipAutorizacaoCheck = false) {
     if (loading) return;
     
-    // Se for acionado pelo botão normal do card, chamar o handler unificado da janela se disponível
-    if (tipo === 'normal' && typeof (window as any).__opv_finalize === 'function') {
+    // Se for acionado pelo botão normal do card, chamar o handler unificado da janela se disponível e não for a própria função
+    if (tipo === 'normal' && typeof (window as any).__opv_finalize === 'function' && (window as any).__opv_finalize !== finalizar) {
       return (window as any).__opv_finalize();
     }
     

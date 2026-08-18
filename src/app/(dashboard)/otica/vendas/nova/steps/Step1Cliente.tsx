@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { AlertTriangle, Eye, FileText, Hash, Check, Search, User, X } from "lucide-react";
 import { PDFDownloadLink } from "@react-pdf/renderer";
 import ReceitaPdf from "@/components/consultorio/ReceitaPdf";
@@ -18,6 +18,11 @@ type Props = {
   pacienteNome: string;
   onChange: (next: VendaData) => void;
 };
+
+function norm(str?: string | null) {
+  if (!str) return "";
+  return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
 
 function toRefracaoValue(r: ReceitaOptometrica | null | undefined) {
   if (!r) return null;
@@ -51,6 +56,20 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
   // Estados para Combobox de busca dinâmica de paciente
   const [buscaPaciente, setBuscaPaciente] = useState("");
   const [dropdownAberto, setDropdownAberto] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fechar o dropdown de busca ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownAberto(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const pacienteAtual = useMemo(
     () => pacientes.find((p) => p.id === data.pacienteId) ?? null,
@@ -58,13 +77,15 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
   );
 
   const pacientesFiltrados = useMemo(() => {
-    if (!buscaPaciente.trim()) return pacientes.slice(0, 20);
-    const termo = buscaPaciente.toLowerCase().trim();
+    if (!buscaPaciente.trim()) return pacientes.slice(0, 30);
+    const termo = norm(buscaPaciente);
+    const termoDigits = buscaPaciente.replace(/\D/g, "");
     return pacientes.filter((p) => {
-      const nomeMatch = (p.nome_completo || "").toLowerCase().includes(termo);
-      const cpfMatch = (p.cpf || "").replace(/\D/g, "").includes(termo.replace(/\D/g, ""));
-      const cidadeMatch = (p.cidade_atendimento || "").toLowerCase().includes(termo);
-      return nomeMatch || cpfMatch || cidadeMatch;
+      const nomeMatch = norm(p.nome_completo).includes(termo);
+      const cpfMatch = termoDigits && (p.cpf || "").replace(/\D/g, "").includes(termoDigits);
+      const celMatch = termoDigits && (p.celular || "").replace(/\D/g, "").includes(termoDigits);
+      const cidadeMatch = norm(p.cidade_atendimento).includes(termo);
+      return nomeMatch || cpfMatch || celMatch || cidadeMatch;
     });
   }, [pacientes, buscaPaciente]);
 
@@ -214,7 +235,7 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
         </div>
       </section>
 
-      <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
+      <section className="bg-white p-8 pb-36 rounded-[40px] shadow-sm border border-slate-50 space-y-6">
         <div>
           <p className="text-cyan-600 font-black text-xs uppercase tracking-widest">Etapa 1</p>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Cliente e Receita</h2>
@@ -286,7 +307,7 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
                 </div>
               ) : (
                 /* Campo de busca em tempo real com dropdown */
-                <div className="relative">
+                <div className="relative" ref={dropdownRef}>
                   <div className="relative">
                     <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
@@ -303,7 +324,7 @@ export default function Step1Cliente({ data, pacientes, receitas, pacienteNome, 
                   </div>
 
                   {dropdownAberto && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-[24px] shadow-2xl border border-slate-100 z-30 max-h-64 overflow-y-auto p-2 divide-y divide-slate-50 animate-in fade-in zoom-in-95">
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-[24px] shadow-2xl border border-slate-100 z-50 max-h-72 overflow-y-auto p-2 divide-y divide-slate-50 animate-in fade-in zoom-in-95">
                       {pacientesFiltrados.length === 0 ? (
                         <div className="p-4 text-center text-xs text-slate-400 font-bold">
                           Nenhum paciente encontrado para "{buscaPaciente}".

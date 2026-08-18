@@ -39,6 +39,8 @@ type ConfigUnidade = {
   email_contato?: string | null;
   instagram_handle?: string | null;
   exibir_carimbo_automatico?: boolean;
+  valor_padrao_consulta?: string | number | null;
+  valor_promocional_consulta?: string | number | null;
 };
 
 const NOTA_PADRAO = "Exame de carater funcional. Retorne anualmente.";
@@ -68,6 +70,8 @@ export default function ConfigUnidadePage() {
     email_contato: "",
     instagram_handle: "",
     exibir_carimbo_automatico: true,
+    valor_padrao_consulta: "150.00",
+    valor_promocional_consulta: "80.00",
   });
 
   const [salvando, setSalvando] = useState(false);
@@ -89,7 +93,7 @@ export default function ConfigUnidadePage() {
             .single(),
           supabase
             .from("config_unidade")
-            .select("razao_social, telefone, cnpj_cpf, endereco_completo, logo_unidade_url, nota_rodape_receita, cor_tema, carimbo_nome, carimbo_titulo, carimbo_registro, modelo_timbrado, email_contato, instagram_handle, exibir_carimbo_automatico")
+            .select("razao_social, telefone, cnpj_cpf, endereco_completo, logo_unidade_url, nota_rodape_receita, cor_tema, carimbo_nome, carimbo_titulo, carimbo_registro, modelo_timbrado, email_contato, instagram_handle, exibir_carimbo_automatico, valor_padrao_consulta, valor_promocional_consulta")
             .eq("clinica_id", ctx.clinicaId)
             .maybeSingle(),
         ]);
@@ -124,6 +128,8 @@ export default function ConfigUnidadePage() {
             email_contato: unidade.email_contato || "",
             instagram_handle: unidade.instagram_handle || "",
             exibir_carimbo_automatico: unidade.exibir_carimbo_automatico ?? true,
+            valor_padrao_consulta: unidade.valor_padrao_consulta ? String(unidade.valor_padrao_consulta) : "150.00",
+            valor_promocional_consulta: unidade.valor_promocional_consulta ? String(unidade.valor_promocional_consulta) : "80.00",
           };
           setConfig((prev) => ({ ...prev, ...sanitized }));
         }
@@ -174,6 +180,8 @@ export default function ConfigUnidadePage() {
         email_contato: config.email_contato || null,
         instagram_handle: config.instagram_handle || null,
         exibir_carimbo_automatico: config.exibir_carimbo_automatico ?? true,
+        valor_padrao_consulta: Number(String(config.valor_padrao_consulta || "150").replace(",", ".")) || 150,
+        valor_promocional_consulta: Number(String(config.valor_promocional_consulta || "80").replace(",", ".")) || 80,
         },
         { onConflict: "clinica_id" }
       );
@@ -526,6 +534,48 @@ export default function ConfigUnidadePage() {
               </div>
             </div>
           </aside>
+        </div>
+      </section>
+
+      <section className="rounded-[32px] border border-slate-100 bg-white p-6 md:p-8 shadow-sm">
+        <div className="mb-4 flex items-center gap-3">
+          <Stamp className="text-emerald-600" size={22} />
+          <div>
+            <h2 className="text-xl font-black tracking-tight text-slate-800">Valores Padrão do Atendimento da Clínica</h2>
+            <p className="text-sm text-slate-500">Configure o valor padrão cobrado pelas consultas para pré-preenchimento automático na recepção e no fechamento financeiro.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="valor_padrao_consulta" className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Valor Normal da Consulta (R$)
+            </label>
+            <input
+              id="valor_padrao_consulta"
+              name="valor_padrao_consulta"
+              type="text"
+              placeholder="150,00"
+              value={config.valor_padrao_consulta ?? "150.00"}
+              onChange={(e) => setConfig((prev) => ({ ...prev, valor_padrao_consulta: e.target.value }))}
+              className="w-full rounded-[20px] border-none bg-slate-50 p-4 font-black text-slate-900 text-lg focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="valor_promocional_consulta" className="mb-2 ml-2 block text-[10px] font-black uppercase tracking-widest text-slate-400">
+              Valor Promocional / Indicação de Ótica (R$)
+            </label>
+            <input
+              id="valor_promocional_consulta"
+              name="valor_promocional_consulta"
+              type="text"
+              placeholder="80,00"
+              value={config.valor_promocional_consulta ?? "80.00"}
+              onChange={(e) => setConfig((prev) => ({ ...prev, valor_promocional_consulta: e.target.value }))}
+              className="w-full rounded-[20px] border-none bg-slate-50 p-4 font-black text-slate-900 text-lg focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
         </div>
       </section>
 

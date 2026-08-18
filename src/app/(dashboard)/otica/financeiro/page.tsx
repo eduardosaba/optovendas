@@ -486,7 +486,10 @@ export default function PainelFinanceiroOticaPage() {
           MODAL 1: REIMPRESSÃO DE CARNÊ / PARCELAS DE PAGAMENTO
          ==================================================================== */}
       {vendaCarneModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setVendaCarneModal(null); }}
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+        >
           <div className="bg-white rounded-[32px] border border-slate-100 shadow-2xl max-w-2xl w-full p-6 md:p-8 space-y-6 max-h-[90vh] overflow-y-auto">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -552,27 +555,16 @@ export default function PainelFinanceiroOticaPage() {
 
             </div>
 
-            {/* BOTÕES DE AÇÃO */}
+            {/* BOTÕES DE AÇÃO DO CARNÊ */}
             <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-100">
-              {vendaCarneModal.status_financeiro !== "pago" && (
-                <button
-                  type="button"
-                  onClick={() => darBaixaFinanceira(vendaCarneModal.id)}
-                  disabled={baixandoId === vendaCarneModal.id}
-                  className="w-full sm:w-auto px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-2 transition-all"
-                >
-                  <CheckCircle2 size={16} /> Confirmar Quitação Total
-                </button>
-              )}
-
-              <a
-                href={`/api/otica/vendas/generate-carnet?vendaId=${vendaCarneModal.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="w-full sm:w-auto px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-2 transition-all"
+              <button
+                type="button"
+                onClick={() => darBaixaFinanceira(vendaCarneModal.id)}
+                disabled={vendaCarneModal.status_financeiro === "pago"}
+                className="w-full sm:w-auto px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-50"
               >
-                <Printer size={16} /> Baixar PDF do Carnê
-              </a>
+                <CheckCircle2 size={16} /> Confirmar Baixa Total
+              </button>
 
               <button
                 type="button"
@@ -584,7 +576,7 @@ export default function PainelFinanceiroOticaPage() {
                   );
                   window.open(foneClean ? `https://wa.me/55${foneClean}?text=${msg}` : `https://wa.me/?text=${msg}`, "_blank");
                 }}
-                className="w-full sm:w-auto px-5 py-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-2 transition-all"
+                className="w-full sm:w-auto px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase shadow-md flex items-center justify-center gap-2 transition-all"
               >
                 <MessageSquare size={16} /> Enviar WhatsApp
               </button>
@@ -598,7 +590,10 @@ export default function PainelFinanceiroOticaPage() {
           MODAL 2: 2ª VIA DE O.S. (FORMULÁRIO TIMBRADO DO LABORATÓRIO COM LOGO)
          ==================================================================== */}
       {vendaOSModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setVendaOSModal(null); }}
+          className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+        >
           
           <style>{`
             @media print {
@@ -657,7 +652,7 @@ export default function PainelFinanceiroOticaPage() {
               <div className="border-b-2 border-slate-900 pb-3 flex items-center justify-between">
                 <div>
                   <h1 className="text-2xl font-black tracking-tight text-slate-900">
-                    ÓTICA OPTOVENDAS
+                    ÓTICA & CONSULTÓRIO
                   </h1>
                   <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mt-0.5">
                     Ordem de Serviço Óptica — Ficha do Laboratório & Balcão
@@ -686,12 +681,12 @@ export default function PainelFinanceiroOticaPage() {
                 <div>
                   <span className="text-[9px] font-bold text-slate-400 block uppercase">Previsão Entrega</span>
                   <span className="font-black text-slate-900">
-                    {vendaOSModal.ordens_servico?.[0]?.previsao_entrega ? new Date(vendaOSModal.ordens_servico[0].previsao_entrega).toLocaleDateString("pt-BR") : "A combinar"}
+                    {vendaOSModal.ordens_servico?.[0]?.previsao_entrega ? new Date(vendaOSModal.ordens_servico[0].previsao_entrega).toLocaleDateString("pt-BR") : "10 dias úteis"}
                   </span>
                 </div>
               </div>
 
-              {/* TABELA DE GRAU DO RECEITUARIO (LONGE E PERTO) */}
+              {/* TABELA DE GRAU DO RECEITUARIO */}
               <div className="space-y-1.5">
                 <h4 className="text-[10px] font-black uppercase text-slate-700 tracking-wider">
                   Prescrição Óptica (Graus)
@@ -751,15 +746,22 @@ export default function PainelFinanceiroOticaPage() {
                 </div>
               </div>
 
-              {/* DETALHES DE LENTES & ARMAÇÃO */}
-              <div className="grid grid-cols-2 gap-3 border border-slate-300 p-3 rounded-xl">
+              {/* DETALHES DE LENTES, ARMAÇÃO E RESUMO FINANCEIRO DA OS */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border border-slate-300 p-3 rounded-xl">
                 <div>
                   <span className="text-[9px] font-bold text-slate-500 uppercase block">Especificação da Lente</span>
                   <p className="font-black text-slate-900">{vendaOSModal.ordens_servico?.[0]?.material_lente || "Lente Monofocal / Multifocal Digital"}</p>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Armação do Cliente</span>
-                  <p className="font-black text-slate-900">{vendaOSModal.ordens_servico?.[0]?.armacao_modelo || "Armação Mostruário"}</p>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase block">Armação Selecionada</span>
+                  <p className="font-black text-slate-900">{vendaOSModal.ordens_servico?.[0]?.armacao_modelo || "Armação de Estoque"}</p>
+                </div>
+                <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                  <span className="text-[9px] font-bold text-emerald-700 uppercase block">Valor Total da Venda</span>
+                  <p className="font-black text-lg text-emerald-900">R$ {Number(vendaOSModal.valor_final ?? vendaOSModal.valor_total ?? 0).toFixed(2)}</p>
+                  {Number(vendaOSModal.desconto || 0) > 0 && (
+                    <span className="text-[9px] font-bold text-emerald-700 block">Desconto: R$ {Number(vendaOSModal.desconto).toFixed(2)}</span>
+                  )}
                 </div>
               </div>
 

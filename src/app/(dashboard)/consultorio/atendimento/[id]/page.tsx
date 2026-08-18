@@ -10,6 +10,8 @@ import ExameRefracao, { type RefracaoValue } from "@/components/consultorio/Exam
 import HistoricoEvolucao from "@/components/consultorio/HistoricoEvolucao";
 import LaudoFuncional from "@/components/consultorio/LaudoFuncional";
 import ReceitaPdf from "@/components/consultorio/ReceitaPdf";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { useToast } from "@/components/ui/ToastProvider";
 
 type ReceitaHistorico = {
@@ -325,6 +327,9 @@ export default function PaginaAtendimento() {
 
   return (
     <form onSubmit={salvarTudo} className="mx-auto max-w-6xl p-4 md:p-8">
+      <Link href="/consultorio" className="inline-flex items-center gap-2 text-xs font-black text-slate-500 hover:text-blue-600 uppercase tracking-widest transition-colors mb-3">
+        <ArrowLeft size={16} /> Voltar ao Consultório
+      </Link>
       <h1 className="mb-4 text-2xl font-bold text-slate-900">Atendimento Clinico</h1>
 
       <FichaAnamnese value={anamnese} onChange={setAnamnese} />
@@ -422,12 +427,18 @@ export default function PaginaAtendimento() {
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-3 rounded-md">Adição<br/><span className="font-black">{receitaGerada.adicao ?? "-"}</span></div>
                 <div className="bg-slate-50 p-3 rounded-md">Condições visuais<br/><span className="font-black">{[receitaGerada.miopia ? "Miopia" : null, receitaGerada.astigmatismo ? "Astigmatismo" : null, receitaGerada.hipermetropia ? "Hipermetropia" : null, receitaGerada.presbiopia ? "Presbiopia" : null].filter(Boolean).join(" • ") || "-"}</span></div>
-                <div className="bg-slate-50 p-3 rounded-md">Retorno<br/><span className="font-black">{receitaGerada.retorno ?? "-"}</span></div>
-                <div className="bg-slate-50 p-3 rounded-md">Tipo de lente<br/><span className="font-black">{receitaGerada.tipo_lente ?? "-"}</span></div>
-                <div className="bg-slate-50 p-3 rounded-md">Tratamento<br/><span className="font-black">{receitaGerada.tratamento_lente ?? "-"}</span></div>
+                {receitaGerada.retorno && (
+                  <div className="bg-slate-50 p-3 rounded-md">Retorno Programado<br/><span className="font-black">{receitaGerada.retorno}</span></div>
+                )}
+                <div className="bg-slate-50 p-3 rounded-md">Tipo de lente<br/><span className="font-black">{receitaGerada.tipo_lente || refracao.tipoLente || "Visão Simples"}</span></div>
+                <div className="bg-slate-50 p-3 rounded-md">Tratamento<br/><span className="font-black">{[refracao.tratamentoAntiReflexo ? "Anti Reflexo" : null, refracao.tratamentoFotossensivel ? "Fotossensível" : null, receitaGerada.tratamento_lente].filter(Boolean).filter((v, i, a) => v && a.indexOf(v) === i).join(" • ") || "-"}</span></div>
               </div>
 
               <div className="mt-6 text-center text-sm text-slate-600 italic">{receitaGerada.nota_rodape || notaRodapeReceita}</div>
+
+              <div className="mt-4 text-center text-xs text-slate-500 font-bold border-t border-slate-100 pt-3">
+                {(clinicaCabecalho as any)?.endereco_completo || (clinicaCabecalho as any)?.endereco || "Endereço da Clínica"}
+              </div>
 
               <div className="mt-6 flex flex-col items-center">
                 {!(clinicaCabecalho as any)?.config_unidade?.carimbo_nome ? (

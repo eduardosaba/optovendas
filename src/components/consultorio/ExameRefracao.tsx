@@ -91,27 +91,27 @@ export default function ExameRefracao({ value, onChange, showExtras = true }: Pr
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* CARD OLHO DIREITO */}
-        <div className="bg-slate-50/50 p-6 md:p-8 rounded-[40px] border border-slate-100 space-y-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-6 opacity-5 font-black text-7xl select-none">OD</div>
+        <div className="bg-slate-100/80 p-6 md:p-8 rounded-[40px] border border-slate-300/80 space-y-6 relative overflow-hidden shadow-xs">
+          <div className="absolute top-0 right-0 p-6 opacity-10 font-black text-7xl select-none text-blue-900">OD</div>
           <div className="flex items-center gap-3 relative z-10">
             <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-black shadow-lg shadow-blue-200">OD</div>
-            <span className="text-xs font-black uppercase text-slate-400 tracking-[0.2em]">Olho Direito</span>
+            <span className="text-xs font-black uppercase text-slate-800 tracking-[0.2em]">Olho Direito</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4 relative z-10">
-                  <InputMedicao label="Esférico" value={value.odEsferico} onChange={(v: string) => setField("odEsferico", v)} step={0.25} />
-                  <InputMedicao label="Cilíndrico" value={value.odCilindrico} onChange={(v: string) => setField("odCilindrico", v)} step={0.25} />
-                  <InputMedicao label="Eixo" value={value.odEixo} onChange={(v: string) => setField("odEixo", v)} isEixo />
-                  <InputMedicao label="AV" value={value.odAv} onChange={(v: string) => setField("odAv", v)} isAv />
-                </div>
+            <InputMedicao label="Esférico" value={value.odEsferico} onChange={(v: string) => setField("odEsferico", v)} step={0.25} />
+            <InputMedicao label="Cilíndrico" value={value.odCilindrico} onChange={(v: string) => setField("odCilindrico", v)} step={0.25} />
+            <InputMedicao label="Eixo" value={value.odEixo} onChange={(v: string) => setField("odEixo", v)} isEixo />
+            <InputMedicao label="AV" value={value.odAv} onChange={(v: string) => setField("odAv", v)} isAv />
+          </div>
         </div>
 
         {/* CARD OLHO ESQUERDO */}
-        <div className="bg-slate-50/50 p-6 md:p-8 rounded-[40px] border border-slate-100 space-y-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-6 opacity-5 font-black text-7xl select-none">OE</div>
+        <div className="bg-slate-100/80 p-6 md:p-8 rounded-[40px] border border-slate-300/80 space-y-6 relative overflow-hidden shadow-xs">
+          <div className="absolute top-0 right-0 p-6 opacity-10 font-black text-7xl select-none text-slate-900">OE</div>
           <div className="flex items-center gap-3 relative z-10">
-            <div className="w-10 h-10 rounded-2xl bg-slate-800 text-white flex items-center justify-center font-black shadow-lg shadow-slate-200">OE</div>
-            <span className="text-xs font-black uppercase text-slate-400 tracking-[0.2em]">Olho Esquerdo</span>
+            <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black shadow-lg shadow-slate-300">OE</div>
+            <span className="text-xs font-black uppercase text-slate-800 tracking-[0.2em]">Olho Esquerdo</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4 relative z-10">
@@ -324,13 +324,13 @@ function InputMedicao({ label, value, onChange, isEixo, isAv, step }: any) {
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-[10px] font-black uppercase text-slate-400 text-center block tracking-tighter">{label}</label>
+      <label className="text-[11px] font-black uppercase text-slate-800 text-center block tracking-tight">{label}</label>
       <div className="relative group/input">
         <InputWithFormatting ariaLabel={label} value={value} onChange={onChange} isAv={isAv} isEixo={isEixo} />
         {step && (
           <div className="mt-2 flex items-center justify-center gap-1">
-            <button type="button" onClick={() => changeBy(-Math.abs(step))} className="flex-1 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-blue-600 transition-all flex items-center justify-center"><ChevronDown size={14} /></button>
-            <button type="button" onClick={() => changeBy(Math.abs(step))} className="flex-1 h-8 rounded-lg bg-white border border-slate-100 text-slate-400 hover:text-blue-600 transition-all flex items-center justify-center"><ChevronUp size={14} /></button>
+            <button type="button" onClick={() => changeBy(-Math.abs(step))} className="flex-1 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-400 transition-all flex items-center justify-center"><ChevronDown size={14} /></button>
+            <button type="button" onClick={() => changeBy(Math.abs(step))} className="flex-1 h-8 rounded-lg bg-white border border-slate-200 text-slate-600 hover:text-blue-600 hover:border-blue-400 transition-all flex items-center justify-center"><ChevronUp size={14} /></button>
           </div>
         )}
       </div>
@@ -340,8 +340,6 @@ function InputMedicao({ label, value, onChange, isEixo, isAv, step }: any) {
 
 function InputWithFormatting({ ariaLabel, value, onChange, isAv, isEixo }: any) {
   const [editing, setEditing] = useState(false);
-
-  // usa a máscara compartilhada `maskAv` de `src/lib/refracaoFormat.ts`
 
   function formatDisplay(v: string | undefined | null) {
     if (!v || String(v).trim() === "") return "";
@@ -367,7 +365,7 @@ function InputWithFormatting({ ariaLabel, value, onChange, isAv, isEixo }: any) 
       onFocus={() => setEditing(true)}
       onBlur={() => setEditing(false)}
       placeholder={isAv ? "20/20" : "0,00"}
-      className="w-full bg-white rounded-2xl border-none shadow-inner py-4 px-2 text-center font-black text-slate-800 text-base focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-200"
+      className="w-full bg-white rounded-2xl border border-slate-200/90 shadow-sm py-4 px-2 text-center font-black text-slate-900 text-base focus:ring-2 focus:ring-blue-600 transition-all placeholder:text-slate-400"
     />
   );
 }

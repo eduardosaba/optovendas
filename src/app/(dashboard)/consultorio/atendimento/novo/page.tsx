@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { useConfig } from "@/context/ConfigContext";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import SelectLocalidade from "@/components/otica/SelectLocalidade";
 
 // --- INTERFACES ---
@@ -177,16 +178,22 @@ export default function NovoAtendimentoPage() {
   const { corPrimaria } = useConfig();
   const searchParams = useSearchParams();
 
-  // Preenche `pacienteId` se foi passado via query string (ex: ?pacienteId=...)
+  // Preenche dados vindos da recepção/agenda via query string (ex: ?pacienteId=...&modelo_cobranca=gratuito&valor=150&forma_pagamento=pix)
   useEffect(() => {
     try {
-      const q =
-        searchParams.get?.("pacienteId") ||
-        (typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("pacienteId") : null);
-      console.debug("novoAtendimento: query pacienteId read", { q });
+      const q = searchParams.get("pacienteId");
       if (q) setPacienteId(String(q));
+
+      const mod = searchParams.get("modelo_cobranca") || searchParams.get("modeloCobranca");
+      if (mod === "gratuito" || mod === "pago") setModeloCobranca(mod);
+
+      const val = searchParams.get("valor") || searchParams.get("valorConsulta");
+      if (val) setValorConsulta(String(val));
+
+      const fp = searchParams.get("forma_pagamento") || searchParams.get("formaPagamento");
+      if (fp) setFormaPagamento(String(fp));
     } catch (e) {
-      console.debug("novoAtendimento: erro ao ler pacienteId da query", e);
+      console.debug("novoAtendimento: erro ao ler params da query", e);
     }
   }, [searchParams]);
 
@@ -396,6 +403,27 @@ export default function NovoAtendimentoPage() {
 
       if (consErr) throw consErr;
 
+      // Se for atendimento cobrado com valor, lança entrada automaticamente no fluxo de caixa do dia
+      if (modeloCobranca === "pago" && valorNum > 0) {
+        try {
+          await supabase.from("fluxo_caixa").insert({
+            clinica_id: ctx.clinicaId,
+            tipo: "entrada",
+            descricao: `Consulta Clínica - ${pacienteNomeExibicao || 'Paciente'}`,
+            valor: valorNum,
+            forma_pagamento: formaPagamento,
+            metodo_pagamento: formaPagamento,
+            categoria: "Consulta",
+            data_movimento: new Date().toISOString().slice(0, 10),
+            status_conciliacao: "concluido",
+            conciliado: true,
+            criado_em: new Date().toISOString(),
+          });
+        } catch (errCaixa) {
+          console.error("Erro ao lancar entrada no fluxo de caixa:", errCaixa);
+        }
+      }
+
       // C. Salvar Anamnese
       await supabase.from("anamnese").insert([{
         paciente_id: pacienteFinalId,
@@ -544,7 +572,10 @@ export default function NovoAtendimentoPage() {
     <div className="mx-auto max-w-5xl p-6 lg:p-10 space-y-8 pb-32">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-        <ConfirmDialog open={confirmOpen} title="Carregar exame" message="Deseja carregar os dados deste exame anterior?" onConfirm={confirmarCopia} onCancel={() => setConfirmOpen(false)} />
+          <ConfirmDialog open={confirmOpen} title="Carregar exame" message="Deseja carregar os dados deste exame anterior?" onConfirm={confirmarCopia} onCancel={() => setConfirmOpen(false)} />
+          <Link href="/consultorio" className="inline-flex items-center gap-2 text-xs font-black text-slate-500 hover:text-blue-600 uppercase tracking-widest transition-colors mb-2">
+            <ArrowLeft size={16} /> Voltar ao Consultório
+          </Link>
           <p className="text-blue-600 font-black text-xs uppercase tracking-[0.2em] mb-1">Prontuário Digital</p>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">Novo Atendimento<span className="text-blue-600">.</span></h1>
         </div>

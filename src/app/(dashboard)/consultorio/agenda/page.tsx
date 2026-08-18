@@ -39,6 +39,8 @@ type AgendaOption = {
     return Array.isArray(p) ? (p[0]?.nome_completo ?? "Paciente") : (p?.nome_completo ?? "Paciente");
   }
 
+import ModalNovoAgendamento from "@/components/consultorio/ModalNovoAgendamento";
+
   function CheckinPageContent() {
     const toast = useToast();
     const search = useSearchParams();
@@ -48,6 +50,7 @@ type AgendaOption = {
     const [lista, setLista] = useState<CheckinItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [filtro, setFiltro] = useState("");
+    const [showAgendamentoModal, setShowAgendamentoModal] = useState(false);
 
     const agendaSelecionada = useMemo(
       () => agendas.find((a) => a.id === agendaId) ?? null,
@@ -166,19 +169,26 @@ type AgendaOption = {
           {/* Header */}
           <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <Link href="/consultorio/agenda" className="p-2 bg-white rounded-xl shadow-sm text-slate-400 hover:text-blue-600 transition-all border border-slate-100">
+              <Link href="/consultorio" className="p-2 bg-white rounded-xl shadow-sm text-slate-400 hover:text-blue-600 transition-all border border-slate-100">
                 <ChevronLeft size={24} />
               </Link>
               <div>
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight">Check-in<span className="text-blue-600">.</span></h1>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Confirmação de Chegada</p>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight">Check-in & Agenda<span className="text-blue-600">.</span></h1>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Confirmação de Chegada e Agendamento</p>
               </div>
             </div>
           
               <div className="flex items-center gap-3">
                 <button
+                  type="button"
+                  onClick={() => setShowAgendamentoModal(true)}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white hover:bg-blue-700 shadow-lg shadow-blue-100 transition-all active:scale-95"
+                >
+                  <Plus size={18} /> Novo Agendamento
+                </button>
+                <button
                   onClick={exportarXlsx}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-6 py-3 text-sm font-black text-white hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-black text-white hover:bg-slate-800 shadow-lg transition-all active:scale-95"
                 >
                   <FileSpreadsheet size={18} />
                   Exportar XLSX
@@ -277,6 +287,8 @@ type AgendaOption = {
             )}
           </div>
         </div>
+
+        <ModalNovoAgendamento open={showAgendamentoModal} onClose={() => setShowAgendamentoModal(false)} />
       </div>
     );
   }

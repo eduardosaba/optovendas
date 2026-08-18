@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarClock, PhoneCall, Search, CreditCard, Image, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CalendarClock, PhoneCall, Search, CreditCard, Image, AlertTriangle, CheckCircle2, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { resolveClinicaContext } from "@/lib/clinica";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -223,7 +223,7 @@ export default function VendasPendentesPage() {
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Link href="/otica/vendas/nova" className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50">
                         Nova negociacao
                       </Link>
@@ -233,20 +233,41 @@ export default function VendasPendentesPage() {
                       >
                         <CreditCard size={14} /> Concluir Fechamento
                       </Link>
-                    <button
-                      type="button"
-                      disabled={!link}
-                      onClick={() => window.open(link, "_blank", "noopener,noreferrer")}
-                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-[11px] font-black uppercase tracking-wider text-white transition hover:bg-emerald-700 disabled:opacity-40"
-                    >
-                      <PhoneCall size={14} /> Cobrar via WhatsApp
-                    </button>
+                      <button
+                        type="button"
+                        disabled={!link}
+                        onClick={() => window.open(link, "_blank", "noopener,noreferrer")}
+                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-[11px] font-black uppercase tracking-wider text-white transition hover:bg-emerald-700 disabled:opacity-40"
+                      >
+                        <PhoneCall size={14} /> Cobrar via WhatsApp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (confirm(`Deseja excluir a venda pendente #${venda.id.slice(0, 8)}?`)) {
+                            try {
+                              await supabase.from("ordens_servico").delete().eq("venda_id", venda.id);
+                              await supabase.from("financeiro_parcelas").delete().eq("venda_id", venda.id);
+                              const { error } = await supabase.from("vendas").delete().eq("id", venda.id);
+                              if (error) throw error;
+                              toast.success("Venda pendente excluída com sucesso!");
+                              setRows((prev) => prev.filter((r) => r.id !== venda.id));
+                            } catch (e: any) {
+                              toast.error(e.message || "Erro ao excluir venda.");
+                            }
+                          }
+                        }}
+                        className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-[11px] font-black text-rose-600 hover:bg-rose-100 transition-all flex items-center gap-1"
+                        title="Excluir Venda Pendente"
+                      >
+                        <Trash2 size={14} /> Excluir
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            );
-          })}
-        </section>
+                </article>
+              );
+            })}
+          </section>
       )}
     </div>
   );

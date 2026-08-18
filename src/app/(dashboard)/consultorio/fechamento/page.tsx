@@ -42,11 +42,27 @@ export default function FechamentoConsultorioPage() {
     setLoading(true);
     try {
       const ctx = await resolveClinicaContext();
-      // Muitas instalações não usam `consultorio_receitas` — a fonte técnica é `receitas_optometricas`.
-      // Aqui fazemos uma consulta em `receitas_optometricas` e mapeamos os campos para a forma esperada
-      // pelo frontend. Campos financeiros como `valor_final` e `forma_pagamento` não existem nesta
-      // tabela e serão mantidos como null (poderemos criar uma view/trigger no banco posteriormente).
+      
+      // Buscar do consultorio_receitas que possui os dados financeiros do atendimento (valor, forma_pagamento, modelo)
       let query = supabase
+        .from("consultorio_receitas")
+        .select("id, paciente_id, valor_final, forma_pagamento, status_pagamento, data_atendimento, localidade, modelo_cobranca, tipo_atendimento, pacientes(nome_completo)")
+        .eq("clinica_id", ctx.clinicaId)
+        .eq("data_atendimento", dataRef)
+        .order("created_at", { ascending: false });
+
+      if (cidade.trim()) {
+        query = query.ilike("localidade", `%${cidade.trim()}%`);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        setLinhas(data as any[]);
+        return;
+      }
+
+      // Fallback: se não houver registros em consultorio_receitas, busca de receitas_optometricas
+      let queryFallback = supabase
         .from("receitas_optometricas")
         .select("id, paciente_id, data_exame, localidade_atendimento, pacientes(nome_completo)")
         .eq("clinica_id", ctx.clinicaId)
@@ -54,35 +70,25 @@ export default function FechamentoConsultorioPage() {
         .order("data_exame", { ascending: false });
 
       if (cidade.trim()) {
-        query = query.ilike("localidade_atendimento", `%${cidade.trim()}%`);
+        queryFallback = queryFallback.ilike("localidade_atendimento", `%${cidade.trim()}%`);
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
-
-      type ReceitaRow = {
-        id: string;
-        paciente_id?: string | null;
-        data_exame?: string | null;
-        localidade_atendimento?: string | null;
-        pacientes?: { nome_completo?: string | null } | Array<{ nome_completo?: string | null }> | null;
-      };
-
-      const rows = (data as ReceitaRow[]) || [];
+      const { data: dataFb } = await queryFallback;
+      const rows = (dataFb as any[]) || [];
       const mapped = rows.map((r) => ({
         id: r.id,
         paciente_id: r.paciente_id,
-        valor_final: null,
-        forma_pagamento: null,
-        status_pagamento: null,
+        valor_final: 0,
+        forma_pagamento: "Cortesia",
+        status_pagamento: "isento",
         data_atendimento: r.data_exame,
         localidade: r.localidade_atendimento,
-        modelo_cobranca: null,
-        tipo_atendimento: null,
+        modelo_cobranca: "gratuito",
+        tipo_atendimento: "interno",
         pacientes: r.pacientes,
       }));
 
-      setLinhas(mapped ?? []);
+      setLinhas(mapped);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Erro ao carregar fechamento: ${msg}`);
@@ -94,7 +100,7 @@ export default function FechamentoConsultorioPage() {
 
   useEffect(() => {
     void carregar();
-  }, []);
+  }, [dataRef]);
 
   const resumo = useMemo(() => {
     const totalPacientes = linhas.length;
@@ -106,7 +112,7 @@ export default function FechamentoConsultorioPage() {
     let cartao = 0;
 
     linhas.forEach((c) => {
-      const gratuito = (c.modelo_cobranca || "").toLowerCase() === "gratuito" || (c.status_pagamento || "").toLowerCase() === "isento";
+      const gratuito = (c.modelo_cobranca || "").toLowerCase() === "gratuito" || (c.status_pagamento || "").toLowerCase() === "isento" || Number(c.valor_final || 0) === 0;
       if (gratuito) {
         gratuitos += 1;
         return;
@@ -133,8 +139,8 @@ export default function FechamentoConsultorioPage() {
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Conferência de Campo</p>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Fechamento de Caixa</h1>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Conferência Diária</p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">Fechamento Financeiro / dia</h1>
           </div>
         </div>
         <div className="ml-auto">

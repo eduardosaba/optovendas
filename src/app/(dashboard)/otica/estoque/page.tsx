@@ -151,6 +151,32 @@ export default function EstoquePage() {
     setNovaCategoria("");
   }
 
+  const [abaEstoque, setAbaEstoque] = useState<"produtos" | "marcas" | "parados" | "conferencia">("produtos");
+
+  // Relatório por marcas
+  const marcasReport = useMemo(() => {
+    const map = new Map<string, { grife: string; totalQtd: number; valorEstoque: number; valorCusto: number }>();
+    itens.forEach((i) => {
+      const g = (i.grife || "Genérica").trim().toUpperCase();
+      const curr = map.get(g) || { grife: g, totalQtd: 0, valorEstoque: 0, valorCusto: 0 };
+      curr.totalQtd += Number(i.quantidade_atual || 0);
+      curr.valorEstoque += Number(i.quantidade_atual || 0) * Number(i.preco_venda || 0);
+      curr.valorCusto += Number(i.quantidade_atual || 0) * Number(i.preco_custo || 0);
+      map.set(g, curr);
+    });
+    return Array.from(map.values()).sort((a, b) => b.totalQtd - a.totalQtd);
+  }, [itens]);
+
+  // Relatório de estoque parado (+60 dias)
+  const paradosReport = useMemo(() => {
+    const sessentaDiasAtras = new Date();
+    sessentaDiasAtras.setDate(sessentaDiasAtras.getDate() - 60);
+    return itens.filter((i) => {
+      if (!i.atualizado_em) return true;
+      return new Date(i.atualizado_em) < sessentaDiasAtras;
+    });
+  }, [itens]);
+
   async function ajustarQuantidade(id: string, atual: number, delta: number) {
     const novaQtd = Math.max(0, atual + delta);
     const { error } = await supabase.from("estoque_armacoes").update({ quantidade_atual: novaQtd }).eq("id", id);
@@ -179,14 +205,14 @@ export default function EstoquePage() {
             href="/otica/estoque/etiquetas"
             className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-4 rounded-2xl font-black text-sm shadow-lg hover:bg-slate-800 transition-all"
           >
-            <Tag size={18} className="text-cyan-400" /> Gerar Etiquetas
+            <Tag size={18} className="text-cyan-400" /> Etiquetas QR Code
           </Link>
           <button 
             onClick={() => { if(mostrarForm) fecharFormulario(); else setMostrarForm(true); }}
             className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-cyan-600 text-white px-6 py-4 rounded-2xl font-black text-sm shadow-xl shadow-cyan-100 hover:bg-cyan-700 transition-all"
           >
             {mostrarForm ? <X size={20} /> : <Plus size={20} />}
-            {mostrarForm ? "Cancelar" : "Cadastrar Modelo"}
+            {mostrarForm ? "Cancelar" : "Novo Produto"}
           </button>
           <Link href="/otica/estoque/dashboard" className="p-4 bg-slate-900 text-white rounded-2xl shadow-lg hover:bg-slate-800 transition-all">
             <TrendingUp size={20} />
@@ -270,79 +296,185 @@ export default function EstoquePage() {
         </section>
       )}
 
-      {/* BUSCA E FILTROS */}
-      <section className="relative group">
-        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-cyan-500 transition-colors" size={24} />
-        <input 
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Pesquisar por marca, modelo ou código..."
-          className="w-full pl-16 pr-8 py-6 bg-white rounded-[32px] border-none shadow-sm focus:ring-2 focus:ring-cyan-500 font-bold text-lg italic text-slate-600"
-        />
-      </section>
+      {/* SEÇÃO DA ABA SELECIONADA */}
+      {abaEstoque === "marcas" && (
+        <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-black text-slate-800">Relatório de Estoque por Marca / Grife</h2>
+            <span className="text-xs font-bold text-slate-400 uppercase">{marcasReport.length} marcas registradas</span>
+          </div>
 
-      {/* LISTAGEM EM GRID VISUAL */}
-      {carregando ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
-          {[1,2,3,4].map(i => <div key={i} className="h-64 bg-slate-100 animate-pulse rounded-[40px]" />)}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {itensFiltrados.map((item) => (
-            <article key={item.id} className="group bg-white rounded-[40px] border border-slate-50 shadow-sm hover:shadow-2xl transition-all duration-500 overflow-hidden flex flex-col relative">
-              
-              {/* Botão Editar Flutuante */}
-              <button 
-                onClick={() => { setEditandoItem(item); window.scrollTo({top: 0, behavior: 'smooth'}); }}
-                className="absolute top-4 left-4 z-10 p-2 bg-white/90 backdrop-blur rounded-xl shadow-sm text-slate-400 hover:text-cyan-600 opacity-0 group-hover:opacity-100 transition-all"
-              >
-                <Edit3 size={18} />
-              </button>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                <tr>
+                  <th className="p-4">Marca / Grife</th>
+                  <th className="p-4">Total em Estoque</th>
+                  <th className="p-4">Valor Total de Venda</th>
+                  <th className="p-4">Valor Total de Custo</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 font-bold text-sm">
+                {marcasReport.map((m) => (
+                  <tr key={m.grife} className="hover:bg-slate-50/50">
+                    <td className="p-4 font-black text-slate-800">{m.grife}</td>
+                    <td className="p-4 text-cyan-600 font-black">{m.totalQtd} unidades</td>
+                    <td className="p-4 text-slate-900">R$ {m.valorEstoque.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                    <td className="p-4 text-slate-500">R$ {m.valorCusto.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
-              <div className="aspect-[4/3] bg-slate-50 relative overflow-hidden flex items-center justify-center border-b border-slate-50">
-                {item.foto_url ? (
-                  <img src={item.foto_url} alt={item.modelo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                ) : (
-                  <div className="flex flex-col items-center text-slate-300">
-                    <ImageIcon size={48} strokeWidth={1} />
-                    <span className="text-[10px] font-black uppercase mt-2">Sem Foto</span>
+      {abaEstoque === "parados" && (
+        <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-black text-rose-600">Produtos com Estoque Parado (+60 dias)</h2>
+              <p className="text-xs text-slate-400 font-medium">Itens sem movimentação ou atualização há mais de 60 dias para promoção ou queima de estoque.</p>
+            </div>
+            <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1 rounded-full uppercase">{paradosReport.length} itens parados</span>
+          </div>
+
+          {paradosReport.length === 0 ? (
+            <div className="p-10 text-center text-slate-400 font-bold italic">Nenhum produto parado há mais de 60 dias! Excelente rotatividade.</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {paradosReport.map((item) => (
+                <div key={item.id} className="p-5 bg-slate-50 rounded-3xl border border-slate-100 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-black uppercase text-cyan-600">{item.grife}</span>
+                    <span className="text-[10px] font-bold text-rose-500 uppercase">Parado há +60d</span>
                   </div>
-                )}
-                <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full shadow-sm text-[10px] font-black text-cyan-600">
-                  {item.codigo_referencia}
+                  <h3 className="font-black text-slate-800">{item.modelo}</h3>
+                  <p className="text-xs font-bold text-slate-500">Ref: {item.codigo_referencia} • Qtd: {item.quantidade_atual}</p>
+                  <p className="text-sm font-black text-slate-900">R$ {Number(item.preco_venda).toFixed(2)}</p>
                 </div>
-              </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
-              <div className="p-6 space-y-4 flex-1 flex flex-col">
-                <div>
-                  <p className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">{item.grife}</p>
-                  <h3 className="text-xl font-black text-slate-800 leading-tight">{item.modelo}</h3>
-                  <p className="text-xs font-bold text-slate-400 italic mt-1">{item.cor || "Cor única"}</p>
-                </div>
+      {abaEstoque === "conferencia" && (
+        <section className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-50 space-y-6 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-black text-slate-800">Relatório de Conferência de Estoque (Inventário Físico)</h2>
+              <p className="text-xs text-slate-400 font-medium">Lista de auditoria para contagem física de armações na loja.</p>
+            </div>
+            <button onClick={() => window.print()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase">
+              🖨️ Imprimir Lista
+            </button>
+          </div>
 
-                <div className="flex justify-between items-end mt-auto pt-4 border-t border-slate-50">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-300 uppercase leading-none">Venda</p>
-                    <p className="text-lg font-black text-slate-900">R$ {Number(item.preco_venda).toFixed(2)}</p>
-                    <p className="text-[9px] font-bold text-slate-400">Custo: R$ {Number(item.preco_custo || 0).toFixed(2)}</p>
-                  </div>
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+              <tr>
+                <th className="p-3">Cód. Ref</th>
+                <th className="p-3">Grife / Marca</th>
+                <th className="p-3">Modelo</th>
+                <th className="p-3">Qtd Sistema</th>
+                <th className="p-3">Contagem Física</th>
+                <th className="p-3">Diferença</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-bold text-xs">
+              {itens.map((item) => (
+                <tr key={item.id}>
+                  <td className="p-3 text-slate-700">{item.codigo_referencia}</td>
+                  <td className="p-3 text-cyan-600 font-black">{item.grife}</td>
+                  <td className="p-3 text-slate-900">{item.modelo}</td>
+                  <td className="p-3 font-black">{item.quantidade_atual}</td>
+                  <td className="p-3 border-b border-slate-200">___</td>
+                  <td className="p-3 border-b border-slate-200">___</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {/* BUSCA E FILTROS APENAS SE ESTIVER NA ABA PRODUTOS */}
+      {abaEstoque === "produtos" && (
+        <>
+          <section className="relative group">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-cyan-500 transition-colors" size={24} />
+            <input 
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Pesquisar por marca, modelo ou código..."
+              className="w-full pl-16 pr-8 py-6 bg-white rounded-[32px] border-none shadow-sm focus:ring-2 focus:ring-cyan-500 font-bold text-lg italic text-slate-600"
+            />
+          </section>
+
+          {/* LISTAGEM EM GRID VISUAL */}
+          {carregando ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
+              {[1,2,3,4].map(i => <div key={i} className="h-64 bg-slate-100 animate-pulse rounded-[40px]" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {itensFiltrados.map((item) => (
+                <article key={item.id} className="group bg-white rounded-[40px] border border-slate-50 shadow-sm hover:shadow-2xl transition-all duration-500 overflow-hidden flex flex-col relative">
                   
-                  <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl border border-slate-100">
-                    <button onClick={() => ajustarQuantidade(item.id, item.quantidade_atual, -1)} className="text-slate-400 hover:text-rose-500">
-                      <MinusCircle size={18} />
-                    </button>
-                    <span className={`text-xs font-black ${item.quantidade_atual <= 2 ? 'text-rose-600' : 'text-slate-700'}`}>
-                      {item.quantidade_atual}
-                    </span>
-                    <button onClick={() => ajustarQuantidade(item.id, item.quantidade_atual, 1)} className="text-slate-400 hover:text-emerald-500">
-                      <PlusCircle size={18} />
-                    </button>
+                  {/* Botão Editar Flutuante */}
+                  <button 
+                    onClick={() => { setEditandoItem(item); window.scrollTo({top: 0, behavior: 'smooth'}); }}
+                    className="absolute top-4 left-4 z-10 p-2 bg-white/90 backdrop-blur rounded-xl shadow-sm text-slate-400 hover:text-cyan-600 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <Edit3 size={18} />
+                  </button>
+
+                  <div className="aspect-[4/3] bg-slate-50 relative overflow-hidden flex items-center justify-center border-b border-slate-50">
+                    {item.foto_url ? (
+                      <img src={item.foto_url} alt={item.modelo} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                    ) : (
+                      <div className="flex flex-col items-center text-slate-300">
+                        <ImageIcon size={48} strokeWidth={1} />
+                        <span className="text-[10px] font-black uppercase mt-2">Sem Foto</span>
+                      </div>
+                    )}
+                    <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full shadow-sm text-[10px] font-black text-cyan-600">
+                      {item.codigo_referencia}
+                    </div>
                   </div>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
+
+                  <div className="p-6 space-y-4 flex-1 flex flex-col">
+                    <div>
+                      <p className="text-[10px] font-black text-cyan-600 uppercase tracking-widest">{item.grife}</p>
+                      <h3 className="text-xl font-black text-slate-800 leading-tight">{item.modelo}</h3>
+                      <p className="text-xs font-bold text-slate-400 italic mt-1">{item.cor || "Cor única"}</p>
+                    </div>
+
+                    <div className="flex justify-between items-end mt-auto pt-4 border-t border-slate-50">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black text-slate-300 uppercase leading-none">Venda</p>
+                        <p className="text-lg font-black text-slate-900">R$ {Number(item.preco_venda).toFixed(2)}</p>
+                        <p className="text-[9px] font-bold text-slate-400">Custo: R$ {Number(item.preco_custo || 0).toFixed(2)}</p>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                        <button onClick={() => ajustarQuantidade(item.id, item.quantidade_atual, -1)} className="text-slate-400 hover:text-rose-500">
+                          <MinusCircle size={18} />
+                        </button>
+                        <span className={`text-xs font-black ${item.quantidade_atual <= 2 ? 'text-rose-600' : 'text-slate-700'}`}>
+                          {item.quantidade_atual}
+                        </span>
+                        <button onClick={() => ajustarQuantidade(item.id, item.quantidade_atual, 1)} className="text-slate-400 hover:text-cyan-600">
+                          <PlusCircle size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

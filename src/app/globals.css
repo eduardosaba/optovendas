@@ -7,7 +7,7 @@
 }
 
 :root {
-  --background: #f8fafc;
+  --background: #f1f5f9;
   --foreground: #0f172a;
   --cor-primaria: #2563eb;
   --cor-tema-unidade: #2563eb;
@@ -18,12 +18,32 @@ body {
   background:
     radial-gradient(
       circle at 10% -10%,
-      rgba(37, 99, 235, 0.09),
+      rgba(37, 99, 235, 0.07),
       transparent 32%
     ),
-    radial-gradient(circle at 90% 0%, rgba(15, 23, 42, 0.06), transparent 28%),
+    radial-gradient(circle at 90% 0%, rgba(15, 23, 42, 0.05), transparent 28%),
     var(--background);
   color: var(--foreground);
+}
+
+/* ====================================================================
+   REGRAS GLOBAIS DE ELEVAÇÃO E ALTO CONTRASTE DE TIPOGRAFIA & FORMULÁRIOS
+   ==================================================================== */
+
+/* Fontes de formulários e inputs 100% legíveis em qualquer tela */
+input, select, textarea {
+  color: #0f172a !important; /* text-slate-900 com alto contraste */
+}
+
+/* Placeholders nítidos e visíveis (sem cinza desbotado) */
+::placeholder, input::placeholder, textarea::placeholder {
+  color: #64748b !important; /* text-slate-500 */
+  opacity: 1 !important;
+}
+
+/* Rótulos e labels com tom escuro encorpado em todos os módulos */
+label {
+  color: #1e293b; /* text-slate-800 */
 }
 
 .bg-primary {
