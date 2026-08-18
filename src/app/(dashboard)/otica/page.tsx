@@ -16,6 +16,7 @@ import {
   DollarSign,
   FileText,
   Glasses,
+  MessageSquare,
   Monitor,
   Package,
   PlusCircle,
@@ -557,6 +558,16 @@ export default function OticaPage() {
           color="text-emerald-600"
           bgColor="bg-emerald-50"
           badge={metrics.inadimplenciaTotal > 0 ? "Cobrança" : undefined}
+        />
+
+        <MenuCard
+          href="/otica/crm/automacoes"
+          title="Régua WhatsApp CRM"
+          desc="Automação de pós-venda (adaptação 15d) e renovação de receita (12m)."
+          icon={<MessageSquare size={24} />}
+          color="text-cyan-600"
+          bgColor="bg-cyan-50"
+          badge="CRM Ativo"
         />
 
         <MenuCard
