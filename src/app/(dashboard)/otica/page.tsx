@@ -571,6 +571,15 @@ export default function OticaPage() {
         />
 
         <MenuCard
+          href="/otica/comissoes"
+          title="Comissões da Equipe"
+          desc="Remuneração flexível por vendedor, marca, tipo de lente e bônus de metas."
+          icon={<Award size={24} />}
+          color="text-emerald-600"
+          bgColor="bg-emerald-50"
+        />
+
+        <MenuCard
           href="/otica/estoque"
           title="Estoque de Armações"
           desc="Controle de marcas e modelos disponíveis."

@@ -395,13 +395,15 @@ export default function SimuladorEspessura() {
     const rad = (anguloRotacao3D * Math.PI) / 180;
     const cosA = Math.cos(rad);
 
-    const rx = (aro * 2.2) * cosA;
-    const ry = (alturaVertical * 2.0);
+    // Garantir raios não-negativos para ctx.ellipse no giro 360
+    const rx = Math.max(0.1, Math.abs((aro * 2.2) * cosA));
+    const ry = Math.max(0.1, Math.abs(alturaVertical * 2.0));
     const espPx = Math.max(6, materialAtual.espessuraBorda * 4.5);
+    const shadowRy = Math.max(0.1, Math.abs(12 * cosA + 4));
 
     // Efeito de sombra no chão
     ctx.beginPath();
-    ctx.ellipse(cx, cy + ry + 15, rx + 15, 12 * cosA + 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy + ry + 15, rx + 15, shadowRy, 0, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0, 0, 0, 0.06)";
     ctx.fill();
 
